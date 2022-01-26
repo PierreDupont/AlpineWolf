@@ -9,15 +9,15 @@ rm(list=ls())
 
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
-#library(rgdal)
+library(rgdal)
 library(raster)
-#library(sp)
+library(sp)
 library(coda)
 library(nimble)
 library(nimbleSCR)
 #library(spdep)
-#library(rgeos)
-#library(maptools)
+library(rgeos)
+library(maptools)
 library(stringr)
 library(abind)
 library(R.utils)
@@ -25,6 +25,7 @@ library(sf)
 library(fasterize)
 library(dplyr)
 #library(ggplot2)
+library(ncdf4)
 
 
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
@@ -170,9 +171,120 @@ plot(countries, add=T)
 plot(habitat, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))						
 plot(studyArea, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 1))
 
+## ----- Save mask to crop Environmental Covariates
+#crs(habRaster) <- crs(studyAreaGrid)
+#writeRaster(habRaster, "mask_habitat", format="GTiff", overwrite=TRUE)
+
 
 
 ## ------     1.2. HABITAT COVARIATES ------
+
+## ------       1.2.1 CORINE LAND COVER ------
+
+## Load data
+CLC <- raster(file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/corine32Ncrop_reclassed.tif"))
+# habPoly <- rasterToPolygons(habRaster)
+# td <- file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/")
+# writeOGR(habPoly, td , "hab_shapefile", driver="ESRI Shapefile", overwrite_layer =TRUE)
+
+grid_hab <- readOGR(file.path(dataDir,"/GISData/shape_studyarea_ALPS/Habitat_shapefile.shp"))
+
+## Plot CLC and the Habitat grid
+plot(CLC)
+plot(grid_hab, add=T)
+
+#Elements for each class in each cell
+#extract for each cell the number of each element per class
+# THIS WILL TAKE FOREVER
+ext = raster::extract(CLC,grid_hab,df=T) 
+# write.csv(ext,"lcl.csv")
+
+#df=true convert  large list in dataframe
+#% land calculation: table
+prop.clc = ext %>%
+  setNames(c("ID", "lc_type")) %>%        # rename for ease
+  group_by(ID, lc_type) %>%               # group by point (ID) and lc class 
+  summarise(n = n()) %>%                  # count the number of occurences of each class
+  mutate(pland = (n / sum(n))*100) %>%    # add new variable
+  # calculate the % of land cover for each class in each cell
+  ungroup() %>%                           # convert back to original form
+  dplyr::select(ID, lc_type, pland) %>%   # keep only these vars
+  tidyr::complete(ID, tidyr::nesting(lc_type), 
+                  fill = list(pland = 0)) %>%    # fill in implicit landcover 0s
+  tidyr::spread(lc_type, pland)                  # convert to long format
+write.csv(prop.clc,"perc_lcl.csv")
+# Legend
+# 1	= developed
+# 2 = agriculture
+# 3 = forest
+# 4 = herbaceous
+# 5 =	bare rock 
+# 6 = sea features
+# 7 = inland water
+# 9 = perpetual snow
+
+## ------   1.2.2 ELEVATION -------
+## Load data
+DEM <- raster(file.path(dataDir,"/GISData/Environmental Layers/Orography/E40N20_crop_1km.tif"))
+
+## Plot DEM and the Habitat grid
+plot(DEM)
+plot(grid_hab, add=T)
+
+# THIS WILL TAKE FOREVER
+ext_el <- raster::extract(DEM, grid_hab, df=T)
+
+
+mean_el <- ext_el %>%
+  setNames(c("ID", "elev")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(elev), n = n())     # calculate mean for cell (ID)
+
+
+write.csv(mean_el,"mean_el.csv")
+
+
+## ------   1.2.3 TRI (Terrain Ruggedness Index) -------
+## Load data
+tri <- raster(file.path(dataDir,"/GISData/Environmental Layers/Orography/TRI_1km.tif"))
+
+## Plot DEM and the Habitat grid
+plot(tri)
+plot(grid_hab, add=T)
+
+# THIS WILL TAKE FOREVER
+ext_tri <- raster::extract(tri, grid_hab, df=T)
+
+
+mean_tri <- ext_tri %>%
+  setNames(c("ID", "tri")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(tri), n = n())     # calculate mean for cell (ID)
+
+
+write.csv(mean_tri,"mean_tri.csv")
+
+## ------   1.2.4 Human Population Density -------
+## Load data
+HPop <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
+
+## Plot DEM and the Habitat grid
+plot(HPop)
+plot(grid_hab, add=T)
+
+# THIS WILL TAKE FOREVER
+ext_hpop <- raster::extract(HPop, grid_hab, df=T)
+
+
+mean_hpop <- ext_hpop %>%
+  setNames(c("ID", "hp")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(hp), n = n())     # calculate mean for cell (ID)
+
+
+write.csv(mean_hpop,"mean_humpop.csv")
+
+
 ## ------   2. DETECTORS ------
 ## ------     2.1. DETECTORS CHARACTERISTICS ------
 detResolution <- 5000
@@ -215,12 +327,115 @@ isDet <- which(!is.na(detector.r[]))
 detCoords <- cbind.data.frame( "x" = coordinates(detector.r)[isDet,1],
                                "y" = coordinates(detector.r)[isDet,2],
                                "length" = detector.r[isDet])
-plot(detector.r, add = T)
+plot(detector.r, add=T)
 plot(transects, col = "blue", add = T)
 
 
 
 ## ------     2.2. DETECTOR COVARIATES ------
+
+## ------     2.2.1 SNOWFALL ERA-5 ------
+
+
+f <- file.path(dataDir,"/GISData/Environmental Layers/Snowfall_2020-2021/ERA-5_snowfall_alps_32N.nc")
+oct20 <- brick(f, var="Band1", lvar=4)
+nov20 <- brick(f, var="Band2", lvar=4)
+dec20 <- brick(f, var="Band3", lvar=4)
+jan21 <- brick(f, var="Band4", lvar=4)
+feb21 <- brick(f, var="Band5", lvar=4)
+mar21<- brick(f, var="Band6", lvar=4)
+ap21 <- brick(f, var="Band7", lvar=4)
+
+# ----   OCTOBER 2020  ----
+
+plot(oct20)
+plot(transects,col = "blue", add=T)
+
+ext_octsf <- raster::extract(oct20, transects, df=T)
+mean_octsf <- ext_octsf %>%
+  setNames(c("ID", "sf_oct")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_oct), n = n())     # calculate mean for cell (ID)
+
+# ----   NOVEMBER 2020  ----
+
+
+plot(nov20)
+plot(transects,col = "blue", add=T)
+
+ext_novsf <- raster::extract(nov20, transects, df=T)
+
+mean_novsf <- ext_octsf %>%
+  setNames(c("ID", "sf_nov")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_nov), n = n())     # calculate mean for cell (ID)
+
+# ----    DECEMBER 2020 -----
+
+plot(dec20)
+plot(transects,col = "blue", add=T)
+
+ext_decsf <- raster::extract(dec20, transects, df=T)
+
+mean_decsf <- ext_decsf %>%
+  setNames(c("ID", "sf_dec")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_dec), n = n())     # calculate mean for cell (ID)
+
+
+# ----   JANUARY 2021  ----
+
+plot(jan21)
+plot(transects,col = "blue", add=T)
+
+ext_jansf <- raster::extract(jan21, transects, df=T)
+
+mean_jansf <- ext_jansf %>%
+  setNames(c("ID", "sf_jan")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_jan), n = n())     # calculate mean for cell (ID)
+
+
+# ----   FEBRUARY 2021 ----
+
+plot(feb21)
+plot(transects,col = "blue", add=T)
+
+ext_febsf <- raster::extract(feb21, transects, df=T)
+
+mean_febsf <- ext_febsf %>%
+  setNames(c("ID", "sf_feb")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_feb), n = n())     # calculate mean for cell (ID)
+
+
+# ----   MARCH 2021 ----
+
+plot(mar21)
+plot(transects,col = "blue", add=T)
+
+ext_marsf <- raster::extract(mar21, transects, df=T)
+
+mean_marsf <- ext_marsf %>%
+  setNames(c("ID", "sf_mar")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_mar), n = n())     # calculate mean for cell (ID)
+
+
+
+# ----   APRIL 2021 ----
+
+plot(apr21)
+plot(transects,col = "blue", add=T)
+
+ext_aprsf <- raster::extract(apr21, transects, df=T)
+
+mean_aprsf <- ext_aprsf %>%
+  setNames(c("ID", "sf_apr")) %>%        # rename for ease
+  group_by(ID) %>%               # group by ID
+  summarise(mean = mean(sf_apr), n = n())     # calculate mean for cell (ID)
+
+
 ## ------   3. DETECTION DATA ------
 ## ------     3.1. DETECTION MATRIX : y[i,j] ------
 # y.ar <- MakeY( myData = myData.alive$myData.sp,
