@@ -10,5 +10,17 @@ if(Sys.info()['user'] == 'pidu') { ## Pierre
   analysisDir <- '/Users/virginia/Dropbox/AlpineWolf/02_Analysis'
   simDir <- '/Users/virginia/Dropbox/AlpineWolf/03_Simulations'
   meetDir <- '/Users/virginia/Dropbox/AlpineWolf/04_Meetings'
+} else if(Sys.info()['user'] == 'ribi') {## Richard
+  gitDir <- ''
+  dataDir <- ''
+  analysisDir <- ''
+  simDir <- ''
+  meetDir <- ''
+} else if(Sys.info()['user'] == 'cymi') {## Cyril
+  gitDir <- ''
+  dataDir <- ''
+  analysisDir <- ''
+  simDir <- ''
+  meetDir <- ''
 } else stop('unknown user')
 

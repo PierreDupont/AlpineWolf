@@ -78,11 +78,10 @@ plot(studyAreaGrid["SCR"], add = T)
 
 ## ------   2. SEARCH EFFORT DATA ------
 ## Load GPS search transects
-# transects <- read_sf(file.path(dataDir,"/GISData/Transects_Wolfalps20202021/wolfalps_transects_20202021.shp"))
-# transects <- readOGR(file.path(dataDir, "/GISData/Transects_Wolfalps20202021/wolfalps_transects_20202021.shp"))
-transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/1.shp"))
+transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
 
 transects$Date <- as.POSIXct(strptime(transects$date, "%Y-%m-%d"))
+
 transects$Year <- as.numeric(format(transects$Date,"%Y"))
 transects$Month <- as.numeric(format(transects$Date,"%m"))
 
@@ -91,8 +90,10 @@ plot(transects, col = "red", add = T)
 
 
 
-
 ## ------   3. DNA DATA ------
+scats <- read_sf(file.path(dataDir,"GISData/scats/merged_scats.shp"))
+plot(scats, add = T)
+
 ngs <- read.csv(file.path(dataDir,"DNA/Copy of wa_genetic_samples_06022022.csv"))
 
 ## Remove dead recoveries
@@ -377,7 +378,6 @@ intersection <- st_intersection(grid, transects) %>%
 grid <- grid %>% 
   left_join(intersection, by = "id") %>% 
   filter(!is.na(transect_L))
-plot(grid)
 detectors$grid <- grid
 
 detectors$grid$mean_transect_L <- scale(detectors$grid$transect_L/detectors$grid$transect_N)
@@ -391,6 +391,7 @@ detectors$trials <- detectors$grid$transect_N
 
 ##---- Extract total number of detectors
 detectors$n.detectors <- nrow(detectors$grid)
+plot(detectors$grid)
 
 
 
@@ -578,9 +579,13 @@ simConstants <- list( n.individuals = 500,
 
 simData <- list( lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords, 
-                 hab.covs = st_drop_geometry(habitat$grid[ ,c("forest","herbaceous","elev","mainRoads_L")]),
+                 hab.covs = st_drop_geometry(habitat$grid[ ,c("forest",
+                                                              "herbaceous",
+                                                              "elev",
+                                                              "mainRoads_L")]),
                  alpha = matrix(1,3,2),
-                 det.covs = st_drop_geometry(detectors$grid[ ,c("snow_fall","mean_transect_L")]),
+                 det.covs = st_drop_geometry(detectors$grid[ ,c("snow_fall",
+                                                                "mean_transect_L")]),
                  size = rep(1,max(detectors$n.detectors)),
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,
