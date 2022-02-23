@@ -34,7 +34,7 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity_PD.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 
 
 
@@ -1305,7 +1305,7 @@ hab.rgmx[is.na(hab.rgmx)] <- 0
 row.names(hab.rgmx) <- "habitat"
 
 ## Calculate density
-WA_Density <- GetDensity_PD(
+WA_Density <- GetDensity(
   sx = res$sims.list$s[ , ,1],
   sy = res$sims.list$s[ , ,2],
   z = res$sims.list$z,
@@ -1322,7 +1322,7 @@ it.rgmx[is.na(it.rgmx)] <- 0
 row.names(it.rgmx) <- "Italia"
 
 ## Calculate density
-WA_Italy <- GetDensity_PD(
+WA_Italy <- GetDensity(
   sx = res$sims.list$s[ , ,1],
   sy = res$sims.list$s[ , ,2],
   z = res$sims.list$z,
@@ -1339,7 +1339,7 @@ comp.rgmx[is.na(comp.rgmx)] <- 0
 row.names(comp.rgmx) <- "comparison"
 
 ## Calculate density
-WA_Comp <- GetDensity_PD(
+WA_Comp <- GetDensity(
   sx = res$sims.list$s[ , ,1],
   sy = res$sims.list$s[ , ,2],
   z = res$sims.list$z,
