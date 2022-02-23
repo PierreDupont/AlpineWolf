@@ -39,7 +39,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity_PD.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "WesternAlps.1.6.2"
+modelName = "WesternAlps.1.6.3"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -70,8 +70,9 @@ countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCou
 
 ## Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
-studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
 studyArea <- st_union(studyAreaGrid)
+studyArea <-st_transform(x = studyArea, crs = st_crs(countries))
+studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
 
 ## Plot check
 plot(studyArea, col = "gray80")
@@ -189,12 +190,12 @@ plot(studyArea)
 plot(cutline, add = T, border = "red", lwd = 2)
 
 ##---- Create study area polygon for the western Alps (study area cut to the line) 
-studyArea_west <- st_sfc(st_cast(st_difference(st_buffer(studyArea,10000), cutline),"POLYGON")[[1]])
+studyArea_west <- st_sfc(st_cast(st_difference(st_buffer(studyArea,10), cutline),"POLYGON")[[1]])
 st_crs(studyArea_west) <- st_crs(studyArea)
 studyArea_west <- st_intersection( st_union(countries),
                                    studyArea_west,
                                    drop_lower_td = TRUE)
-plot(studyArea_west, add=T, col = "gray60")
+plot(studyArea_west, add=T, col = adjustcolor("gray20",0.2))
 
 ##---- Create a detector grid from the ENTIRE STUDY AREA with the desired resolution
 grid <- st_as_sf(st_make_grid( studyArea_west,
@@ -744,9 +745,9 @@ mtext( text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
 
 ## Processed data
 plot(st_geometry(habitat$grid))
-mtext( text = "Processed human density",
+mtext( text = "log(human density+1)",
        side = 1, font = 2)
-plot(habitat$grid[ ,"pop"], add = T)
+plot(habitat$grid[ ,"log_pop"], add = T)
 plot(st_geometry(countries), add = T)
 
 mtext( text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
@@ -885,9 +886,13 @@ graphics.off()
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
-  betaHab ~ dnorm(0.0,0.01)
-  
-  habIntensity[1:n.habWindows] <- exp(betaHab*hab.covs[1:n.habWindows])
+  for(c in 1:n.habCovs){
+    betaHab[c] ~ dnorm(0.0,0.01)
+  }
+  for(h in 1:n.habWindows){
+    habIntensity[h] <- exp(inprod(betaHab[1:n.habCovs],
+                                  hab.covs[h,1:n.habCovs]))
+  } 
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -947,6 +952,7 @@ nimConstants <- list( n.individuals = dim(yCombined.aug)[1],
                       n.habWindows = habitat$n.HabWindows,
                       n.detectors = detectors$n.detectors, 
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
+                      n.habCovs = 3,
                       n.maxDets = dim(yCombined.aug)[2],
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2])
@@ -958,8 +964,9 @@ nimData <- list( y = yCombined.aug,
                  upperHabCoords = habitat$upScaledCoords,
                  size = rep(1,detectors$n.detectors),
                  detCoords = detectors$scaledCoords,
-                 hab.covs = cbind(scale(st_drop_geometry(habitat$grid[ ,c("forest")])),
-                                  scale(log(st_drop_geometry(habitat$grid[ ,c("pop")])+1)),
+                 hab.covs = cbind(habitat$grid$`forest`,
+                                  habitat$grid$`bare rock` + habitat$grid$`perpetual snow`,
+                                  habitat$grid$`log_pop`),
                  det.covs = c(scale(st_drop_geometry(detectors$grid[ ,c("transect_L")]))),
                  localTrapsIndices = localObjects$localIndices,
                  localTrapsNum = localObjects$numLocalIndices,
@@ -997,8 +1004,8 @@ for(c in 1:4){
   nimInits <- list( "s" = s.init,
                     "z" = z.init,
                     "psi" = 0.6,
-                    "betaDet" = c(0,0,0),
-                    "betaHab" = 0,
+                    "betaDet" = 0,
+                    "betaHab" = c(0,0,0),
                     "p0" = c(0.05),
                     "sigma" = c(1))
   
@@ -1042,7 +1049,7 @@ for(c in 1:3){
   print(system.time(
     runMCMCbites( mcmc = Cmcmc,
                   bite.size = 500,
-                  bite.number = 10,
+                  bite.number = 20,
                   path = file.path(thisDir, paste0("output/chain",c))) 
   ))
 }#c
@@ -1193,7 +1200,8 @@ relativeDens.r[] <- meanDensity.R[]/sum(meanDensity.R[], na.rm = T)
 ##-- Calculate relative point-process intensity
 intensity.r <- habitat.r
 intensity.r[intensity.r[] > 0] <- exp(res$mean$betaHab[1]*nimData$hab.covs[ ,1]+
-                                        res$mean$betaHab[2]*nimData$hab.covs[ ,2])
+                                        res$mean$betaHab[2]*nimData$hab.covs[ ,2]+
+                                        res$mean$betaHab[3]*nimData$hab.covs[ ,3])
 relativeInt.r <- intensity.r
 relativeInt.r[] <- relativeInt.r[]/sum(relativeInt.r[],na.rm=T)
 

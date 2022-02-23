@@ -50,8 +50,8 @@ int fastIntMode( NumericVector x,
 
 
 // [[Rcpp::export]]
-// GetDensity_PD FUNCTION 
-List GetDensity_PD(NumericMatrix sx,             // X COORDINATES
+// GetDensity FUNCTION 
+List GetDensity(NumericMatrix sx,             // X COORDINATES
                 NumericMatrix sy,                // Y COORDINATES 
                 NumericMatrix z,                 // Z STATE 
                 NumericMatrix IDmx,              // MATRIX OF CELL IDS
