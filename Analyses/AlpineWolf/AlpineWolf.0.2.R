@@ -205,17 +205,20 @@ st_crs(detectors$grid) <- st_crs(studyArea)
 
 ##---- Extract length and number of transects in each grid cell
 intersection <- st_intersection(detectors$grid, transects) %>%
-  mutate(LEN = st_length(.)) %>%
+  mutate(LEN = st_length(.),
+         QI = .$Q.index)  %>%
   st_drop_geometry() %>%
   group_by(id) %>%
   summarise(transect_L = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N = length(unique(Date)))   ## Get total number of visits in each detector grid cell
+            transect_N = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi = mean(QI))              ## Get mean number of the transects quality index per each detector grid cell
 
 ##---- Store in detector grid
 detectors$grid <- detectors$grid %>% 
   left_join(intersection, by = "id") 
 detectors$grid$transect_L[is.na(detectors$grid$transect_L)] <- 0
 detectors$grid$transect_N[is.na(detectors$grid$transect_N)] <- 1
+detectors$grid$transect_qi[is.na(detectors$grid$transect_qi)] <- 0 
 detectors$grid$transect_L <- scale(detectors$grid$transect_L)
 detectors$grid$mean_transect_L <- scale(detectors$grid$transect_L/detectors$grid$transect_N)
 
@@ -1192,10 +1195,12 @@ nimData <- list( y = yCombined.aug,
                  upperHabCoords = habitat$upScaledCoords, 
                  hab.covs = cbind(habitat$grid$`log_pop`,
                                   habitat$grid$`forest`,
-                                  habitat$grid$`herbaceous`,
+                                  habitat$grid$agriculture,
+                                  #habitat$grid$`herbaceous`,
                                   habitat$grid$`bare rock`,
                                   habitat$grid$`perpetual snow`),
                  det.covs = cbind(detectors$grid$`transect_L`,
+                                  detectors$grid$transect_qi,
                                   detectors$grid$`snow_fall`,
                                   detectors$grid$`zone`,
                                   detectors$grid$`log_pop`),
