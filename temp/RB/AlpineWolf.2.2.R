@@ -63,9 +63,9 @@ data = list( sex = c("F","M"),
              aug.factor = 5) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
-if(!dir.exists(thisDir)){dir.create(thisDir)}
-if(!dir.exists(file.path(thisDir, "input"))){dir.create(file.path(thisDir, "input"))}
-if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "output"))}
+dir.create(thisDir,recursive = TRUE)
+dir.create(file.path(thisDir, "input"),recursive = TRUE)
+dir.create(file.path(thisDir, "output"),recursive = TRUE)
 
 
 
@@ -767,7 +767,7 @@ intersection <- st_intersection(habitat$grid, PA) %>%
 habitat$grid <- habitat$grid %>%
   left_join(intersection, by = "id") 
 habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
-habitat$grid$PA[habitat$grid$PA > 1] <- 1
+habitat$grid$PA[habitat$grid$PA > 1] <- 1 #[RB] - getting an error
 
 #habitat$grid$PA <- scale(habitat$grid$PA)
 #plot(habitat$grid[,"PA"])
@@ -886,6 +886,7 @@ status.aug <- MakeAugmentation( y = status,
 ## -----------------------------------------------------------------------------
 ## ------ III. VISUAL SUMMARY OF DATA PROCESSING ------
 {
+  graphics.off()
   pdf( file = file.path(thisDir, paste0(modelName, "_data_prep.pdf")),
        width = 20, height = 12)
   
