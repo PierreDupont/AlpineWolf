@@ -1450,14 +1450,12 @@ for(c in 1:1){
 ##---- Collect multiple MCMC bites and chains
 nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
                                    burnin = 0,
-                                   param.omit = c("s","z"))
+                                   param.omit = c("s","z","sex","status"))
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
 plot(nimOutput_noZ)
 graphics.off()
-
-plot(nimOutput_noZ)
 
 
 ##---- Process and save MCMC samples

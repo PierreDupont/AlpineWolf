@@ -26,6 +26,7 @@ library(RANN)
 library(Rcpp)
 library(RcppArmadillo)
 library(RcppProgress)
+library(gridExtra)
 
 
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
@@ -42,7 +43,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.2.0"
+modelName = "AlpineWolf.3.0"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -50,13 +51,14 @@ habitat = list( resolution = 5000,
                 buffer = 30000)
 
 ## DETECTORS SPECIFICATIONS
-detectors = list( detResolution = 5000,
+detectors = list( resolution = 5000,
+                  detSubResolution = 500,
                   samplingMonths = c(10:12,1:4))
 
 ## NGS DATA SPECIFICATIONS
 data = list( sex = c("F","M"),
              status = c("alpha","pup","other"),
-             aug.factor = 6) 
+             aug.factor = 5) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -103,13 +105,13 @@ plot(transects, col = "red", add = T)
 
 ## ------   3. DNA DATA ------
 ##---- All collected NGS samples
-# allSamples <- read_sf(file.path(dataDir,"GISData/scats/merged_scats.shp"))
-# plot(st_geometry(studyArea))
-# plot(st_geometry(countries), col = "gray80",add=T)
-# plot(allSamples, add = T,pch=3)
+allSamples <- read_sf(file.path(dataDir,"GISData/scats/merged_scats.shp"))
+plot(st_geometry(studyArea))
+plot(st_geometry(countries), col = "gray80",add=T)
+plot(allSamples, add = T,pch=3)
 
 ##---- Genotyped NGS samples
-ngs <- read.csv(file.path(dataDir,"DNA/ngs.csv"))
+ngs <- read.csv(file.path(dataDir,"DNA/ngs21032022.csv"))
 dim(ngs)
 
 ##---- Use lubridate to clean dates
@@ -127,7 +129,7 @@ ngs <- ngs[ngs$Year > 2019, ]
 dim(ngs)
 
 ##---- Filter out dead recoveries
-ngs <- ngs[ngs$Dead.recovery != "Yes", ]
+ngs <- ngs[ngs$Dead.recovery == "", ]
 dim(ngs)
 
 ##---- Number of detections per individual
@@ -255,9 +257,17 @@ lapply(packPres_raw, function(x)plot(x, add = T))
 # pack.r <- raster(file.path(dataDir, "/GISData/Packs_history_grid/packs_history_sum.tif"))
 
 
+##---- Load IUCN presence data
+iucn <- read_sf(file.path(dataDir,"/GISData/Wolf_IUCN/2018_06_06_Wolf_IUCN_RedList.shp"))
+iucn <- st_transform(iucn,st_crs(studyArea))
+plot(st_geometry(studyArea))
+plot(st_geometry(iucn),add=T,col="blue")
+
+
 ##---- Load protected areas
 PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
-
+plot(studyArea)
+plot(PA, add = T)
 
 
 
@@ -267,12 +277,54 @@ PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/P
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
 ##---- Create detector raster 
 detectors$raster <- raster(extent(st_bbox(studyArea)))
-res(detectors$raster) <- detectors$detResolution
+res(detectors$raster) <- detectors$resolution
 detectors$raster <- fasterize(countries, detectors$raster)
 
 ##---- Mask and crop raster cells outside the study area to obtain the detector grid
 detectors$raster <- mask(detectors$raster, st_as_sf(studyArea))
 detectors$raster <- crop(detectors$raster, st_as_sf(studyArea))
+
+##---- Remove glaciers
+glaciers <- CLC
+glaciers[!glaciers[ ] %in% c(9)] <- 0
+glaciers[glaciers[ ] %in% c(9)] <- 1
+to.remove <- glaciers %>% 
+  raster::aggregate( x = .,
+                     fact = detectors$resolution/res(glaciers),
+                     fun = mean) %>%
+  rasterToPolygons(.,fun = function(x)x>0.5) %>%
+  st_as_sf() %>% 
+  fasterize(.,detectors$raster)
+
+detectors$raster[to.remove[ ] == 1] <- NA
+plot(detectors$raster)
+
+##---- Remove big lakes
+lakes <- CLC
+lakes[!lakes[ ] %in% c(7)] <- 0
+lakes[lakes[ ] %in% c(7)] <- 1
+to.remove <- lakes %>% 
+  raster::aggregate( x = .,
+                     fact = detectors$resolution/res(lakes),
+                     fun = mean) %>%
+  rasterToPolygons(.,fun = function(x)x>0.5) %>%
+  st_as_sf() %>% 
+  fasterize(.,detectors$raster)
+detectors$raster[to.remove[ ] == 1] <- NA
+plot(detectors$raster)
+
+##---- Remove big cities
+to.remove <- POP_raw %>% 
+  raster::aggregate( x = .,
+                     fact = detectors$resolution/res(POP_raw),
+                     fun = mean) %>%
+  rasterToPolygons(.,fun = function(x)x>5000) %>%
+  st_as_sf() %>% 
+  fasterize(.,detectors$raster)
+detectors$raster[to.remove[ ] == 1] <- NA
+plot(detectors$raster)
+
+##---- Transform into spatial grid
 detectors$grid <- st_as_sf(rasterToPolygons(detectors$raster))
 detectors$grid$id <- 1:nrow(detectors$grid)
 st_crs(detectors$grid) <- st_crs(studyArea)
@@ -359,7 +411,7 @@ for(l in 1:length(layer.index)){
   plot(st_geometry(detectors$grid), add = T)
   
   COV[[l]] <- raster::aggregate( x = temp,
-                                 fact = detectors$detResolution/res(temp),
+                                 fact = detectors$resolution/res(temp),
                                  fun = mean)
   plot(COV[[l]])
   plot(st_geometry(detectors$grid), add = T)
@@ -377,7 +429,7 @@ detectors$grid <- left_join(detectors$grid, CLC.df, by = "id")
 ## ------       1.2.3. ELEVATION -------
 ##---- Aggregate to the detector resolution
 DEM <- raster::aggregate( x = DEM_raw,
-                          fact = detectors$detResolution/res(DEM_raw),
+                          fact = detectors$resolution/res(DEM_raw),
                           fun = mean)
 plot(DEM)
 plot(st_geometry(detectors$grid), add = T)
@@ -496,7 +548,7 @@ glaciers[!glaciers[ ] %in% c(9)] <- 0
 glaciers[glaciers[ ] %in% c(9)] <- 1
 to.remove <- glaciers %>% 
   raster::aggregate( x = .,
-                     fact = habitat$resolution/res(glaciers),
+                     fact = habitat$resolution/res(temp),
                      fun = mean) %>%
   rasterToPolygons(.,fun = function(x)x>0.5) %>%
   st_as_sf() %>% 
@@ -549,8 +601,7 @@ habitat$comparison <- mask(habitat$raster, st_as_sf(comparison))
 habitat$comparison[habitat$comparison == 0] <- NA
 
 ##---- Create "ITALY" habitat raster (for density estimates) 
-Italia <- countries[countries$CNTR_CODE == "IT", ]
-habitat$Italia <- mask(habitat$raster, st_as_sf(Italia))
+habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
 habitat$Italia[habitat$Italia == 0] <- NA
 
 ##---- Create Habitat matrix of cell ID 
@@ -631,7 +682,8 @@ for(l in 1:length(layer.index)){
 ## Store in habitat grid
 habitat$grid <- left_join(habitat$grid, CLC.df, by = "id") 
 
-
+habitat$grid$alpine <- habitat$grid$herbaceous + habitat$grid$`bare rock`
+habitat$grid$human <- habitat$grid$developed + habitat$grid$agriculture
 
 
 ## ------       2.2.2. ELEVATION -------
@@ -752,6 +804,20 @@ habitat$grid$presence <- scale(habitat$grid$presence)
 
 
 
+## ------       2.2.8. IUCN PRESENCE ------
+## Extract IUCN pack presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(IUCN = sum(iucn)/2.5e+07) 
+
+# Store IUCN permanent presence
+habitat$grid <- habitat$grid %>%
+  left_join(intersection, by = "id") 
+habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
+
+
 ## ------       2.2.8. PROTECTED AREAS -----
 intersection <- st_intersection(habitat$grid, PA) %>%
   mutate(pa = st_area(.))  %>%
@@ -759,7 +825,7 @@ intersection <- st_intersection(habitat$grid, PA) %>%
   group_by(id) %>%
   summarise(PA = sum(pa)/2.5e+07) 
 
-## Store scaled road density 
+## Store proportion of protected area
 habitat$grid <- habitat$grid %>%
   left_join(intersection, by = "id") 
 habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
@@ -1035,6 +1101,18 @@ status.aug <- MakeAugmentation( y = status,
   plot(st_geometry(countries), add = T)
   mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
   
+  ##-- IUCN permanent presence
+  par(mfrow = c(1,2), mar = c(2,2,2,2))
+  plot(st_geometry(habitat$grid))
+  mtext(text = "Raw IUCN presence",side = 1, font = 2)
+  lapply(packPres_raw, function(x)plot(x, add = T))
+  plot(st_geometry(countries), add = T)
+  plot(st_geometry(habitat$grid), add = T)
+  plot(st_geometry(habitat$grid[ ,"iucn"]))
+  mtext(text = "Processed IUCN presence", side = 1, font = 2)
+  plot(habitat$grid[ ,"presence"], add = T)
+  plot(st_geometry(countries), add = T)
+  mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
   
   
   
@@ -1159,6 +1237,60 @@ status.aug <- MakeAugmentation( y = status,
   plot(st_geometry(countries), add = T)
   mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
   
+  
+  ## ------       2.2.7. HISTORICAL PRESENCE ------
+  habitat$grid$presence <- 0
+  
+  for(y in 1:length(packPres_raw)){
+    ## Extract historical pack presence in each habitat grid cell
+    intersection <- st_intersection(habitat$grid, packPres_raw[[y]]) %>%
+      mutate(pres = 1)  %>%
+      st_drop_geometry() %>%
+      group_by(id) %>%
+      summarise(sumpres = sum(pres)) 
+    
+    tmp <- habitat$grid %>%
+      left_join(intersection, by = "id") 
+    tmp$sumpres[is.na(tmp$sumpres)] <- 0
+    habitat$grid$presence <- habitat$grid$presence + tmp$sumpres
+    plot(habitat$grid[,"presence"])
+  }
+  
+  habitat$grid$presence <- scale(habitat$grid$presence)
+  
+  
+  ## ------       2.2.8. IUCN PRESENCE ------
+  ## Extract IUCN pack presence in each habitat grid cell
+  intersection <- st_intersection(habitat$grid, iucn) %>%
+    mutate(pres = 1)  %>%
+    st_drop_geometry() %>%
+    group_by(id) %>%
+    summarise(iucn = sum(pres))
+  
+  # Store scaled road density 
+  habitat$grid <- habitat$grid %>%
+    left_join(intersection, by = "id") 
+  habitat$grid$iucn[is.na(habitat$grid$iucn)] <- 0
+  habitat$grid$iucn[habitat$grid$iucn > 1] <- 1
+  habitat$grid$iucn <- scale(habitat$grid$iucn)
+  #iucn.r <- fasterize(iucn,habitat$raster)
+  
+  
+  ## ------       2.2.8. PROTECTED AREAS -----
+  intersection <- st_intersection(habitat$grid, PA) %>%
+    mutate(pa = st_area(.))  %>%
+    st_drop_geometry() %>%
+    group_by(id) %>%
+    summarise(PA = sum(pa)/2.5e+07) 
+  
+  ## Store scaled road density 
+  habitat$grid <- habitat$grid %>%
+    left_join(intersection, by = "id") 
+  habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
+  habitat$grid$PA[habitat$grid$PA > 1] <- 1
+  
+  #habitat$grid$PA <- scale(habitat$grid$PA)
+  #plot(habitat$grid[,"PA"])
   
   
   ## ------   4. INDIVIDUAL COVARIATES -----
@@ -1322,15 +1454,17 @@ nimData <- list( y = yCombined.aug,
                  alpha = matrix(1,3,2),
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords, 
-                 hab.covs = cbind(
+                 hab.covs = cbind.data.frame(
+                   "alpine" = habitat$grid$`alpine`,
                    "forest" = habitat$grid$`forest`,
-                   "alpine" = habitat$grid$`herbaceous` + habitat$grid$`bare rock`,
-                   "presence" = habitat$grid$`presence`),
-                 det.covs = cbind(detectors$grid$`transect_L`,
-                                  detectors$grid$`transect_qi`,
-                                  detectors$grid$`snow_fall`,
-                                  detectors$grid$`zone`,
-                                  detectors$grid$`log_pop`),
+                   "iucn" = habitat$grid$`IUCN`,
+                   "protected" = habitat$grid$`PA`),
+                 det.covs = cbind.data.frame(
+                   "transect_L" = detectors$grid$`transect_L`,
+                   "transect_qi" = detectors$grid$`transect_qi`,
+                   "snow_fall" = detectors$grid$`snow_fall`,
+                   "zone" = detectors$grid$`zone`,
+                   "log_pop" = detectors$grid$`log_pop`),
                  size = rep(1,detectors$n.detectors),
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,
@@ -1352,8 +1486,6 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
 nimParams <- c("N", "p0", "sigma", "psi",
                "betaDet", "betaHab", "theta", "rho",
                "z", "s", "status", "sex")
-
-
 
 
 ## ------   3. SAVE THE INPUT ------
@@ -1438,12 +1570,14 @@ Cmodel <- compiledList$model
 Cmcmc <- compiledList$mcmc
 
 ##---- Run nimble MCMC in multiple bites
-print(system.time(
-  runMCMCbites( mcmc = Cmcmc,
-                bite.size = 500,
-                bite.number = 12,
-                path = file.path(thisDir, paste0("output/test")))
-))
+for(c in 1:1){
+  print(system.time(
+    runMCMCbites( mcmc = Cmcmc,
+                  bite.size = 500,
+                  bite.number = 12,
+                  path = file.path(thisDir, paste0("output/chain",c)))
+  ))
+}
 
 ##---- Collect multiple MCMC bites and chains
 nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
@@ -1455,10 +1589,13 @@ pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
 plot(nimOutput_noZ)
 graphics.off()
 
+
 ##---- Process and save MCMC samples
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 10)
+                               burnin = 0)
 res <- ProcessCodaOutput(nimOutput)
+
+##---- Save processed MCMC samples
 save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 
@@ -1502,9 +1639,15 @@ WA_Density <- GetDensity(
 
 ##---- Create a matrix of italy 
 ##---- (rows == regions ; columns == habitat raster cells)
-it.rgmx <- rbind(habitat$Italia[] == 1)
+west.r <- fasterize(st_as_sf(studyArea_west), habitat.r)
+west.r[is.na(west.r[])] <- 0
+west.r <- west.r + habitat$Italia 
+plot(west.r)
+table(west.r[], useNA = "always")
+it.rgmx <- rbind(west.r[] == 1,
+                 west.r[] == 2)
 it.rgmx[is.na(it.rgmx)] <- 0
-row.names(it.rgmx) <- "Italia"
+row.names(it.rgmx) <- c("West","East")
 
 ##---- Calculate density
 WA_Italy <- GetDensity(
@@ -1516,7 +1659,8 @@ WA_Italy <- GetDensity(
   returnPosteriorCells = T,
   regionID = it.rgmx)
 
-
+WA_Italy$summary
+ 
 ##---- Create a matrix of admin units binary indicators
 ##---- (rows == regions ; columns == habitat raster cells)
 comp.rgmx <- rbind(habitat$comparison[] == 1)
@@ -1567,8 +1711,8 @@ mtext( text = paste( "N = ", round(WA_Density$summary["Total",1],1),
 
 
 ##---- Plot Italian density raster
-ital.R <- habitat.r
-ital.R[ ] <- WA_Italy$MeanCell
+ital.R <- habitat$Italia
+ital.R[] <- WA_Italy$MeanCell
 ital.R[is.na(habitat$Italia[])] <- NA
 
 plot( habitat$polygon, col = "gray80", border = grey(0.3))
@@ -1600,8 +1744,6 @@ mtext( text = paste( "N = ", round(WA_Comp$summary["Total",1],1),
                      " [", round(WA_Comp$summary["Total",4],1), " ; ",
                      round(WA_Comp$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
-
-
 
 
 
@@ -1682,12 +1824,21 @@ mtext( text = "Wolf density with\ndetected individuals' centroid",
        side = 3, font = 2, cex = 2)
 
 
+## ------  EAST/WEST ABUNDANCES
+##-- Export as .pdf
+par(mfrow = c(1,1))
+plot.new()
+grid.table(WA_Italy$summary)
+mtext(text = "Abundance estimates\nby region",
+      side = 3, outer = T, line = -20, cex = 2, font = 2)
+
+
 
 
 ## ------     2.2. DENSITY EFFECT PLOT ------
 par(mfrow = c(2,2), mar = c(6,6,0,0))
-covNames <- c("forest","herbaceous","presence")
-names(nimData$hab.covs) <- covNames
+covNames <- c("alpine","forest","IUCN","PA")
+
 pred.hab.covs <- apply(nimData$hab.covs,
                        2,
                        function(c){
@@ -1705,6 +1856,7 @@ for(b in 1:ncol(res$sims.list$betaHab)){
                                        sum(res$sims.list$betaHab[x,-b] * mean.hab.covs[-b]))
                                }))
   
+  
   mean.int <- colMeans(intensity)
   quant.int <- apply(intensity, 2, function(x)quantile(x,c(0.025,0.5,0.975)))
   maxD <- round(max(quant.int),3)
@@ -1712,10 +1864,9 @@ for(b in 1:ncol(res$sims.list$betaHab)){
         y = quant.int[2, ],
         type = "n", ylim = c(0, maxD), xlim = range(pred.hab.covs[ ,b]),
         ylab = "Density", xlab = covNames[b], axes = FALSE)
-  minCov <- min(pred.hab.covs[,b])#st_drop_geometry(habitat$grid[ ,covNames[b]]))
-  maxCov <- max(pred.hab.covs[,b])#max(st_drop_geometry(habitat$grid[ ,covNames[b]]))
+  minCov <- min(st_drop_geometry(habitat$grid[ ,covNames[b]]))
+  maxCov <- max(st_drop_geometry(habitat$grid[ ,covNames[b]]))
   xLabels <- round(seq(minCov, maxCov, length.out = 10),2)
-  
   axis(1,
        at = round(seq(min(pred.hab.covs[ ,b]), max(pred.hab.covs[ ,b]), length.out = 10),3),
        labels = xLabels, cex = 2,
@@ -1740,34 +1891,24 @@ graphics.off()
 
 ## ------   3. DETECTION ------
 pdf(file = file.path(thisDir, paste0(modelName,"_Detection.pdf")),
-    width = 15, height = 15)
+    width = 20, height = 15)
 
 ## ------     3.1. DETECTION MAP ------
 sex <- c("female","male")
 status <- c("alpha","pup","other")
-par(mfrow = c(3,2))
+par(mfrow=c(3,2))
 for(ss in 1:2){
   for(s in 1:3){
-    detectors$grid[ ,paste0("p0_",sex[ss],"_",status[s])] <- c(ilogit(logit(res$mean$p0[s,ss]) +
+    detectors$grid$p0 <- c(ilogit(logit(res$mean$p0[s,ss]) +
                                     res$mean$betaDet %*% t(nimData$det.covs)))
-    # plot(st_geometry(detectors$grid[ ,paste0("p0.",ss,".",s)]),
-    #      main = paste0("p0_",sex[ss],"_",status[s]))
-    # plot(detectors$grid[ ,paste0("p0.",ss,".",s)],
-    #      add = T,
-    #      breaks = seq(0,1,0.05))    
+    plot(detectors$grid[,"p0"], main = paste0("p0_",sex[ss],"_",status[s]))
+    
   }
 }
-plot(detectors$grid[ ,c("p0_female_alpha", 
-                        "p0_male_alpha",
-                        "p0_female_pup",
-                        "p0_male_pup",
-                        "p0_female_other",
-                        "p0_male_other")],
-     key.pos = 4, breaks = seq(0,1,0.05)) 
-     
-     
+
+
 ## ------     3.2. DETECTION EFFECT PLOT ------
-par(mfrow = c(3,2), mar = c(8,8,0,4))
+par(mfrow = c(2,2), mar = c(6,6,0,0))
 covNames <- c("transect_L",
               "transect_qi",
               "snow_fall",
@@ -1802,11 +1943,11 @@ for(b in 1:ncol(res$sims.list$betaDet)){
   xLabels <- round(seq(minCov, maxCov, length.out = 10),2)
   axis(1,
        at = round(seq(min(pred.det.covs[ ,b]), max(pred.det.covs[ ,b]), length.out = 10),3),
-       labels = xLabels, cex = 3,
+       labels = xLabels, cex = 2,
        tck = 0.01, las = 1, hadj = 0.5)
   axis(2, at = seq(0,maxp0,length.out = 6),
        labels = seq(0,maxp0,length.out = 6),
-       tck = 0.01, las = 1, cex = 3)
+       tck = 0.01, las = 1, cex = 2)
   
   polygon(x = c(pred.det.covs[ ,b],rev(pred.det.covs[ ,b])),
           y = c(quant.int[1, ],rev(quant.int[3, ])), border = F,
@@ -1818,6 +1959,8 @@ for(b in 1:ncol(res$sims.list$betaDet)){
   
 }
 graphics.off()
+
+
 
 
 
@@ -1850,6 +1993,7 @@ names(params.summary) <- c("mean", "sd", "2.5%CI", "97.5%CI", "Rhat", "n.eff")
 #        add.to.row = list(list(seq(1, nrow(params.summary), by = 2)),"\\rowcolor[gray]{.95} "),
 #        file = file.path(myVars$WD, myVars$modelName,"TABLES",
 #                         paste( myVars$modelName, "_params.tex", sep = "")))
+
 
 
 
@@ -1949,6 +2093,10 @@ WA_Italy$summary
 #                         cex.axis = 0.6),
 #       legend.args = list( text = 'Density (ids.km2)', line = -2,
 #                           side = 4, font = 2, cex = 0.8))
+
+
+
+
 
 
 
