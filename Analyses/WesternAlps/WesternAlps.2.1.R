@@ -32,7 +32,7 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity_PD.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 
 
 
@@ -803,7 +803,7 @@ mtext( text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2
 par(mfrow = c(1,1))
 centroids <- st_drop_geometry(ngs) %>%
   group_by(Genotype.ID) %>%
-  summarise(X = mean(Coordinate.WGS84.UTM.East),               ## Get total length searched in each detector grid cell
+  summarise(X = mean(Coordinate.WGS84.UTM.East),      ## Get total length searched in each detector grid cell
             Y =  mean(Coordinate.WGS84.UTM.North)) 
 coordinates(centroids) <- cbind.data.frame(centroids$X,
                                            centroids$Y)
@@ -877,11 +877,11 @@ modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
   for(c in 1:n.habCovs){
     betaHab[c] ~ dnorm(0.0,0.01)
-  }
+  }#c
   for(h in 1:n.habWindows){
     habIntensity[h] <- exp(inprod(betaHab[1:n.habCovs],
                                   hab.covs[h,1:n.habCovs]))
-  }
+  }#h
   
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
@@ -905,7 +905,7 @@ modelCode <- nimbleCode({
   
   for(ss in 1:2){
     theta[1:n.states,ss] ~ ddirch(alpha[1:n.states,ss])
-  }
+  }#ss
   
   for(i in 1:n.individuals){ 
     sex[i] ~ dbern(rho)
@@ -915,20 +915,26 @@ modelCode <- nimbleCode({
   
   
   ##---- DETECTION PROCESS 
-  betaDet ~ dnorm(0.0,0.01)
+  for(c in 1:n.detCovs){
+    betaDet ~ dnorm(0.0,0.01)
+  }
 
   for(s in 1:n.states){
-      p0[s] ~ dunif(0,1)
-      sigma[s] ~ dunif(0,6)
-
-      logit(p0Traps[s,1:n.detectors]) <- logit(p0[s]) + betaDet*det.covs[1:n.detectors]
-  }#
+    for(ss in 1:2){
+      p0[s,ss] ~ dunif(0,1)
+      sigma[s,ss] ~ dunif(0,6)
+      for(j in 1:n.detectors){
+        logit(p0Traps[s,ss,j]) <- logit(p0[s,ss]) + inprod(betaDet[1:n.detCovs],
+                                                           det.covs[h,1:n.detCovs])
+      }#j
+    }#ss
+  }#s
 
   for(i in 1:n.individuals){
     y[i,1:n.maxDets] ~ dbinomLocal_normal(
       size = size[1:n.detectors],
-      p0Traps = p0Traps[status[i],1:n.detectors],
-      sigma = sigma[status[i]],
+      p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
+      sigma = sigma[status[i],sex[i]+1],
       s = s[i,1:2],
       trapCoords = detCoords[1:n.detectors,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -954,7 +960,7 @@ nimConstants <- list( n.individuals = dim(yCombined.aug)[1],
                       #habIntensity = rep(1,habitat$n.HabWindows),
                       n.detectors = detectors$n.detectors, 
                       n.habCovs = 5,
-                      #n.detCovs = 2,
+                      n.detCovs = 2,
                       n.states = 3,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
@@ -973,7 +979,8 @@ nimData <- list( y = yCombined.aug,
                                   habitat$grid$`herbaceous`,
                                   habitat$grid$`bare rock`,
                                   habitat$grid$`perpetual snow`),
-                 det.covs = c(scale(st_drop_geometry(detectors$grid[ ,c("transect_L")]))),
+                 det.covs = cbind(detectors$grid$`transect_L`,
+                                  detectors$grid$`snow_fall`),
                  size = rep(1,detectors$n.detectors),# detectors$grid$transect_N,
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,
@@ -981,7 +988,7 @@ nimData <- list( y = yCombined.aug,
                  habitatGrid2 = habitat$matrix,
                  habitatGrid = localObjects$habitatGrid)
 
-nimParams <- c("N","p0", "sigma", "psi",
+nimParams <- c("N", "p0", "sigma", "psi",
                "betaDet", "betaHab", "theta", "rho",
                "z", "s")
 

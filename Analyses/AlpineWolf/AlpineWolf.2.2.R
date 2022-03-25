@@ -1748,24 +1748,34 @@ graphics.off()
 
 ## ------   3. DETECTION ------
 pdf(file = file.path(thisDir, paste0(modelName,"_Detection.pdf")),
-    width = 20, height = 15)
+    width = 15, height = 15)
 
 ## ------     3.1. DETECTION MAP ------
 sex <- c("female","male")
 status <- c("alpha","pup","other")
-par(mfrow=c(3,2))
+par(mfrow = c(3,2))
 for(ss in 1:2){
   for(s in 1:3){
-    detectors$grid$p0 <- c(ilogit(logit(res$mean$p0[s,ss]) +
-                                    res$mean$betaDet %*% t(nimData$det.covs)))
-    plot(detectors$grid[,"p0"], main = paste0("p0_",sex[ss],"_",status[s]))
-    
+    detectors$grid[ ,paste0("p0_",sex[ss],"_",status[s])] <- c(ilogit(logit(res$mean$p0[s,ss]) +
+                                                                        res$mean$betaDet %*% t(nimData$det.covs)))
+    # plot(st_geometry(detectors$grid[ ,paste0("p0.",ss,".",s)]),
+    #      main = paste0("p0_",sex[ss],"_",status[s]))
+    # plot(detectors$grid[ ,paste0("p0.",ss,".",s)],
+    #      add = T,
+    #      breaks = seq(0,1,0.05))    
   }
 }
+plot(detectors$grid[ ,c("p0_female_alpha", 
+                        "p0_male_alpha",
+                        "p0_female_pup",
+                        "p0_male_pup",
+                        "p0_female_other",
+                        "p0_male_other")],
+     key.pos = 4, breaks = seq(0,1,0.05)) 
 
 
 ## ------     3.2. DETECTION EFFECT PLOT ------
-par(mfrow = c(2,2), mar = c(6,6,0,0))
+par(mfrow = c(3,2), mar = c(8,8,0,4))
 covNames <- c("transect_L",
               "transect_qi",
               "snow_fall",
@@ -1800,11 +1810,11 @@ for(b in 1:ncol(res$sims.list$betaDet)){
   xLabels <- round(seq(minCov, maxCov, length.out = 10),2)
   axis(1,
        at = round(seq(min(pred.det.covs[ ,b]), max(pred.det.covs[ ,b]), length.out = 10),3),
-       labels = xLabels, cex = 2,
+       labels = xLabels, cex = 3,
        tck = 0.01, las = 1, hadj = 0.5)
   axis(2, at = seq(0,maxp0,length.out = 6),
        labels = seq(0,maxp0,length.out = 6),
-       tck = 0.01, las = 1, cex = 2)
+       tck = 0.01, las = 1, cex = 3)
   
   polygon(x = c(pred.det.covs[ ,b],rev(pred.det.covs[ ,b])),
           y = c(quant.int[1, ],rev(quant.int[3, ])), border = F,
@@ -1816,8 +1826,6 @@ for(b in 1:ncol(res$sims.list$betaDet)){
   
 }
 graphics.off()
-
-
 
 
 
