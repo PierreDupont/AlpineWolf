@@ -56,7 +56,7 @@ load(file.path(thisDir, paste0(modelName, "_mcmc.RData")))
 ## LOAD MODEL INPUT 
 load(file.path(thisDir, "input", paste0(modelName, "_1.RData")))
 
-## LOAD POYGON OF ITALY AND NEIGHBOURING COUNTRIES
+## LOAD POLYGON OF ITALY AND NEIGHBOURING COUNTRIES
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
 
 ## LOAD POLYGONS OF ITALY's REGIONS 
@@ -130,67 +130,68 @@ iter <- seq(1,dim(res$sims.list$z)[1],10)
 
 
 
-## ------   1.2. EXTRACT TOTAL & REGION-SPECIFIC DENSITIES ------
-##---- Calculate total and regional densities
-WA_Regions <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = regions.rgmx)
+# ## ------   1.2. EXTRACT TOTAL & REGION-SPECIFIC DENSITIES ------
+# ##---- Calculate total and regional densities
+# WA_regions <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = regions.rgmx)
+# 
+# ##---- Calculate sex and status-specific densities
+# WA_status <- list()
+# for(s in 0:1){
+#   WA_status[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res$sims.list$z[iter, ] == 1) &
+#       (res$sims.list$sex[iter, ] == s) &
+#       (res$sims.list$status[iter, ] == ss)
+#     
+#     WA_status[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter, ,1],
+#       sy = s.rescaled[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = regions.rgmx)
+#   }#ss
+# }#s
+# 
+# 
+# ## ------   1.3. EXTRACT ALPINE REGION DENSITY ------
+# WA_alps <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = alps.rgmx)
+# 
+# 
+# ## ------   1.4. EXTRACT PREDICTED DENSITY ------
+# predDensities <- sapply(iter,
+#                         function(x){
+#                           intens <- c(exp(res$sims.list$betaHab[x, ] %*% t(nimData$hab.covs)))
+#                           pred <- res$sims.list$N[x]*(intens/sum(intens)) 
+#                           return(pred)
+#                         })
+# 
+# meanPred.r <- habitat$raster
+# meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
+# meanPred.r[is.na(habitat$Italia[])] <- NA
+# 
+# 
+# 
+# ## ------   1.5. SAVE DENSITIES -----
+# save(WA_regions, WA_status, WA_alps, predDensities, 
+#      file = file.path(thisDir, paste0(modelName, "_densities.RData")))
 
-##---- Calculate sex and status-specific densities
-WA_status <- list()
-for(s in 0:1){
-  WA_status[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
-    
-    WA_status[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = regions.rgmx)
-  }#ss
-}#s
-
-
-## ------   1.3. EXTRACT ALPINE REGION DENSITY ------
-WA_Alps <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = alps.rgmx)
-
-
-## ------   1.4. EXTRACT PREDICTED DENSITY ------
-predDensities <- sapply(iter,
-                        function(x){
-                          intens <- c(exp(res$sims.list$betaHab[x, ] %*% t(nimData$hab.covs)))
-                          pred <- res$sims.list$N[x]*(intens/sum(intens)) 
-                          return(pred)
-                        })
-
-meanPred.r <- habitat$raster
-meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
-meanPred.r[is.na(habitat$Italia[])] <- NA
-
-
-
-## ------   1.5. SAVE DENSITIES -----
-save(WA_regions, WA_status, WA_Alps, predDensities, 
-     file = file.path(thisDir, paste0(modelName, "_densities.RData")))
-
+load(file = file.path(thisDir, paste0(modelName, "_densities.RData")))
 
 
 ## -----------------------------------------------------------------------------
@@ -202,7 +203,7 @@ pdf(file = file.path(thisDir, paste0(modelName,"_Results.pdf")),
 
 ## ------     2.1.1. DENSITY MAPS ------
 ##---- Set color scale
-maxDens <- max(WA_Regions$MeanCell)
+maxDens <- max(WA_regions$MeanCell)
 cuts <- seq(0, maxDens, length.out = 100)   
 colFunc <- colorRampPalette(c("white","slateblue","navyblue", "midnightblue"))#,"yellow","orange","red","red"
 col <- colFunc(100)
@@ -212,7 +213,7 @@ col <- colFunc(100)
 par(mfrow = c(1,1), mar = c(4,4,0,0))
 
 meanDensity.R <- habitat.r
-meanDensity.R[ ] <- WA_Regions$MeanCell
+meanDensity.R[ ] <- WA_regions$MeanCell
 meanDensity.R[is.na(italia.r[])] <- NA
 
 plot( habitat$polygon, border = "white")
@@ -222,9 +223,9 @@ plot( meanDensity.R, add = T,
 plot( st_geometry(countries), add = T, lwd = 1)
 plot( st_geometry(st_intersection(regions,countries)), add = T, lwd = 2)
 
-mtext( text = paste( "N = ", round(WA_Regions$summary["Total",1],1),
-                     " [", round(WA_Regions$summary["Total",4],1), " ; ",
-                     round(WA_Regions$summary["Total",5],1), "]", sep = ""),
+mtext( text = paste( "N = ", round(WA_regions$summary["Total",1],1),
+                     " [", round(WA_regions$summary["Total",4],1), " ; ",
+                     round(WA_regions$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
 
@@ -232,7 +233,7 @@ mtext( text = paste( "N = ", round(WA_Regions$summary["Total",1],1),
 par(mfrow = c(1,1), mar = c(4,4,0,0))
 
 alpDensity.R <- habitat.r
-alpDensity.R[] <- WA_Alps$MeanCell
+alpDensity.R[] <- WA_alps$MeanCell
 alpDensity.R[is.na(alps.r[])] <- NA
 
 plot( habitat$polygon, border = "white")
@@ -242,9 +243,9 @@ plot( alpDensity.R, add = T,
 plot( st_geometry(countries), add = T, lwd = 1)
 plot( st_geometry(st_intersection(alps,countries)), add = T, lwd = 2)
 
-mtext( text = paste( "N = ", round(WA_Alps$summary["Total",1],1),
-                     " [", round(WA_Alps$summary["Total",4],1), " ; ",
-                     round(WA_Alps$summary["Total",5],1), "]", sep = ""),
+mtext( text = paste( "N = ", round(WA_alps$summary["Total",1],1),
+                     " [", round(WA_alps$summary["Total",4],1), " ; ",
+                     round(WA_alps$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
 
@@ -359,15 +360,11 @@ for(b in 1:ncol(res$sims.list$betaHab)){
           lwd = 2, type = "l", col = cols[b])
   
 }
-graphics.off()
 
 
 
 
 ## ------   2.2. DETECTION ------
-pdf(file = file.path(thisDir, paste0(modelName,"_Detection.pdf")),
-    width = 15, height = 15)
-
 ## ------     2.2.1. DETECTION MAPS ------
 sex <- c("female","male")
 status <- c("alpha","pup","other")
@@ -383,13 +380,14 @@ plot(detectors$grid[ ,c("p0_female_alpha",
                         "p0_male_pup",
                         "p0_female_other",
                         "p0_male_other")],
-     key.pos = 4, breaks = seq(0,1,0.05)) 
+     key.pos = 4,
+     breaks = c(0,0.001,0.002,0.004,0.008,0.016,0.032,0.064,0.128,0.256,0.512,1)) 
 
 
 
 ## ------     2.2.2. DETECTION EFFECT PLOTS ------
 par(mfrow = c(3,2), mar = c(8,8,0,4))
-names(nimData$det.covs)
+covNames <- names(nimData$det.covs)
 
 pred.det.covs <- apply(nimData$det.covs,
                        2,
@@ -439,7 +437,7 @@ for(b in 1:ncol(res$sims.list$betaDet)){
 ## ------   2.3. PARAMETER TABLES ------
 ## ------     2.3.1. SCR PARAMETERS ------
 # paramSimple <- sapply(strsplit(colnames(res$sims.list), split = '\\['), '[', 1)
-params.simple <- names(res$mean)[!names(res$mean) %in% c("s","z")]
+params.simple <- names(res$mean)[!names(res$mean) %in% c("s","z","sex","status")]
 
 params.means <- do.call(c, lapply(params.simple, function(x)res$mean[[x]]))
 params.sd <- do.call(c, lapply(params.simple, function(x)res$sd[[x]]))
