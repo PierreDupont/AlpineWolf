@@ -43,7 +43,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.1"
+modelName = "AlpineWolf.5.2"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -58,7 +58,7 @@ detectors = list( resolution = 5000,
 ## NGS DATA SPECIFICATIONS
 data = list( sex = c("F","M"),
              status = c("alpha","pup","other"),
-             aug.factor = 7) 
+             aug.factor = 6) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -312,633 +312,636 @@ PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/P
 plot(studyArea)
 plot(PA, add = T)
 
+## ------   5. PRE-PROCESSED STUFF ------
+load(file.path(thisDir,"Habitat.RData"))
+load(file.path(thisDir,"Detectors.RData"))
 
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
-## ------   1. DETECTORS ------
-## ------     1.1. DETECTORS CHARACTERISTICS ------
-##---- Make PAB search grid
-searchGrid <- MakeSearchGrid(
-  data = as_Spatial(studyArea),
-  resolution = detectors$resolution,
-  div = (detectors$resolution/detectors$detSubResolution)^2,
-  center = T,
-  plot = TRUE,
-  fasterize = TRUE)
-
-##---- Create detector raster 
-detectors$raster <- raster(extent(st_bbox(studyArea)))
-res(detectors$raster) <- detectors$resolution
-detectors$raster <- fasterize(countries, detectors$raster)
-
-##---- Mask and crop raster cells outside the study area to obtain the detector grid
-detectors$raster <- mask(detectors$raster, st_as_sf(studyArea))
-detectors$raster <- crop(detectors$raster, st_as_sf(studyArea))
-
-##---- Remove glaciers
-glaciers <- CLC
-glaciers[!glaciers[ ] %in% c(9)] <- 0
-glaciers[glaciers[ ] %in% c(9)] <- 1
-to.remove <- glaciers %>% 
-  raster::aggregate( x = .,
-                     fact = detectors$resolution/res(glaciers),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>0.5) %>%
-  st_as_sf() %>% 
-  fasterize(.,detectors$raster)
-
-detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
-
-##---- Remove big lakes
-lakes <- CLC
-lakes[!lakes[ ] %in% c(7)] <- 0
-lakes[lakes[ ] %in% c(7)] <- 1
-to.remove <- lakes %>% 
-  raster::aggregate( x = .,
-                     fact = detectors$resolution/res(lakes),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>0.5) %>%
-  st_as_sf() %>% 
-  fasterize(.,detectors$raster)
-detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
-
-##---- Remove big cities
-to.remove <- POP_raw %>% 
-  raster::aggregate( x = .,
-                     fact = detectors$resolution/res(POP_raw),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>5000) %>%
-  st_as_sf() %>% 
-  fasterize(.,detectors$raster)
-detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
-
-##---- Transform into spatial grid
-detectors$grid <- st_as_sf(rasterToPolygons(detectors$raster))
-detectors$grid$id <- 1:nrow(detectors$grid)
-st_crs(detectors$grid) <- st_crs(studyArea)
-
-##---- Extract length and number of transects in each grid cell
-intersection <- st_intersection(detectors$grid, transects) %>%
-  mutate(LEN = st_length(.),
-         QI = .$Q.index) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(transect_L = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N = length(unique(Date)),   ## Get total number of visits in each detector grid cell
-            transect_qi = mean(QI))              ## Get mean transects quality index for each detector grid cell
-
-##---- Store in detector grid
-detectors$grid <- detectors$grid %>% 
-  left_join(intersection, by = "id") 
-detectors$grid$transect_L[is.na(detectors$grid$transect_L)] <- 0
-detectors$grid$transect_N[is.na(detectors$grid$transect_N)] <- 1
-detectors$grid$transect_qi[is.na(detectors$grid$transect_qi)] <- 0 
-detectors$grid$transect_L <- scale(detectors$grid$transect_L)
-detectors$grid$mean_transect_L <- scale(detectors$grid$transect_L/detectors$grid$transect_N)
-
-# ####---- If you want only grid cells that contain transects instead
-# detectors$grid <- detectors$grid %>% 
-#   left_join(intersection, by = "id") %>% 
-#  filter(!is.na(transect_L))
-
-detPoly <- rasterToPolygons(detectors$raster)
-proj4string(detPoly) <-"+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
-
-##---- Remove sub-detectors outside the habitat
-detToKeep <- over(x = searchGrid$detector.sp,
-                  y = detPoly)
-searchGrid$detector.sp <- searchGrid$detector.sp[!is.na(detToKeep[,1]), ]
-
-mainDetToKeep <- searchGrid$main.detector.sp$main.cell.id %in% searchGrid$detector.sp$main.cell.id
-searchGrid$main.detector.sp <- searchGrid$main.detector.sp[mainDetToKeep, ] 
-
-##---- Re-order detectors to match the detector grid
-searchGrid$main.detector.sp <- searchGrid$main.detector.sp[
-  order(-searchGrid$main.detector.sp$main.cell.y,
-        searchGrid$main.detector.sp$main.cell.x), ]
-searchGrid$main.detector.sp$main.cell.new.id <- 1:nrow(detectors$grid)
-
-##---- Re-name main detectors to match the detector grid
-searchGrid$detector.sp$main.cell.new.id <- sapply(
-  searchGrid$detector.sp$main.cell.id, function(x){
-    which(searchGrid$main.detector.sp$main.cell.id == x)
-  })
-
-##---- Store detector coordinates
-detectors$coords <- st_coordinates(st_centroid(detectors$grid))[ ,c("X","Y")]
-dimnames(detectors$coords) <- list(1:nrow(detectors$grid),
-                                   c("x","y"))
-detectors$sp <- searchGrid$main.detector.sp
-detectors$sub.sp <- searchGrid$detector.sp
-detectors$size <- as.numeric(table(detectors$sub.sp$main.cell.new.id))
-
-##---- Extract total number of detectors
-detectors$n.detectors <- nrow(detectors$grid)
-
-
-
-## ------     1.2. DETECTOR COVARIATES ------
-## ------       1.2.1. SNOWFALL ERA-5 ------
-##---- Calculate mean and cumulative snowfall
-SNOW$snow.mean <- rowMeans(st_drop_geometry(SNOW), na.rm = T) 
-SNOW$snow.sum <- rowSums(st_drop_geometry(SNOW), na.rm = T) 
-
-##---- Extract snow-fall in each detector grid cell
-intersection <- st_intersection(detectors$grid, SNOW) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(snow_fall = mean(snow.mean)) 
-
-##---- Store average snow-fall 
-detectors$grid <- detectors$grid %>%
-  left_join(intersection, by = "id") 
-
-##---- scale covariate
-detectors$grid$snow_fall[is.na(detectors$grid$snow_fall)] <- 0
-detectors$grid$snow_fall <- scale(detectors$grid$snow_fall)
-
-
-
-
-## ------       1.2.2. CORINE LAND COVER ------
-##---- Identify layers we want to use
-layer.index <- c(1,2,3,4,5,9)
-
-##---- Set-up data frame to store CLC values
-CLC.df <- as.data.frame(matrix(NA, detectors$n.detectors, length(layer.index)))
-names(CLC.df) <- layer.names[layer.index]
-CLC.df$id <- 1:detectors$n.detectors
-COV <- list()
-
-##---- Loop over the different layers of interest
-par(mfrow = c(1,2))
-for(l in 1:length(layer.index)){
-  temp <- CLC
-  temp[!temp[] %in% layer.index[l]] <- 0
-  temp[temp[] %in% layer.index[l]] <- 1
-  plot(temp)
-  plot(st_geometry(detectors$grid), add = T)
-  
-  COV[[l]] <- raster::aggregate( x = temp,
-                                 fact = detectors$resolution/res(temp),
-                                 fun = mean)
-  plot(COV[[l]])
-  plot(st_geometry(detectors$grid), add = T)
-  CLC.df[ ,l] <- raster::extract( x = COV[[l]],
-                                  y = detectors$sp)
-  print(layer.index[l])
-}#c
-
-##---- Store in detector grid
-detectors$grid <- left_join(detectors$grid, CLC.df, by = "id") 
-
-
-
-
-## ------       1.2.3. ELEVATION -------
-##---- Aggregate to the detector resolution
-DEM <- raster::aggregate( x = DEM_raw,
-                          fact = detectors$resolution/res(DEM_raw),
-                          fun = mean)
-plot(DEM)
-plot(st_geometry(detectors$grid), add = T)
-
-##---- Extract scaled elevation values
-detectors$grid$elev <- DEM %>%
-  raster::extract(y = detectors$sp) %>%
-  scale()
-
-
-
-
-## ------       1.2.4. TERRAIN RUGGEDNESS INDEX -------
-##---- Aggregate to the detector resolution
-TRI <- raster::aggregate( x = TRI_raw ,
-                          fact = detectors$resolution/res(TRI_raw ),
-                          fun = mean)
-
-plot(TRI)
-plot(st_geometry(detectors$grid), add = T)
-
-##---- Extract scaled terrain ruggedness 
-detectors$grid$tri <- TRI %>%
-  raster::extract(y = detectors$sp) %>%
-  scale()
-
-
-
-
-## ------       1.2.5. HUMAN POPULATION DENSITY -------
-##---- Aggregate to the detector resolution
-POP <- raster::aggregate( x = POP_raw ,
-                          fact = detectors$resolution/res(POP_raw ),
-                          fun = mean)
-
-plot(POP)
-plot(st_geometry(detectors$grid), add = T)
-
-##----Extract scaled human pop density 
-detectors$grid$pop <- POP %>% 
-  raster::extract(y = detectors$sp) %>% 
-  scale()
-
-##---- Extract log(human pop density + 1)
-log_POP <- POP
-log_POP[ ] <- log(POP[]+1)
-detectors$grid$log_pop <- log_POP %>% 
-  raster::extract(y = detectors$sp) %>% 
-  scale()
-
-
-
-
-## ------       1.2.6. ROAD DENSITY -------
-##---- Extract road length in each detector grid cell
-intersection <- st_intersection(detectors$grid, mainRoads) %>%
-  mutate(length = st_length(.))  %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(mainRoads_L = sum(length)) 
-
-##---- Store scaled road density 
-detectors$grid <- detectors$grid %>%
-  left_join(intersection, by = "id") 
-detectors$grid$mainRoads_L[is.na(detectors$grid$mainRoads_L)] <- 0
-detectors$grid$mainRoads_L <- scale(detectors$grid$mainRoads_L)
-
-
-##---- Display all detector covariates
-plot(detectors$grid[ ,3:length(detectors$grid)], max.plot = 15)
-
-
-
-
-## ------       1.2.7. EAST/WEST ------
-##---- Calculate distance of all detectors to each zone
-distWest <- st_distance(detectors$grid,studyArea_west)
-distEast <- st_distance(detectors$grid,studyArea_east)
-
-##---- Assign detectors to the closest zone
-detectors$grid$zone <- apply(cbind(distWest,distEast),1,
-                             function(x)which.min(x)-1)
-
-
-
-
-## ------   2. HABITAT ------
-## ------     2.1. HABITAT CHARACTERISTICS ------
-##---- Create Habitat polygon (detector grid + buffer)  
-habitat$polygon <- st_buffer(st_union(detectors$grid),
-                             habitat$buffer)
-
-##---- Remove un-suitable habitat (e.g. seas)
-habitat$polygon <- st_intersection( st_union(countries),
-                                    habitat$polygon,
-                                    drop_lower_td = TRUE)
-
-##---- Create habitat raster (keep raster cells with > 50% habitat) 
-##---- (the huge buffer is used to make sure all models have comparable rasters)
-habitat$raster <- raster(extent(st_bbox(st_buffer(st_union(studyAreaGrid),
-                                                  100000))))
-
-##---- Trick to get % of habitat
-res(habitat$raster) <- habitat$resolution/10
-habitat$raster <- fasterize( countries,
-                             habitat$raster, )
-habitat$raster[is.na(habitat$raster)]<- 0
-habitat$raster <- aggregate(habitat$raster, fact = 10, sum, na.rm = TRUE)
-habitat$raster[habitat$raster[ ] < 50] <- NA
-habitat$raster[habitat$raster[ ] >= 50] <- 1
-plot(habitat$raster)
-
-##---- Remove glaciers
-glaciers <- CLC
-glaciers[!glaciers[ ] %in% c(9)] <- 0
-glaciers[glaciers[ ] %in% c(9)] <- 1
-to.remove <- glaciers %>% 
-  raster::aggregate( x = .,
-                     fact = habitat$resolution/res(temp),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>0.5) %>%
-  st_as_sf() %>% 
-  fasterize(.,habitat$raster)
-
-habitat$raster[to.remove[ ] == 1] <- NA
-plot(habitat$raster)
-
-##---- Remove big lakes
-lakes <- CLC
-lakes[!lakes[ ] %in% c(7)] <- 0
-lakes[lakes[ ] %in% c(7)] <- 1
-to.remove <- lakes %>% 
-  raster::aggregate( x = .,
-                     fact = habitat$resolution/res(lakes),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>0.5) %>%
-  st_as_sf() %>% 
-  fasterize(.,habitat$raster)
-habitat$raster[to.remove[ ] == 1] <- NA
-plot(habitat$raster)
-
-##---- Remove big cities
-to.remove <- POP_raw %>% 
-  raster::aggregate( x = .,
-                     fact = habitat$resolution/res(POP_raw),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>5000) %>%
-  st_as_sf() %>% 
-  fasterize(.,habitat$raster)
-habitat$raster[to.remove[ ] == 1] <- NA
-plot(habitat$raster)
-
-
-
-##---- Mask and crop habitat to the buffer 
-habitat$raster <- mask(habitat$raster, st_as_sf(habitat$polygon))
-habitat$raster <- crop(habitat$raster, st_as_sf(habitat$polygon))
-
-##---- Create habitat grid
-habitat$grid <- st_as_sf(rasterToPolygons( habitat$raster,
-                                           fun = function(x)x == 1))
-habitat$grid$id <- 1:nrow(habitat$grid)
-habitat$grid <- habitat$grid[,c(2,3)]
-st_crs(habitat$grid) <- st_crs(habitat$polygon)
-
-##---- Create "COMPARISON" habitat raster (for comparison between models) 
-comparison <- st_buffer(st_union(detectors$grid[as.numeric(detectors$grid$transect_L) >0, ]),5000) 
-habitat$comparison <- mask(habitat$raster, st_as_sf(comparison))
-habitat$comparison[habitat$comparison == 0] <- NA
-
-##---- Create "EXTRACTION" habitat raster (for the report) 
-habitat$extraction <- mask(habitat$raster, st_as_sf(st_union(SCRGrid)))
-habitat$extraction[habitat$extraction == 0] <- NA
-
-##---- Create "ITALY" habitat raster (for density estimates) 
-habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
-habitat$Italia[habitat$Italia == 0] <- NA
-
-##---- Create Habitat matrix of cell ID 
-habitat$matrix <- habitat$raster
-habitat$matrix[] <- 0
-
-##----  Identify suitable habitat cells
-isHab <- which(habitat$raster[]==1)
-
-##---- Cell ID starts from the top left corner, increments left to right and
-##---- up to down
-habitat$matrix[isHab] <- 1:length(isHab)
-
-##---- Convert to matrix
-habitat$matrix <- as.matrix(habitat$matrix)
-habitat$binary <- habitat$matrix  ##(required by the getLocalObject function; the function could be changed to deal with matrix others than 0/1)
-habitat$binary[habitat$binary > 0] <- 1 
-
-##---- Obtain xy coordinates of habitat cells   
-habitat$coords <- coordinates(habitat$raster)[isHab, ]
-dimnames(habitat$coords) <- list(1:length(isHab), c("x","y"))
-habitat$sp <- SpatialPoints(coords = habitat$coords,
-                            proj4string = crs(habitat$polygon)) 
-
-##---- Retrieve habitat windows corners
-habitat$lowerCoords <- habitat$coords - 0.5*habitat$resolution
-habitat$upperCoords <- habitat$coords + 0.5*habitat$resolution
-habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
-
-##---- Visual plotting to check if everything is right  
-plot(habitat$raster)					
-plot(st_geometry(countries), add = T)
-plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))						
-plot(transects,add=T, col="red")
-plot(st_geometry(detectors$grid), add=T)
-
-
-
-
-## ------     2.2. HABITAT COVARIATES ------
-## ------       2.2.1. CORINE LAND COVER ------
-## Legend : 
-## 1	= developed; 2 = agriculture; 3 = forest; 4 = herbaceous; 5 =	bare rock;
-## 6 = sea features; 7 = inland water; 9 = perpetual snow
-layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
-                 "sea features","inland water","NA","perpetual snow")
-layer.index <- c(1,2,3,4,5,9)
-par(mfrow = c(1,2))
-
-CLC.df <- as.data.frame(matrix(NA, habitat$n.HabWindows, length(layer.index)))
-names(CLC.df) <- layer.names[layer.index]
-CLC.df$id <- 1:habitat$n.HabWindows
-
-COV <- list()
-for(l in 1:length(layer.index)){
-  temp <- CLC
-  temp[!temp[] %in% layer.index[l]] <- 0
-  temp[temp[] %in% layer.index[l]] <- 1
-  plot(temp)
-  plot(st_geometry(habitat$grid), add = T)
-  
-  COV[[l]] <- raster::aggregate( x = temp,
-                                 fact = habitat$resolution/res(temp),
-                                 fun = mean)
-  
-  COV[[l]] <- raster::focal(x = COV[[l]],
-                            w = matrix(1,3,3),
-                            fun = mean,
-                            na.rm = T)
-  
-  plot(COV[[l]])
-  plot(st_geometry(habitat$grid), add = T)
-  CLC.df[ ,l] <- raster::extract( x = COV[[l]],
-                                  y = habitat$sp)
-  print(layer.index[l])
-}#c
-
-## Store in habitat grid
-habitat$grid <- left_join(habitat$grid, CLC.df, by = "id") 
-
-habitat$grid$alpine <- habitat$grid$herbaceous + habitat$grid$`bare rock`
-habitat$grid$human <- habitat$grid$developed + habitat$grid$agriculture
-
-
-## ------       2.2.2. ELEVATION -------
-## Aggregate to the detector resolution
-DEM <- raster::aggregate( x = DEM_raw,
-                          fact = habitat$resolution/res(DEM_raw),
-                          fun = mean)
-plot(DEM)
-plot(st_geometry(habitat$grid), add = T)
-
-## Extract scaled elevation values
-habitat$grid$elev <- DEM %>%
-  raster::extract(y = habitat$sp) %>%
-  scale()
-
-
-
-
-## ------       2.2.3. TERRAIN RUGGEDNESS INDEX -------
-## Aggregate to the detector resolution
-TRI <- raster::aggregate( x = TRI_raw ,
-                          fact = habitat$resolution/res(TRI_raw ),
-                          fun = mean)
-TRI <- raster::focal(x = TRI,
-                     w = matrix(1,3,3),
-                     fun = mean,
-                     na.rm = T)
-plot(TRI)
-plot(st_geometry(habitat$grid), add = T)
-
-## Extract scaled terrain ruggedness 
-habitat$grid$tri <- TRI %>%
-  raster::extract(y = habitat$sp) %>%
-  scale()
-
-
-
-
-## ------       2.2.4. HUMAN POPULATION DENSITY -------
-## Aggregate to the detector resolution
-POP <- raster::aggregate( x = POP_raw ,
-                          fact = habitat$resolution/res(POP_raw ),
-                          fun = mean)
-POP <- raster::focal(x = POP,
-                     w = matrix(1,3,3),
-                     fun = mean,
-                     na.rm = T)
-plot(POP)
-plot(st_geometry(habitat$grid), add = T)
-
-## Extract scaled human pop density 
-habitat$grid$pop <- POP %>% 
-  raster::extract(y = habitat$sp) %>% 
-  scale()
-
-## Extract log(human pop density + 1)
-log_POP <- POP
-log_POP[ ] <- log(POP[]+1)
-
-par(mfrow=c(1,2))
-plot(POP)
-plot(st_geometry(countries),add=T)
-plot(log_POP)
-plot(st_geometry(countries),add=T)
-
-habitat$grid$log_pop <- log_POP %>% 
-  raster::extract(y = habitat$sp) %>% 
-  scale()
-
-
-
-## ------       2.2.5. ROAD DENSITY -------
-## Extract road length in each habitat grid cell
-intersection <- st_intersection(habitat$grid, mainRoads) %>%
-  mutate(length = st_length(.))  %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(mainRoads_L = sum(length)) 
-
-## Store scaled road density 
-habitat$grid <- habitat$grid %>%
-  left_join(intersection, by = "id") 
-habitat$grid$mainRoads_L[is.na(habitat$grid$mainRoads_L)] <- 0
-habitat$grid$mainRoads_L <- scale(habitat$grid$mainRoads_L)
-
-
-
-## ------       2.2.6. EAST/WEST ------
-##---- Calculate distance of all detectors to each zone
-distWest <- st_distance(habitat$grid, studyArea_west)
-distEast <- st_distance(habitat$grid, studyArea_east)
-
-##---- Assign detectors to the closest zone
-habitat$grid$zone <- apply(cbind(distWest,distEast),1,
-                           function(x)which.min(x)-1)
-
-
-## ------       2.2.7. HISTORICAL PRESENCE ------
-habitat$grid$presence <- 0
-
-for(y in 1:length(packPres_raw)){
-  ## Extract historical pack presence in each habitat grid cell
-  intersection <- st_intersection(habitat$grid, packPres_raw[[y]]) %>%
-    mutate(pres = 1)  %>%
-    st_drop_geometry() %>%
-    group_by(id) %>%
-    summarise(sumpres = sum(pres)) 
-  
-  tmp <- habitat$grid %>%
-    left_join(intersection, by = "id") 
-  tmp$sumpres[is.na(tmp$sumpres)] <- 0
-  habitat$grid$presence <- habitat$grid$presence + tmp$sumpres
-  plot(habitat$grid[,"presence"])
-}
-
-habitat$grid$presence <- scale(habitat$grid$presence)
-
-
-
-
-## ------       2.2.8. IUCN PRESENCE ------
-## Extract LCIE wolf permanent presence in each habitat grid cell
-intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
-  mutate(iucn = st_area(.)) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(IUCN = sum(iucn*SPOIS)/2.5e+07) 
-
-habitat$grid <- habitat$grid %>%
-  left_join(intersection, by = "id") 
-habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
-plot(habitat$grid[,"IUCN"])
-
-## Extract LCIE wolf sporadic presence in each habitat grid cell
-intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
-  mutate(iucn = st_area(.)) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07) 
-
-tmp <- habitat$grid %>%
-  left_join(intersection, by = "id") 
-tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
-habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
-
-## Extract LCIE wolf presence in each habitat grid cell
-intersection <- st_intersection(habitat$grid, iucn_2018) %>%
-  mutate(iucn = st_area(.)) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07) 
-
-tmp <- habitat$grid %>%
-  left_join(intersection, by = "id") 
-tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
-habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
-
-habitat$grid$IUCN <- scale(habitat$grid$IUCN)
-
-
-
-
-## ------       2.2.8. PROTECTED AREAS -----
-# intersection <- st_intersection(habitat$grid, PA) %>%
-#   mutate(pa = st_area(.))  %>%
+# ## ------   1. DETECTORS ------
+# ## ------     1.1. DETECTORS CHARACTERISTICS ------
+# ##---- Make PAB search grid
+# searchGrid <- MakeSearchGrid(
+#   data = as_Spatial(studyArea),
+#   resolution = detectors$resolution,
+#   div = (detectors$resolution/detectors$detSubResolution)^2,
+#   center = T,
+#   plot = TRUE,
+#   fasterize = TRUE)
+# 
+# ##---- Create detector raster 
+# detectors$raster <- raster(extent(st_bbox(studyArea)))
+# res(detectors$raster) <- detectors$resolution
+# detectors$raster <- fasterize(countries, detectors$raster)
+# 
+# ##---- Mask and crop raster cells outside the study area to obtain the detector grid
+# detectors$raster <- mask(detectors$raster, st_as_sf(studyArea))
+# detectors$raster <- crop(detectors$raster, st_as_sf(studyArea))
+# 
+# ##---- Remove glaciers
+# glaciers <- CLC
+# glaciers[!glaciers[ ] %in% c(9)] <- 0
+# glaciers[glaciers[ ] %in% c(9)] <- 1
+# to.remove <- glaciers %>% 
+#   raster::aggregate( x = .,
+#                      fact = detectors$resolution/res(glaciers),
+#                      fun = mean) %>%
+#   rasterToPolygons(.,fun = function(x)x>0.5) %>%
+#   st_as_sf() %>% 
+#   fasterize(.,detectors$raster)
+# 
+# detectors$raster[to.remove[ ] == 1] <- NA
+# plot(detectors$raster)
+# 
+# ##---- Remove big lakes
+# lakes <- CLC
+# lakes[!lakes[ ] %in% c(7)] <- 0
+# lakes[lakes[ ] %in% c(7)] <- 1
+# to.remove <- lakes %>% 
+#   raster::aggregate( x = .,
+#                      fact = detectors$resolution/res(lakes),
+#                      fun = mean) %>%
+#   rasterToPolygons(.,fun = function(x)x>0.5) %>%
+#   st_as_sf() %>% 
+#   fasterize(.,detectors$raster)
+# detectors$raster[to.remove[ ] == 1] <- NA
+# plot(detectors$raster)
+# 
+# ##---- Remove big cities
+# to.remove <- POP_raw %>% 
+#   raster::aggregate( x = .,
+#                      fact = detectors$resolution/res(POP_raw),
+#                      fun = mean) %>%
+#   rasterToPolygons(.,fun = function(x)x>5000) %>%
+#   st_as_sf() %>% 
+#   fasterize(.,detectors$raster)
+# detectors$raster[to.remove[ ] == 1] <- NA
+# plot(detectors$raster)
+# 
+# ##---- Transform into spatial grid
+# detectors$grid <- st_as_sf(rasterToPolygons(detectors$raster))
+# detectors$grid$id <- 1:nrow(detectors$grid)
+# st_crs(detectors$grid) <- st_crs(studyArea)
+# 
+# ##---- Extract length and number of transects in each grid cell
+# intersection <- st_intersection(detectors$grid, transects) %>%
+#   mutate(LEN = st_length(.),
+#          QI = .$Q.index) %>%
 #   st_drop_geometry() %>%
 #   group_by(id) %>%
-#   summarise(PA = sum(pa)/2.5e+07) 
+#   summarise(transect_L = sum(LEN),               ## Get total length searched in each detector grid cell
+#             transect_N = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+#             transect_qi = mean(QI))              ## Get mean transects quality index for each detector grid cell
+# 
+# ##---- Store in detector grid
+# detectors$grid <- detectors$grid %>% 
+#   left_join(intersection, by = "id") 
+# detectors$grid$transect_L[is.na(detectors$grid$transect_L)] <- 0
+# detectors$grid$transect_N[is.na(detectors$grid$transect_N)] <- 1
+# detectors$grid$transect_qi[is.na(detectors$grid$transect_qi)] <- 0 
+# detectors$grid$transect_L <- scale(detectors$grid$transect_L)
+# detectors$grid$mean_transect_L <- scale(detectors$grid$transect_L/detectors$grid$transect_N)
+# 
+# # ####---- If you want only grid cells that contain transects instead
+# # detectors$grid <- detectors$grid %>% 
+# #   left_join(intersection, by = "id") %>% 
+# #  filter(!is.na(transect_L))
+# 
+# detPoly <- rasterToPolygons(detectors$raster)
+# proj4string(detPoly) <-"+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
+# 
+# ##---- Remove sub-detectors outside the habitat
+# detToKeep <- over(x = searchGrid$detector.sp,
+#                   y = detPoly)
+# searchGrid$detector.sp <- searchGrid$detector.sp[!is.na(detToKeep[,1]), ]
+# 
+# mainDetToKeep <- searchGrid$main.detector.sp$main.cell.id %in% searchGrid$detector.sp$main.cell.id
+# searchGrid$main.detector.sp <- searchGrid$main.detector.sp[mainDetToKeep, ] 
+# 
+# ##---- Re-order detectors to match the detector grid
+# searchGrid$main.detector.sp <- searchGrid$main.detector.sp[
+#   order(-searchGrid$main.detector.sp$main.cell.y,
+#         searchGrid$main.detector.sp$main.cell.x), ]
+# searchGrid$main.detector.sp$main.cell.new.id <- 1:nrow(detectors$grid)
+# 
+# ##---- Re-name main detectors to match the detector grid
+# searchGrid$detector.sp$main.cell.new.id <- sapply(
+#   searchGrid$detector.sp$main.cell.id, function(x){
+#     which(searchGrid$main.detector.sp$main.cell.id == x)
+#   })
+# 
+# ##---- Store detector coordinates
+# detectors$coords <- st_coordinates(st_centroid(detectors$grid))[ ,c("X","Y")]
+# dimnames(detectors$coords) <- list(1:nrow(detectors$grid),
+#                                    c("x","y"))
+# detectors$sp <- searchGrid$main.detector.sp
+# detectors$sub.sp <- searchGrid$detector.sp
+# detectors$size <- as.numeric(table(detectors$sub.sp$main.cell.new.id))
+# 
+# ##---- Extract total number of detectors
+# detectors$n.detectors <- nrow(detectors$grid)
+# 
+# 
+# 
+# ## ------     1.2. DETECTOR COVARIATES ------
+# ## ------       1.2.1. SNOWFALL ERA-5 ------
+# ##---- Calculate mean and cumulative snowfall
+# SNOW$snow.mean <- rowMeans(st_drop_geometry(SNOW), na.rm = T) 
+# SNOW$snow.sum <- rowSums(st_drop_geometry(SNOW), na.rm = T) 
+# 
+# ##---- Extract snow-fall in each detector grid cell
+# intersection <- st_intersection(detectors$grid, SNOW) %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(snow_fall = mean(snow.mean)) 
+# 
+# ##---- Store average snow-fall 
+# detectors$grid <- detectors$grid %>%
+#   left_join(intersection, by = "id") 
+# 
+# ##---- scale covariate
+# detectors$grid$snow_fall[is.na(detectors$grid$snow_fall)] <- 0
+# detectors$grid$snow_fall <- scale(detectors$grid$snow_fall)
+# 
+# 
+# 
+# 
+# ## ------       1.2.2. CORINE LAND COVER ------
+# ##---- Identify layers we want to use
+# layer.index <- c(1,2,3,4,5,9)
+# 
+# ##---- Set-up data frame to store CLC values
+# CLC.df <- as.data.frame(matrix(NA, detectors$n.detectors, length(layer.index)))
+# names(CLC.df) <- layer.names[layer.index]
+# CLC.df$id <- 1:detectors$n.detectors
+# COV <- list()
+# 
+# ##---- Loop over the different layers of interest
+# par(mfrow = c(1,2))
+# for(l in 1:length(layer.index)){
+#   temp <- CLC
+#   temp[!temp[] %in% layer.index[l]] <- 0
+#   temp[temp[] %in% layer.index[l]] <- 1
+#   plot(temp)
+#   plot(st_geometry(detectors$grid), add = T)
+#   
+#   COV[[l]] <- raster::aggregate( x = temp,
+#                                  fact = detectors$resolution/res(temp),
+#                                  fun = mean)
+#   plot(COV[[l]])
+#   plot(st_geometry(detectors$grid), add = T)
+#   CLC.df[ ,l] <- raster::extract( x = COV[[l]],
+#                                   y = detectors$sp)
+#   print(layer.index[l])
+# }#c
+# 
+# ##---- Store in detector grid
+# detectors$grid <- left_join(detectors$grid, CLC.df, by = "id") 
+# 
+# 
+# 
+# 
+# ## ------       1.2.3. ELEVATION -------
+# ##---- Aggregate to the detector resolution
+# DEM <- raster::aggregate( x = DEM_raw,
+#                           fact = detectors$resolution/res(DEM_raw),
+#                           fun = mean)
+# plot(DEM)
+# plot(st_geometry(detectors$grid), add = T)
+# 
+# ##---- Extract scaled elevation values
+# detectors$grid$elev <- DEM %>%
+#   raster::extract(y = detectors$sp) %>%
+#   scale()
+# 
+# 
+# 
+# 
+# ## ------       1.2.4. TERRAIN RUGGEDNESS INDEX -------
+# ##---- Aggregate to the detector resolution
+# TRI <- raster::aggregate( x = TRI_raw ,
+#                           fact = detectors$resolution/res(TRI_raw ),
+#                           fun = mean)
+# 
+# plot(TRI)
+# plot(st_geometry(detectors$grid), add = T)
+# 
+# ##---- Extract scaled terrain ruggedness 
+# detectors$grid$tri <- TRI %>%
+#   raster::extract(y = detectors$sp) %>%
+#   scale()
+# 
+# 
+# 
+# 
+# ## ------       1.2.5. HUMAN POPULATION DENSITY -------
+# ##---- Aggregate to the detector resolution
+# POP <- raster::aggregate( x = POP_raw ,
+#                           fact = detectors$resolution/res(POP_raw ),
+#                           fun = mean)
+# 
+# plot(POP)
+# plot(st_geometry(detectors$grid), add = T)
+# 
+# ##----Extract scaled human pop density 
+# detectors$grid$pop <- POP %>% 
+#   raster::extract(y = detectors$sp) %>% 
+#   scale()
+# 
+# ##---- Extract log(human pop density + 1)
+# log_POP <- POP
+# log_POP[ ] <- log(POP[]+1)
+# detectors$grid$log_pop <- log_POP %>% 
+#   raster::extract(y = detectors$sp) %>% 
+#   scale()
+# 
+# 
+# 
+# 
+# ## ------       1.2.6. ROAD DENSITY -------
+# ##---- Extract road length in each detector grid cell
+# intersection <- st_intersection(detectors$grid, mainRoads) %>%
+#   mutate(length = st_length(.))  %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(mainRoads_L = sum(length)) 
+# 
+# ##---- Store scaled road density 
+# detectors$grid <- detectors$grid %>%
+#   left_join(intersection, by = "id") 
+# detectors$grid$mainRoads_L[is.na(detectors$grid$mainRoads_L)] <- 0
+# detectors$grid$mainRoads_L <- scale(detectors$grid$mainRoads_L)
+# 
+# 
+# ##---- Display all detector covariates
+# plot(detectors$grid[ ,3:length(detectors$grid)], max.plot = 15)
+# 
+# 
+# 
+# 
+# ## ------       1.2.7. EAST/WEST ------
+# ##---- Calculate distance of all detectors to each zone
+# distWest <- st_distance(detectors$grid,studyArea_west)
+# distEast <- st_distance(detectors$grid,studyArea_east)
+# 
+# ##---- Assign detectors to the closest zone
+# detectors$grid$zone <- apply(cbind(distWest,distEast),1,
+#                              function(x)which.min(x)-1)
+# 
+# 
+# 
+# 
+# ## ------   2. HABITAT ------
+# ## ------     2.1. HABITAT CHARACTERISTICS ------
+# ##---- Create Habitat polygon (detector grid + buffer)  
+# habitat$polygon <- st_buffer(st_union(detectors$grid),
+#                              habitat$buffer)
+# 
+# ##---- Remove un-suitable habitat (e.g. seas)
+# habitat$polygon <- st_intersection( st_union(countries),
+#                                     habitat$polygon,
+#                                     drop_lower_td = TRUE)
+# 
+# ##---- Create habitat raster (keep raster cells with > 50% habitat) 
+# ##---- (the huge buffer is used to make sure all models have comparable rasters)
+# habitat$raster <- raster(extent(st_bbox(st_buffer(st_union(studyAreaGrid),
+#                                                   100000))))
+# 
+# ##---- Trick to get % of habitat
+# res(habitat$raster) <- habitat$resolution/10
+# habitat$raster <- fasterize( countries,
+#                              habitat$raster, )
+# habitat$raster[is.na(habitat$raster)]<- 0
+# habitat$raster <- aggregate(habitat$raster, fact = 10, sum, na.rm = TRUE)
+# habitat$raster[habitat$raster[ ] < 50] <- NA
+# habitat$raster[habitat$raster[ ] >= 50] <- 1
+# plot(habitat$raster)
+# 
+# ##---- Remove glaciers
+# glaciers <- CLC
+# glaciers[!glaciers[ ] %in% c(9)] <- 0
+# glaciers[glaciers[ ] %in% c(9)] <- 1
+# to.remove <- glaciers %>% 
+#   raster::aggregate( x = .,
+#                      fact = habitat$resolution/res(temp),
+#                      fun = mean) %>%
+#   rasterToPolygons(.,fun = function(x)x>0.5) %>%
+#   st_as_sf() %>% 
+#   fasterize(.,habitat$raster)
+# 
+# habitat$raster[to.remove[ ] == 1] <- NA
+# plot(habitat$raster)
+# 
+# ##---- Remove big lakes
+# lakes <- CLC
+# lakes[!lakes[ ] %in% c(7)] <- 0
+# lakes[lakes[ ] %in% c(7)] <- 1
+# to.remove <- lakes %>% 
+#   raster::aggregate( x = .,
+#                      fact = habitat$resolution/res(lakes),
+#                      fun = mean) %>%
+#   rasterToPolygons(.,fun = function(x)x>0.5) %>%
+#   st_as_sf() %>% 
+#   fasterize(.,habitat$raster)
+# habitat$raster[to.remove[ ] == 1] <- NA
+# plot(habitat$raster)
+# 
+# ##---- Remove big cities
+# to.remove <- POP_raw %>% 
+#   raster::aggregate( x = .,
+#                      fact = habitat$resolution/res(POP_raw),
+#                      fun = mean) %>%
+#   rasterToPolygons(.,fun = function(x)x>5000) %>%
+#   st_as_sf() %>% 
+#   fasterize(.,habitat$raster)
+# habitat$raster[to.remove[ ] == 1] <- NA
+# plot(habitat$raster)
+# 
+# 
+# 
+# ##---- Mask and crop habitat to the buffer 
+# habitat$raster <- mask(habitat$raster, st_as_sf(habitat$polygon))
+# habitat$raster <- crop(habitat$raster, st_as_sf(habitat$polygon))
+# 
+# ##---- Create habitat grid
+# habitat$grid <- st_as_sf(rasterToPolygons( habitat$raster,
+#                                            fun = function(x)x == 1))
+# habitat$grid$id <- 1:nrow(habitat$grid)
+# habitat$grid <- habitat$grid[,c(2,3)]
+# st_crs(habitat$grid) <- st_crs(habitat$polygon)
+# 
+# ##---- Create "COMPARISON" habitat raster (for comparison between models) 
+# comparison <- st_buffer(st_union(detectors$grid[as.numeric(detectors$grid$transect_L) >0, ]),5000) 
+# habitat$comparison <- mask(habitat$raster, st_as_sf(comparison))
+# habitat$comparison[habitat$comparison == 0] <- NA
+# 
+# ##---- Create "EXTRACTION" habitat raster (for the report) 
+# habitat$extraction <- mask(habitat$raster, st_as_sf(st_union(SCRGrid)))
+# habitat$extraction[habitat$extraction == 0] <- NA
+# 
+# ##---- Create "ITALY" habitat raster (for density estimates) 
+# habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
+# habitat$Italia[habitat$Italia == 0] <- NA
+# 
+# ##---- Create Habitat matrix of cell ID 
+# habitat$matrix <- habitat$raster
+# habitat$matrix[] <- 0
+# 
+# ##----  Identify suitable habitat cells
+# isHab <- which(habitat$raster[]==1)
+# 
+# ##---- Cell ID starts from the top left corner, increments left to right and
+# ##---- up to down
+# habitat$matrix[isHab] <- 1:length(isHab)
+# 
+# ##---- Convert to matrix
+# habitat$matrix <- as.matrix(habitat$matrix)
+# habitat$binary <- habitat$matrix  ##(required by the getLocalObject function; the function could be changed to deal with matrix others than 0/1)
+# habitat$binary[habitat$binary > 0] <- 1 
+# 
+# ##---- Obtain xy coordinates of habitat cells   
+# habitat$coords <- coordinates(habitat$raster)[isHab, ]
+# dimnames(habitat$coords) <- list(1:length(isHab), c("x","y"))
+# habitat$sp <- SpatialPoints(coords = habitat$coords,
+#                             proj4string = crs(habitat$polygon)) 
+# 
+# ##---- Retrieve habitat windows corners
+# habitat$lowerCoords <- habitat$coords - 0.5*habitat$resolution
+# habitat$upperCoords <- habitat$coords + 0.5*habitat$resolution
+# habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
+# 
+# ##---- Visual plotting to check if everything is right  
+# plot(habitat$raster)					
+# plot(st_geometry(countries), add = T)
+# plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))						
+# plot(transects,add=T, col="red")
+# plot(st_geometry(detectors$grid), add=T)
+# 
+# 
+# 
+# 
+# ## ------     2.2. HABITAT COVARIATES ------
+# ## ------       2.2.1. CORINE LAND COVER ------
+# ## Legend : 
+# ## 1	= developed; 2 = agriculture; 3 = forest; 4 = herbaceous; 5 =	bare rock;
+# ## 6 = sea features; 7 = inland water; 9 = perpetual snow
+# layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
+#                  "sea features","inland water","NA","perpetual snow")
+# layer.index <- c(1,2,3,4,5,9)
+# par(mfrow = c(1,2))
+# 
+# CLC.df <- as.data.frame(matrix(NA, habitat$n.HabWindows, length(layer.index)))
+# names(CLC.df) <- layer.names[layer.index]
+# CLC.df$id <- 1:habitat$n.HabWindows
+# 
+# COV <- list()
+# for(l in 1:length(layer.index)){
+#   temp <- CLC
+#   temp[!temp[] %in% layer.index[l]] <- 0
+#   temp[temp[] %in% layer.index[l]] <- 1
+#   plot(temp)
+#   plot(st_geometry(habitat$grid), add = T)
+#   
+#   COV[[l]] <- raster::aggregate( x = temp,
+#                                  fact = habitat$resolution/res(temp),
+#                                  fun = mean)
+#   
+#   COV[[l]] <- raster::focal(x = COV[[l]],
+#                             w = matrix(1,3,3),
+#                             fun = mean,
+#                             na.rm = T)
+#   
+#   plot(COV[[l]])
+#   plot(st_geometry(habitat$grid), add = T)
+#   CLC.df[ ,l] <- raster::extract( x = COV[[l]],
+#                                   y = habitat$sp)
+#   print(layer.index[l])
+# }#c
+# 
+# ## Store in habitat grid
+# habitat$grid <- left_join(habitat$grid, CLC.df, by = "id") 
+# 
+# habitat$grid$alpine <- habitat$grid$herbaceous + habitat$grid$`bare rock`
+# habitat$grid$human <- habitat$grid$developed + habitat$grid$agriculture
+# 
+# 
+# ## ------       2.2.2. ELEVATION -------
+# ## Aggregate to the detector resolution
+# DEM <- raster::aggregate( x = DEM_raw,
+#                           fact = habitat$resolution/res(DEM_raw),
+#                           fun = mean)
+# plot(DEM)
+# plot(st_geometry(habitat$grid), add = T)
+# 
+# ## Extract scaled elevation values
+# habitat$grid$elev <- DEM %>%
+#   raster::extract(y = habitat$sp) %>%
+#   scale()
+# 
+# 
+# 
+# 
+# ## ------       2.2.3. TERRAIN RUGGEDNESS INDEX -------
+# ## Aggregate to the detector resolution
+# TRI <- raster::aggregate( x = TRI_raw ,
+#                           fact = habitat$resolution/res(TRI_raw ),
+#                           fun = mean)
+# TRI <- raster::focal(x = TRI,
+#                      w = matrix(1,3,3),
+#                      fun = mean,
+#                      na.rm = T)
+# plot(TRI)
+# plot(st_geometry(habitat$grid), add = T)
+# 
+# ## Extract scaled terrain ruggedness 
+# habitat$grid$tri <- TRI %>%
+#   raster::extract(y = habitat$sp) %>%
+#   scale()
+# 
+# 
+# 
+# 
+# ## ------       2.2.4. HUMAN POPULATION DENSITY -------
+# ## Aggregate to the detector resolution
+# POP <- raster::aggregate( x = POP_raw ,
+#                           fact = habitat$resolution/res(POP_raw ),
+#                           fun = mean)
+# POP <- raster::focal(x = POP,
+#                      w = matrix(1,3,3),
+#                      fun = mean,
+#                      na.rm = T)
+# plot(POP)
+# plot(st_geometry(habitat$grid), add = T)
+# 
+# ## Extract scaled human pop density 
+# habitat$grid$pop <- POP %>% 
+#   raster::extract(y = habitat$sp) %>% 
+#   scale()
+# 
+# ## Extract log(human pop density + 1)
+# log_POP <- POP
+# log_POP[ ] <- log(POP[]+1)
+# 
+# par(mfrow=c(1,2))
+# plot(POP)
+# plot(st_geometry(countries),add=T)
+# plot(log_POP)
+# plot(st_geometry(countries),add=T)
+# 
+# habitat$grid$log_pop <- log_POP %>% 
+#   raster::extract(y = habitat$sp) %>% 
+#   scale()
+# 
+# 
+# 
+# ## ------       2.2.5. ROAD DENSITY -------
+# ## Extract road length in each habitat grid cell
+# intersection <- st_intersection(habitat$grid, mainRoads) %>%
+#   mutate(length = st_length(.))  %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(mainRoads_L = sum(length)) 
 # 
 # ## Store scaled road density 
 # habitat$grid <- habitat$grid %>%
 #   left_join(intersection, by = "id") 
-# habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
-# habitat$grid$PA[habitat$grid$PA > 1] <- 1
-
-
+# habitat$grid$mainRoads_L[is.na(habitat$grid$mainRoads_L)] <- 0
+# habitat$grid$mainRoads_L <- scale(habitat$grid$mainRoads_L)
+# 
+# 
+# 
+# ## ------       2.2.6. EAST/WEST ------
+# ##---- Calculate distance of all detectors to each zone
+# distWest <- st_distance(habitat$grid, studyArea_west)
+# distEast <- st_distance(habitat$grid, studyArea_east)
+# 
+# ##---- Assign detectors to the closest zone
+# habitat$grid$zone <- apply(cbind(distWest,distEast),1,
+#                            function(x)which.min(x)-1)
+# 
+# 
+# ## ------       2.2.7. HISTORICAL PRESENCE ------
+# habitat$grid$presence <- 0
+# 
+# for(y in 1:length(packPres_raw)){
+#   ## Extract historical pack presence in each habitat grid cell
+#   intersection <- st_intersection(habitat$grid, packPres_raw[[y]]) %>%
+#     mutate(pres = 1)  %>%
+#     st_drop_geometry() %>%
+#     group_by(id) %>%
+#     summarise(sumpres = sum(pres)) 
+#   
+#   tmp <- habitat$grid %>%
+#     left_join(intersection, by = "id") 
+#   tmp$sumpres[is.na(tmp$sumpres)] <- 0
+#   habitat$grid$presence <- habitat$grid$presence + tmp$sumpres
+#   plot(habitat$grid[,"presence"])
+# }
+# 
+# habitat$grid$presence <- scale(habitat$grid$presence)
+# 
+# 
+# 
+# 
+# ## ------       2.2.8. IUCN PRESENCE ------
+# ## Extract LCIE wolf permanent presence in each habitat grid cell
+# intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
+#   mutate(iucn = st_area(.)) %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(IUCN = sum(iucn*SPOIS)/2.5e+07) 
+# 
+# habitat$grid <- habitat$grid %>%
+#   left_join(intersection, by = "id") 
+# habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
+# plot(habitat$grid[,"IUCN"])
+# 
+# ## Extract LCIE wolf sporadic presence in each habitat grid cell
+# intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
+#   mutate(iucn = st_area(.)) %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07) 
+# 
+# tmp <- habitat$grid %>%
+#   left_join(intersection, by = "id") 
+# tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
+# habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
+# plot(habitat$grid[,"IUCN"])
+# 
+# ## Extract LCIE wolf presence in each habitat grid cell
+# intersection <- st_intersection(habitat$grid, iucn_2018) %>%
+#   mutate(iucn = st_area(.)) %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07) 
+# 
+# tmp <- habitat$grid %>%
+#   left_join(intersection, by = "id") 
+# tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
+# habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
+# plot(habitat$grid[,"IUCN"])
+# 
+# habitat$grid$IUCN <- scale(habitat$grid$IUCN)
+# 
+# 
+# 
+# 
+# ## ------       2.2.8. PROTECTED AREAS -----
+# # intersection <- st_intersection(habitat$grid, PA) %>%
+# #   mutate(pa = st_area(.))  %>%
+# #   st_drop_geometry() %>%
+# #   group_by(id) %>%
+# #   summarise(PA = sum(pa)/2.5e+07) 
+# # 
+# # ## Store scaled road density 
+# # habitat$grid <- habitat$grid %>%
+# #   left_join(intersection, by = "id") 
+# # habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
+# # habitat$grid$PA[habitat$grid$PA > 1] <- 1
+# 
+# 
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
 ##---- Rescale habitat and detector coordinates
@@ -1540,6 +1543,7 @@ nimData <- list( y = yCombined.aug,
                    "bare rock" = habitat$grid$`bare rock`,
                    "herbaceous" = habitat$grid$`herbaceous`,
                    "forest" = habitat$grid$`forest`,
+                   "pop" = habitat$grid$pop,
                    "IUCN" = habitat$grid$`IUCN`),
                  det.covs = cbind.data.frame(
                    "transect_L" = detectors$grid$`transect_L`,

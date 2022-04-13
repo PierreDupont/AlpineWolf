@@ -1639,6 +1639,10 @@ save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 ##---- Load processed MCMC samples
 load(file.path(thisDir, paste0(modelName, "_mcmc.RData")))
 load(file.path(thisDir, "input", paste0(modelName, "_1.RData")))
+## LOAD POLYGONS OF ITALY's REGIONS 
+regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
+regions <- st_transform(x = regions, crs = st_crs(countries))
+regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
 
 ##----  Extract the habitat raster
 habitat.r <- habitat$raster
@@ -1652,11 +1656,22 @@ habitat.id <- matrix( data = 1:ncell(habitat.r),
                       ncol = dim(habitat.r)[2],
                       byrow = TRUE)
 
-##---- Create a matrix of admin units binary indicators
+##---- Create a matrix of Italian regions
 ##---- (rows == regions ; columns == habitat raster cells)
-hab.rgmx <- rbind(habitat$raster[] == 1)
-hab.rgmx[is.na(hab.rgmx)] <- 0
-row.names(hab.rgmx) <- "habitat"
+regions.r <- fasterize(sf = st_as_sf(regions),
+                       raster = habitat.r,
+                       field = "ID",
+                       background = 0)
+regions.r[regions.r[]==0] <- NA
+regions.r <- regions.r + italia.r - 1
+for(i in 1:length(regions$DEN_UTS)){
+  regions.r[regions.r %in% regions$ID[i]] <- regions$DEN_UTS[i]
+}
+regions.unique <- sort(na.omit(unique(regions.r[])))
+regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
+regions.rgmx[is.na(regions.rgmx)] <- 0
+row.names(regions.rgmx) <- regions.unique
+
 
 ##---- Calculate density
 WA_Density <- GetDensity(
@@ -1666,7 +1681,7 @@ WA_Density <- GetDensity(
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = T,
-  regionID = hab.rgmx)
+  regionID = regions.rgmx)
 
 
 ##---- Create a matrix of italy 
@@ -1721,7 +1736,7 @@ maxDens <- max(WA_Density$MeanCell)
 cuts <- seq(0, maxDens, length.out = 100)   
 colFunc <- colorRampPalette(c("white","slateblue","yellow","orange","red","red"))
 col <- colFunc(100)
-par(mfrow = c(1,3), mar = c(4,4,0,0))
+par(mfrow = c(1,1), mar = c(4,4,0,0))
 
 ##---- Plot overall density raster
 meanDensity.R <- habitat.r
@@ -1734,6 +1749,7 @@ plot( meanDensity.R, add = T,
       axes = F, box = F, bty = "n", legend = F)
 plot( habitat$polygon, add = T, border = grey(0.3))
 plot( st_geometry(countries), add = T, lwd = 2)
+plot( st_geometry(regions), add = T, lwd = 2)
 
 mtext( text = paste( "N = ", round(WA_Density$summary["Total",1],1),
                      " [", round(WA_Density$summary["Total",4],1), " ; ",
