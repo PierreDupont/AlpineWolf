@@ -1447,8 +1447,8 @@ Cmcmc <- compiledList$mcmc
 for(c in 1:1){
   print(system.time(
     runMCMCbites( mcmc = Cmcmc,
-                  bite.size = 500,
-                  bite.number = 12,
+                  bite.size = 100,
+                  bite.number = 3,
                   path = file.path(thisDir, paste0("output/chain",c)))
   ))
 }
@@ -1672,10 +1672,12 @@ cuts <- seq(0, maxDens, length.out = 100)
 colFunc <- colorRampPalette(c("white","slateblue","yellow","orange","red","red"))
 col <- colFunc(100)
 
+
+
 centroids <- st_drop_geometry(ngs) %>%
   group_by(Genotype.ID) %>%
-  summarise(X = mean(Coordinate.WGS84.UTM.East),               ## Get total length searched in each detector grid cell
-            Y =  mean(Coordinate.WGS84.UTM.North)) 
+  summarise(X = mean(CoordX),               ## Get total length searched in each detector grid cell
+            Y =  mean(CoordY)) 
 coordinates(centroids) <- cbind.data.frame(centroids$X,
                                            centroids$Y)
 proj4string(centroids) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
@@ -1696,10 +1698,10 @@ mtext( text = "Wolf density with\ndetected individuals' centroid",
 
 
 
-
+names(nimData$hab.covs)
 ## ------     2.2. DENSITY EFFECT PLOT ------
 par(mfrow = c(2,2), mar = c(6,6,0,0))
-covNames <- c("forest","herbaceous","presence")
+covNames <- names(nimData$hab.covs)#c("forest","herbaceous","presence")
 
 pred.hab.covs <- apply(nimData$hab.covs,
                        2,
