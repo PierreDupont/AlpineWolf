@@ -30,7 +30,7 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+#sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 #sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 
@@ -72,6 +72,18 @@ presTrans <- st_cast(presTrans,"MULTIPOLYGON")
 
 east <- read_sf(file.path(dataDir,"GISData/Output_layout/East_tot.shp"))
 west <- read_sf(file.path(dataDir,"GISData/Output_layout/West_tot.shp"))
+
+##--- Study area grid
+studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
+studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
+studyArea <- studyAreaGrid %>%
+  st_snap(x = ., y = ., tolerance = 0.0001) %>%
+  st_union() %>%
+  st_intersection(.,countries)
+
+##---- Load GPS search transects
+transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
+
 
 
 
@@ -244,17 +256,15 @@ save(WA_regions, WA_status, WA_alps, meanPred.r,
 
 
 ## -----------------------------------------------------------------------------
-## ------ 2. REPORT .pdf ------
+## ------ 2. REPORT FIGURES ------
 ## ------   2.1. DENSITY MAPS ------
 ## ------     2.1.1. DENSITY MAPS ------
 ##---- Set color scale
 maxDens <- max(WA_regions$MeanCell)
 cuts <- seq(0, maxDens, length.out = 100)   
-#cuts <- c(0,0.001,0.002,0.004,0.008,0.016,0.032,0.064,0.128,0.256)   
 
 colFunc <- colorRampPalette(c("black", "orange", "yellow", "white"))#,"yellow","orange","red","red"
 col <- colFunc(100)
-#col <- hcl.colors(10)
 
 ##---- Plot overall density raster
 par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "black")
@@ -664,6 +674,53 @@ mtext( text = "Alpine wolf abundance estimates",
 ##----- Export as .csv
 write.csv( abundanceTable[ ,10:12],
           file = file.path(thisDir, paste0(modelName, "_TableAbundance3.csv")))
+
+
+
+
+## ------   2.5. NGS DATA ------
+##---- Genotyped NGS samples
+ngs <- read.csv(file.path(dataDir,"DNA/ngs21032022.csv"))
+ngs$Date <- parse_date_time(ngs$Date, orders = c('dmy','mdy','ymd'))
+ngs$Year <- as.numeric(format(ngs$Date,"%Y"))
+ngs$Month <- as.numeric(format(ngs$Date,"%m"))
+ngs <- ngs[ngs$Year > 2019, ]
+ngs <- ngs[ngs$Dead.recovery == "", ]
+dim(ngs)
+
+##---- Number of detections per individual
+numDetsPerId <- table(ngs$Genotype.ID)
+##---- Number of individuals detected
+length(numDetsPerId)
+##---- Mean number of detections per ID
+mean(numDetsPerId)
+sd(numDetsPerId)
+
+##---- Turn ngs into spatial data frame
+coordinates(ngs) <- cbind.data.frame(ngs$CoordX, ngs$CoordY)
+proj4string(ngs) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
+ngs <- st_as_sf(ngs)
+
+##---- Plot ngs 
+png(filename = file.path(reportDir, "Figures", paste0(modelName, "_NGS_map.png")),
+    width = 30, height = 20, units = "cm", res = 600)
+par(mar = c(0,0,0,0))
+cols <- met.brewer(name="Isfahan1",n=10,type="continuous")
+plot( studyArea, border = "black")
+plot( st_geometry(countries), col="gray60", border = "white", add = T, lwd = 1)
+plot(studyArea,border = "white", col = "gray40", add=T)
+plot(transects, add=T, col = "red", lwd = 1)
+plot(st_geometry(ngs[ngs$Sex == "", ]), add = T, pch = 3, col = cols[2])
+plot(st_geometry(ngs[ngs$Sex == "M", ]), add = T, pch = 3, col = cols[5])
+plot(st_geometry(ngs[ngs$Sex == "F", ]), add = T, pch = 3, col = cols[7])
+# mtext( text = paste0( "transects : ", round(sum(st_length(transects))/1000),
+#                       "km/n genotyped samples : ", dim(ngs)[1]),
+#        side = 1, font = 2, cex = 1.5)
+legend("bottomright",legend = c("female","male","NA"),pch = 3,col=cols[c(7,5,2)])
+dev.off()
+
+#plot( st_geometry(countries), add = T, lwd = 1, border = "white")
+plot( st_geometry(studyArea), add = T, lwd = 3, border = "white")
 
 
 
