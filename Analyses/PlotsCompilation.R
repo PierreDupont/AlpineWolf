@@ -30,7 +30,7 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-#sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 #sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 
@@ -91,8 +91,8 @@ transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths
 ## ------ 1. CALCULATE AC-BASED DENSITY ------
 ## ------   1.1. PREPARE INPUT FOR EXTRACTION ------
 ##---- Disaggregate habitat raster to a 1x1km resolution
-habitat.r <- disaggregate(x = habitat$raster, fact = 1)
-italia.r <- disaggregate(x = habitat$Italia, fact = 1)
+habitat.r <- disaggregate(x = habitat$raster, fact = 5)
+italia.r <- disaggregate(x = habitat$Italia, fact = 5)
 
 ##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
 habitat.id <- matrix( data = 1:ncell(habitat.r),
@@ -182,7 +182,7 @@ row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Thin MCMC samples for faster calculation 
 ##---- (60000 iterations in too much for the getDensity fucntion at 1x1km)
-iter <- seq(1,dim(res$sims.list$z)[1],length.out = 10000)
+iter <- seq(1,dim(res$sims.list$z)[1],length.out = 2000)
 
 
 
@@ -248,37 +248,236 @@ meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
 meanPred.r[is.na(habitat$Italia[])] <- NA
 
 
-## ------   1.5. SAVE DENSITIES -----
-save(WA_regions, WA_status, WA_alps, meanPred.r,
-     file = file.path(thisDir, paste0(modelName, "_densities.RData")))
+# ## ------   1.5. SAVE DENSITIES -----
+# save(WA_regions, WA_status, WA_alps, meanPred.r,
+#      file = file.path(thisDir, paste0(modelName, "_densities.RData")))
 
- load(file = file.path(thisDir, paste0(modelName, "_densities.RData")))
+load(file = file.path(thisDir, paste0(modelName, "_densities.RData")))
+
 
 
 ## -----------------------------------------------------------------------------
 ## ------ 2. REPORT FIGURES ------
 ## ------   2.1. DENSITY MAPS ------
 ## ------     2.1.1. DENSITY MAPS ------
-##---- Set color scale
-maxDens <- max(WA_regions$MeanCell)
-cuts <- seq(0, maxDens, length.out = 100)   
-
-colFunc <- colorRampPalette(c("black", "orange", "yellow", "white"))#,"yellow","orange","red","red"
-col <- colFunc(100)
-
 ##---- Plot overall density raster
-par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "black")
+par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "white")
 meanDensity.R <- habitat.r
 meanDensity.R[ ] <- WA_regions$MeanCell
 meanDensity.R[is.na(italia.r[])] <- NA
+plot(meanDensity.R)
 
-plot( habitat$polygon, border = "black")
-#plot( st_geometry(countries), col="black", border = "white", add = T, lwd = 1)
+##---- Smooth using a moving window 
+f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T)) 
+MovingWindowSize <-  matrix(1,5,5)
+meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+plot(meanDensity.R)
+
+
+
+##---- Plot 1
+##---- Set color scale
+maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+cuts <- seq(0, maxDens, length.out = 100)   
+
+
+colFunc <- colorRampPalette(c("gray80", rev(terrain.colors(12))))
+col <- colFunc(100)
+{
+pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map1.pdf" )),
+    width = 10, height = 8)
+par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
+plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+     col = "white", border = "black")
+plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+plot( meanDensity.R, add = T,
+      breaks = cuts, col = col,
+      axes = F, box = F, bty = "n", legend = F)
+plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+     add=T, border = "black")
+graphics.off()
+
+
+pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend1.pdf" )),
+    width = 1.75, height = 5)
+par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
+plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
+resolution<-prod(res(meanDensity.R)/1000)
+num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
+lab<-DoScale(num,1,100)
+segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
+axis(4,lab,num*100)
+box()
+graphics.off()
+}
+
+
+colFunc <- colorRampPalette(c("gray80","slateblue","yellow","orange","red","red"))
+col <- colFunc(100)
+{
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map2.pdf" )),
+      width = 10, height = 8)
+  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       col = "white", border = "black")
+  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  plot( meanDensity.R, add = T,
+        breaks = cuts, col = col,
+        axes = F, box = F, bty = "n", legend = F)
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       add=T, border = "black")
+  graphics.off()
+  
+  
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend2.pdf" )),
+      width = 1.75, height = 5)
+  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
+  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
+  resolution<-prod(res(meanDensity.R)/1000)
+  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
+  lab<-DoScale(num,1,100)
+  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
+  axis(4,lab,num*100)
+  box()
+  graphics.off()
+}
+
+
+colFunc <- colorRampPalette(c("gray80", "yellow", "orange","red","red"))
+col <- colFunc(100)
+{
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map3.pdf" )),
+      width = 10, height = 8)
+  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       col = "white", border = "black")
+  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  plot( meanDensity.R, add = T,
+        breaks = cuts, col = col,
+        axes = F, box = F, bty = "n", legend = F)
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       add=T, border = "black")
+  graphics.off()
+  
+  
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend3.pdf" )),
+      width = 1.75, height = 5)
+  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
+  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
+  resolution<-prod(res(meanDensity.R)/1000)
+  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
+  lab<-DoScale(num,1,100)
+  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
+  axis(4,lab,num*100)
+  box()
+  graphics.off()
+}
+
+
+colFunc <- colorRampPalette(c("gray80", "orange", "yellow", "white"))#,"yellow","orange","red","red"
+col <- colFunc(100)
+{
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map4.pdf" )),
+      width = 10, height = 8)
+  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       col = "white", border = "black")
+  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  plot( meanDensity.R, add = T,
+        breaks = cuts, col = col,
+        axes = F, box = F, bty = "n", legend = F)
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       add=T, border = "black")
+  graphics.off()
+  
+  
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend4.pdf" )),
+      width = 1.75, height = 5)
+  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
+  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
+  resolution<-prod(res(meanDensity.R)/1000)
+  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
+  lab<-DoScale(num,1,100)
+  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
+  axis(4,lab,num*100)
+  box()
+  graphics.off()
+}
+
+
+colFunc <- colorRampPalette(c("gray80", rev(hcl.colors(4))))
+col <- colFunc(100)
+{
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map5.pdf" )),
+      width = 10, height = 8)
+  par(mfrow = c(1,1), mar = c(4,4,0,0),bg = "white")
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       col = "white", border = "black")
+  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  plot( meanDensity.R, add = T,
+        breaks = cuts, col = col,
+        axes = F, box = F, bty = "n", legend = F)
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       add=T, border = "black")
+  graphics.off()
+  
+  
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend5.pdf" )),
+      width = 1.75, height = 5)
+  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
+  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
+  resolution<-prod(res(meanDensity.R)/1000)
+  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
+  lab<-DoScale(num,1,100)
+  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
+  axis(4,lab,num*100)
+  box()
+  graphics.off()
+}
+
+
+colFunc <- colorRampPalette(c("gray80", hcl.colors(4)))
+col <- colFunc(100)
+{
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map6.pdf" )),
+      width = 10, height = 8)
+  par(mfrow = c(1,1), mar = c(4,4,0,0),bg = "white")
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       col = "white", border = "black")
+  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  plot( meanDensity.R, add = T,
+        breaks = cuts, col = col,
+        axes = F, box = F, bty = "n", legend = F)
+  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       add=T, border = "black")
+  graphics.off()
+  
+  
+  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend6.pdf" )),
+      width = 1.75, height = 5)
+  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
+  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
+  resolution<-prod(res(meanDensity.R)/1000)
+  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
+  lab<-DoScale(num,1,100)
+  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
+  axis(4,lab,num*100)
+  box()
+  graphics.off()
+}
+
+
+
+
+plot( st_geometry(st_difference(countries,studyArea)),
+     add= T, lwd = 2, col = "white",border = "white")
+plot( st_geometry(bground),
+      add = T, lwd = 2, col = "white",border = "white")
+# plot( st_geometry(countries), col="black", border = "white", add = T, lwd = 1)
 plot( meanDensity.R,
       breaks = cuts, col = col,
       axes = F, box = F, bty = "n", legend = F)
-#plot( st_geometry(countries), add = T, lwd = 1, border = "white")
-plot( st_geometry(studyArea), add = T, lwd = 3, border = "white")
+plot( st_geometry(studyArea), add = T, lwd = 3, border = "black")
 
 mtext( text = paste( "N = ", round(WA_regions$summary["Total",1],1),
                      " [", round(WA_regions$summary["Total",4],1), " ; ",
@@ -469,7 +668,7 @@ for(b in 1:ncol(res$sims.list$betaDet)){
 
 
 ## ------   2.3. SIGMA / p0 ------
-par(mfrow = c(1,2), bg = "black", col.axis="white", col.text = "white")
+par(mfrow = c(1,2))#, bg = "black", col.axis="white", col.text = "white")
 #mar = c(15,25,15,25)
 myCols <- matrix(met.brewer(name="Isfahan1",n=8,type="discrete")[c(2:4,7:5)],
                  nrow = 3, ncol=2, byrow = F)
@@ -479,10 +678,11 @@ plot(1,1,
      ylim = c(0,10),
      type = "n", xaxt = "n", main = "",
      ylab = expression(paste(sigma, " (km)")),
-     col.lab = "white",
+     col.lab = "black",
      xlab = "", axes = F)
-axis(1, at = 1:2, labels = sex, col = "white")
-axis(2, at = seq(0,10,length.out = 6), col ="white", labels = seq(0,10,length.out = 6)*5)
+axis(1, at = 1:2, labels = sex, col = "black")
+axis(2, at = seq(0,10,length.out = 6), col ="black",
+     labels = seq(0,10,length.out = 6)*5)
 for(s in 1:length(sex)){
   for(ss in 1:length(status)){
     temp <- res$sims.list$sigma[ ,ss,s]
@@ -510,11 +710,11 @@ plot(1,1,
      xlim = c(0.5,2.5),
      ylim = c(0,0.03),
      type = "n", xaxt = "n", main = "",
-     ylab = expression(p_0),
-     col.lab = "white",
+     ylab = expression(p[0]),
+     col.lab = "black",
      xlab = "", axes = F)
-axis(1, at = 1:2, labels = sex, col ="white")
-axis(2, at = seq(0,0.03,length.out = 7), col ="white", labels = seq(0,0.03,length.out = 7))
+axis(1, at = 1:2, labels = sex, col ="black")
+axis(2, at = seq(0,0.03,length.out = 7), col ="black", labels = seq(0,0.03,length.out = 7))
 for(s in 1:length(sex)){
   for(ss in 1:length(status)){
     temp <- res$sims.list$p0[ ,ss,s]
@@ -530,10 +730,10 @@ for(s in 1:length(sex)){
                    scale.width = F)
   }#status
 }#sex
-legend(title = "Females",text.col = "white",
+legend(title = "Females",text.col = "black",
        legend = c("Alpha","Pup","Other"),
        x = 0.5, y = 0.03, fill = myCols[1:3])
-legend(title = "Males", text.col = "white",
+legend(title = "Males", text.col = "black",
        legend = c("Alpha","Pup","Other"),
        x = 0.9, y = 0.03, fill = myCols[4:6])
 
