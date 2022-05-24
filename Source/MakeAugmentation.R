@@ -11,7 +11,8 @@
 #' @return A \code{Vector}, \code{Matrix} or \code{Array} object containing the augmented y.
 
 MakeAugmentation <- function( y,
-                              aug.factor= NULL,
+                              M = NULL,
+                              aug.factor = NULL,
                               aug.years = NULL,
                               replace.value = NA){
   ## Vector Data augmentation
@@ -23,6 +24,12 @@ MakeAugmentation <- function( y,
     if(!is.null(aug.factor)){
       y.aug <- c(y, rep(replace.value, round(length(y) * aug.factor)))
       names(y.aug) <- c(names(y), rep("Augmented", round(length(y) * aug.factor)))
+      y <- y.aug
+    }
+    
+    if(!is.null(M)){
+      y.aug <- c(y, rep(replace.value, M-length(y)))
+      names(y.aug) <- c(names(y), rep("Augmented", M-length(y)))
       y <- y.aug
     }
     
@@ -43,6 +50,15 @@ MakeAugmentation <- function( y,
     
     if(!is.null(aug.factor)){
       n.tot <- round(dim(y)[1]*(1 + aug.factor))
+      y.aug <- matrix(replace.value, n.tot, dim(y)[2])
+      y.aug[1:dim(y)[1], ] <- y
+      dimnames(y.aug) <- list(c( dimnames(y)[[1]], rep("Augmented", n.tot - dim(y)[1])),
+                              dimnames(y)[[2]])
+      y <- y.aug
+    }
+    
+    if(!is.null(M)){
+      n.tot <- M
       y.aug <- matrix(replace.value, n.tot, dim(y)[2])
       y.aug[1:dim(y)[1], ] <- y
       dimnames(y.aug) <- list(c( dimnames(y)[[1]], rep("Augmented", n.tot - dim(y)[1])),
@@ -77,6 +93,16 @@ MakeAugmentation <- function( y,
       y <- y.aug
     }
     
+    if(!is.null(M)){
+      n.tot <- M
+      y.aug <- array(replace.value, c(n.tot,dim(y)[2],dim(y)[3]))
+      y.aug[1:dim(y)[1], , ] <- y
+      dimnames(y.aug) <- list(c( dimnames(y)[[1]],rep("Augmented", n.tot - dim(y)[1])),
+                              dimnames(y)[[2]],
+                              dimnames(y)[[3]])
+      y <- y.aug
+    }
+    
     if(!is.null(aug.years)){
       y.aug <- array(replace.value, c(dim(y)[1],dim(y)[2],dim(y)[3] + aug.years))
       y.aug[ , ,1:dim(y)[3]] <- y
@@ -97,6 +123,17 @@ MakeAugmentation <- function( y,
     
     if(!is.null(aug.factor)){
       n.tot <- round(dim(y)[3]*(1 + aug.factor))
+      y.aug <- array(replace.value, c(dim(y)[1], dim(y)[2], n.tot, dim(y)[4]))
+      y.aug[ , ,1:dim(y)[3], ] <- y
+      dimnames(y.aug) <- list( dimnames(y)[[1]],
+                               dimnames(y)[[2]],
+                               c(dimnames(y)[[3]], rep("Augmented",  n.tot - dim(y)[3])),
+                               dimnames(y)[[4]])
+      y <- y.aug
+    }
+    
+    if(!is.null(M)){
+      n.tot <- M
       y.aug <- array(replace.value, c(dim(y)[1], dim(y)[2], n.tot, dim(y)[4]))
       y.aug[ , ,1:dim(y)[3], ] <- y
       dimnames(y.aug) <- list( dimnames(y)[[1]],
