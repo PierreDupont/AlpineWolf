@@ -248,9 +248,9 @@ meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
 meanPred.r[is.na(habitat$Italia[])] <- NA
 
 
-# ## ------   1.5. SAVE DENSITIES -----
-# save(WA_regions, WA_status, WA_alps, meanPred.r,
-#      file = file.path(thisDir, paste0(modelName, "_densities.RData")))
+## ------   1.5. SAVE DENSITIES -----
+save(WA_regions, WA_status, WA_alps, meanPred.r,
+     file = file.path(thisDir, paste0(modelName, "_densities.RData")))
 
 load(file = file.path(thisDir, paste0(modelName, "_densities.RData")))
 
@@ -267,11 +267,15 @@ meanDensity.R[ ] <- WA_regions$MeanCell
 meanDensity.R[is.na(italia.r[])] <- NA
 plot(meanDensity.R)
 
+
 ##---- Smooth using a moving window 
 f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T)) 
 MovingWindowSize <-  matrix(1,5,5)
 meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
 plot(meanDensity.R)
+
+# writeRaster(x = meanDensity.R, overwrite = TRUE,
+#             filename = file.path( thisDir, "rasters", paste0(modelName, "_raster.tif")))
 
 
 
@@ -374,7 +378,7 @@ col <- colFunc(100)
 }
 
 
-colFunc <- colorRampPalette(c("gray80", "orange", "yellow", "white"))#,"yellow","orange","red","red"
+colFunc <- colorRampPalette(c("gray80", "orange", "yellow", "white", "white"))#,"yellow","orange","red","red"
 col <- colFunc(100)
 {
   pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map4.pdf" )),
@@ -387,8 +391,11 @@ col <- colFunc(100)
         breaks = cuts, col = col,
         axes = F, box = F, bty = "n", legend = F)
   plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+       add=T, border = "black",lwd=2)
+  plot(st_geometry(st_union(st_intersection(west,studyArea))), lwd = 2,
        add=T, border = "black")
   graphics.off()
+  
   
   
   pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend4.pdf" )),

@@ -92,11 +92,11 @@ studyArea <- studyAreaGrid %>%
 habitat.r <- disaggregate(x = habitat$raster, fact = 1)
 italia.r <- disaggregate(x = habitat$Italia, fact = 1)
 
-##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
-habitat.id <- matrix( data = 1:ncell(habitat.r),
-                      nrow = nrow(habitat.r),
-                      ncol = ncol(habitat.r),
-                      byrow = TRUE)
+# ##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
+# habitat.id <- matrix( data = 1:ncell(habitat.r),
+#                       nrow = nrow(habitat.r),
+#                       ncol = ncol(habitat.r),
+#                       byrow = TRUE)
 
 ##---- Rescale sxy coords to original projection and reproject to the new raster
 dimnames(res$sims.list$s) <- list(1:dim(res$sims.list$s)[1],
