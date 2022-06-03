@@ -257,31 +257,22 @@ ngs <- st_as_sf(ngs)
 ## ------   3. DETECTION DATA ------
 ## ------     3.1. DETECTION MATRIX : y ------
 ##---- Calculate distance between detections and detectors
-
 closest <- nn2( coordinates(detectors$sub.sp),
                 st_coordinates(ngs),
                 k = 1,
                 searchtype = "radius",
                 radius = 10000)
 
-
-
-
 ##---- Assign each detection to a detector based on minimum distance
 ngs$sub.detector <- c(closest$nn.idx)
 ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx] 
 
-# main.cell.id <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]     
-# ngs$detector <- unlist(
-#   lapply(1:length(main.cell.id), function(x){
-#     out <- NA
-#     if(!is.na(main.cell.id[x]))out <- which(detectors$sp$main.cell.new.id %in% main.cell.id[x])
-#     return(out)
-#   }))
-# all(ngs$detector==main.cell.id)
 
 
+## -----------------------------------------------------------------------------
+## ------ III. SUB-SAMPLE DATA ------
 ngs <- as.data.frame(ngs)
+
 for (rep in 1:100) {
   
   ngs25 <- ngs %>% sample_frac(0.25)
@@ -939,17 +930,14 @@ for (rep in 1:100) {
   }
   
   print(rep)
-}
+}#rep
 
 
 
 
-  
 
-  
-  
-
-## ------   4. FIT MODEL -----
+## -----------------------------------------------------------------------------
+## ------ IV. FIT MODEL -----
 ##---- Create the nimble model object
 nimModel <- nimbleModel( code = modelCode,
                          constants = nimConstants,
@@ -973,14 +961,13 @@ Cmodel <- compiledList$model
 Cmcmc <- compiledList$mcmc
 
 ##---- Run nimble MCMC in multiple bites
-for(c in 1:1){
-  print(system.time(
+system.time(
     runMCMCbites( mcmc = Cmcmc,
                   bite.size = 500,
                   bite.number = 2,
                   path = file.path(thisDir, paste0("output/chain",c)))
-  ))
-}
+  )
+
 
 ##---- Collect multiple MCMC bites and chains
 nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
@@ -1001,3 +988,9 @@ res <- ProcessCodaOutput(nimOutput)
 ##---- Save processed MCMC samples
 save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
+
+
+## -----------------------------------------------------------------------------
+## ------ V. PROCESS OUTPUTS -----
+
+## -----------------------------------------------------------------------------
