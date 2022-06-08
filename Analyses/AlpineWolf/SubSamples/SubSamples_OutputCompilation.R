@@ -521,7 +521,7 @@ scenarios <- c(25,50,75,100)
   
   legend(title = "Detectors Covariates",
          legend = c("Transects_L", "Transect_Exp", "Snow", "East/West", "Log Pop"),
-         x=3, y=2, fill = myCols[1:5], cex = 0.5)
+         x=3.5, y=2, fill = myCols2[1:5], cex = 0.5)
   
   
 
@@ -559,60 +559,65 @@ scenarios <- c(25,50,75,100)
   
 ## ---- PLOTS BetaHab -----
   
-  
+  ylim <- 5
   par(mfrow=c(1,2))
+  
+  valNoise <- c(-0.15,-0.10,0,0.10,0.15)
   ## MEAN
 
   
-  plot(1,1, xlim = c(0,5), ylim = c(0,ylim),
+  plot(1,1, xlim = c(0,5), ylim = c(-3,ylim),
        type = "n", xaxt = "n", main = "Mean estimate",
        ylab = "BetaHab", xlab = "", axes = F)
   axis(1, at = c(1,2,3,4), labels = c(0.25,0.50,0.75,1))
-  axis(2, at = seq(0,ylim,length.out = 5),
-       labels = seq(0,ylim,length.out = 5))
+  axis(2, at = seq(-3,ylim,length.out = 5),
+       labels = seq(-3,ylim,length.out = 5))
   
   for(sc in 1:length(scenarios)){
     load(file.path(thisDir, paste0("AlpineWolf.SubSample.",scenarios[sc],"_mcmc.RData")))
     
-    plot.violins2( dat.list = list(res$sims.list$betaHab),
-                   x = sc,
-                   at = sc,
+    for(dc in 1:length(HabCov)){
+      temp <- res$sims.list$betaHab[,dc]
+    
+    plot.violins2( dat.list = list(temp),
+                   x = sc + valNoise[dc],
+                   at = sc + valNoise[dc],
                    add = T,
-                   col = "dodgerblue4",
+                   col = myCols2[dc],
                    violin.width = 0.05,
                    alpha = 0.9,
-                   border.col = "dodgerblue4",
+                   border.col = myCols2[dc],
                    scale.width = F)
+    }
   }#sc
   
   
   legend(title = "Habitat Covariates",
-         legend = c("Bare Rocks","Herbaceous", "Forest","Pop","Wolf presence"),
-         x=3, y=2, fill = myCols[1:5], cex = 0.5)
+         legend = c("Bare Rocks","Herbaceous", "Forest","Human Pop","Wolf presence"),
+         x=4, y=5, fill = myCols[1:5], cex = 0.5)
   
+#CV  
   
-  
-  
-  plot(1,1, xlim = c(0,5), ylim = c(0,0.5),
+  plot(1,1, xlim = c(0,5), ylim = c(0,2.5),
        type = "n", xaxt = "n", main = "Coefficient of variation",
        ylab = "CV(BetaHab)", xlab = "", axes = F)
   axis(1, at = c(1,2,3,4), labels = c(0.25,0.50,0.75,1))
-  axis(2, at = seq(0,0.5,length.out = 6),
-       labels = seq(0,0.5,length.out = 6))
+  axis(2, at = seq(0,2.5,length.out = 6),
+       labels = seq(0,2.5,length.out = 6))
   
-  for(sc in 1:length(scenarios)){
+  for(sc in 1:length(scenarios)) {
     load(file.path(thisDir, paste0("AlpineWolf.SubSample.",scenarios[sc],"_mcmc.RData")))
     
-    for(dc1 in 1:length(DetCov)){
+    for(dc1 in 1:length(DetCov)) {
       temp1 <- res$mean$betaHab[dc1]
       
-      for(dc2 in 1:length(DetCov)){
+      for(dc2 in 1:length(DetCov)) {
         temp2 <- res$sd$betaHab[dc2]
     points( y = temp2/temp1,
             x = sc,
             pch = 21, cex = 2,
-            bg  = c(myCols2[ss,s]),
-            col = c(myCols2[ss,s])
+            bg  = c(myCols2[dc1]),
+            col = c(myCols2[dc1]))
   
       }
     }
