@@ -64,7 +64,7 @@ scenarios <- c(25,50,75,100)
 
 
   # pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
-  #     width = 10, height = 3.5)
+  #      width = 10, height = 3.5)
   
   par(mfrow=c(1,2))
   ## MEAN
@@ -205,7 +205,7 @@ scenarios <- c(25,50,75,100)
 
     points( y = temp2/temp1,
             x = sc ,
-            pch = 21, cex = 2,
+            pch = 21, cex = 0.9,
             bg  = c(myCols[ss,s]),
             col = c(myCols[ss,s]))
         }
@@ -594,7 +594,7 @@ scenarios <- c(25,50,75,100)
   
   legend(title = "Habitat Covariates",
          legend = c("Bare Rocks","Herbaceous", "Forest","Human Pop","Wolf presence"),
-         x=4, y=5, fill = myCols[1:5], cex = 0.5)
+         x=4, y=5, fill = myCols2[1:5], cex = 0.5)
   
 #CV  
   
