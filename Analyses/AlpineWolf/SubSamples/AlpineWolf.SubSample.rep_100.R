@@ -431,7 +431,7 @@ for (rep in 1:100) {
       if(any(temp75 %in% "na")){
         status75[i] <- temp75[!(temp75 =="na")]
       }else{
-        status50[i] <- NA
+        status75[i] <- NA
       }
     } else {
       status75[i] <- temp75

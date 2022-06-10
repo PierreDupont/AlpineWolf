@@ -43,12 +43,12 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.3"
+modelName = "AlpineWolf.5.4"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
 habitat = list( resolution = 5000, 
-                buffer = 30000)
+                buffer = 20000)
 
 ## DETECTORS SPECIFICATIONS
 detectors = list( resolution = 5000,
@@ -1077,8 +1077,8 @@ for(i in 1:length(IDs)){
   temp <- unique(ngs$Status[ngs$Genotype.ID %in% IDs[i]])
   if(length(temp)>1){
     warning(print(paste("ID:", IDs[i], " status:", temp)))
-    if(any(temp %in% "other")){status[i] <- "other"}
     if(any(temp %in% "pup")){status[i] <- "pup"}
+    if(any(temp %in% "other")){status[i] <- "other"}
     if(any(temp %in% "alpha")){status[i] <- "alpha"}
   } else {
     status[i] <- temp
@@ -1099,7 +1099,7 @@ sex <- as.numeric(sex)
 
 status[status == "alpha"] <- 1
 status[status == "pup"] <- 2
-status[status == "na"] <- 2
+status[status == "na"] <- NA
 status[status == "other"] <- 3
 
 status <- as.numeric(status)
@@ -1524,29 +1524,26 @@ modelCode <- nimbleCode({
     theta[1:n.states,ss] ~ ddirch(alpha[1:n.states,ss])
   }#ss
   
-  theta.obs[1,1:n.states] <- c(1,0,0)
-  theta.obs[2,1:n.states] <- c(0,eta,1-eta)
-  theta.obs[3,1:n.states] <- c(0,0,1)
   
   for(i in 1:n.individuals){ 
     sex[i] ~ dbern(rho)
     z[i] ~ dbern(psi)
     status[i] ~ dcat(theta[1:n.states,sex[i]+1])
-    obs.status[i] ~ dcat(theta.obs[status[i],1:n.states])
   }#i 	
   
   ##-- POPULATION SIZE
   N <- sum(z[1:n.individuals])
-  
-  ##-- CONSTRAIN n.alpha.female == n.alpha.female
-  N.alpha.female <- sum(z[1:n.individuals]*sex[1:n.individuals]*(status[1:n.individuals]==1))
-  N.alpha.male <- sum(z[1:n.individuals]*(1-sex[1:n.individuals])*(status[1:n.individuals]==1))
-  
-  pOK <- (N.alpha.female == N.alpha.male)
-  one ~ dbern(pOK)
-  
+
   
   ##---- DETECTION PROCESS 
+  betaDens  ~ dnorm(0.0,0.01)
+  
+  dens[1:n.habWindows] <- calculateDensity(
+    s = s[1:n.individuals,1:2],
+    habitatGrid = habitatGrid2[1:y.max,1:x.max], 
+    indicator = z[1:n.individuals], 
+    numWindows = n.habWindows)
+
   for(c in 1:n.detCovs){
     betaDet[c] ~ dnorm(0.0,0.01)
   }
@@ -1554,17 +1551,21 @@ modelCode <- nimbleCode({
   for(s in 1:n.states){
     for(ss in 1:2){
       p0[s,ss] ~ dunif(0,0.5)
-      sigma[s,ss] ~ dunif(0,12)
+      log.sigma0[s,ss] ~ dnorm(0,0.01)
       logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
     }#ss
   }#s
   
   for(i in 1:n.individuals){
+    sID[i] <- habitatGrid[trunc(s[i,2])+1,trunc(s[i,1])+1]
+    
+    sigma[i] <- exp(log.sigma0[status[i],sex[i]+1] + betaDens * dens[sID[i]])
+    
     y[i,1:n.maxDets] ~ dbinomLocal_normal(
       size = size[1:n.detectors],
       p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
-      sigma = sigma[status[i],sex[i]+1],
+      sigma = sigma[i],
       s = s[i,1:2],
       trapCoords = detCoords[1:n.detectors,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -1584,8 +1585,7 @@ nimData <- list( y = yCombined.aug,
                  z = c(rep(1,n.detected),
                        rep(NA,dim(yCombined.aug)[1]-n.detected)),
                  sex = sex.aug,
-                 obs.status = status.aug,
-                 one = 1,
+                 status = status.aug,
                  alpha = matrix(1,3,2),
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords, 
@@ -1621,7 +1621,7 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       x.max = dim(habitat$matrix)[2])
 
 nimParams <- c("N", "p0", "sigma", "psi", "eta",
-               "betaDet", "betaHab", "theta", "rho",
+               "betaDens","betaDet", "betaHab", "theta", "rho",
                "z", "s", "status", "sex")
 
 
@@ -1661,20 +1661,19 @@ for(c in 1:4){
                     "z" = z.init,
                     "sex" = sex.init,
                     "status" = status.init,
-                    "obs.status" = status.init,
                     "N.alpha.female" = 110,
                     "N.alpha.male" = 110,
-                    "eta" = 0.95,
                     "psi" = 0.5,
                     "rho" = 0.5,
                     "theta" = cbind(c(0.5,0.45,0.05),
                                     c(0.5,0.3,0.2)),
                     "betaDet" = rep(0,nimConstants$n.detCovs),
                     "betaHab" = rep(0,nimConstants$n.habCovs),
+                    "betaDens" = 0,
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),
-                    "sigma" = cbind(c(1,1,2),
-                                    c(1,1,2)))
+                    "log.sigma0" = cbind(c(0,0,2),
+                                    c(0,0,2)))
   
   save( modelCode,
         nimData,
