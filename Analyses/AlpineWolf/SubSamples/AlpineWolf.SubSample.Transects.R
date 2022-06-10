@@ -147,16 +147,16 @@ temp <- st_transform(temp, st_crs(studyArea))
 
 ## ------   2. SEARCH EFFORT DATA ------
 ##---- Load GPS search transects
-# transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
+transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
 trans <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/transects_wolfalps_2020-2021.shp"))
 # trans <- st_cast(trans,  "LINESTRING")
 ##---- Convert dates
 transects$Date <- parse_date_time(transects$date, orders = c('ymd'))
 transects$Year <- as.numeric(format(transects$Date,"%Y"))
 transects$Month <- as.numeric(format(transects$Date,"%m"))
-
-##---- Plot check
-plot(transects, col = "red", add = T)
+# 
+# ##---- Plot check
+# plot(transects, col = "red", add = T)
 
 
 
@@ -164,6 +164,7 @@ plot(transects, col = "red", add = T)
 load(file.path(thisDir,"Habitat.RData"))
 load(file.path(thisDir,"Detectors.RData"))
 
+detectors$grid <- detectors$grid[,-(3:6)]
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
@@ -282,38 +283,115 @@ ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]
 # all(ngs$detector==main.cell.id)
 
 
-ngs <- as.data.frame(ngs)
-for (rep in 1:100) {
+# ngs <- as.data.frame(ngs)
+# for (rep in 1:100) {
   
 
 trans25 <- trans %>% 
   sample_frac(0.25) %>% 
-  st_buffer(., dist = 1000)
+  st_buffer(., dist = 500)
 
   
 trans50 <- trans %>% 
     sample_frac(0.50)  %>% 
-  st_buffer(., dist = 1000)
+  st_buffer(., dist = 500)
 
   
 trans75 <- trans %>% 
     sample_frac(0.75)  %>% 
-    st_buffer(., dist = 1000)
+    st_buffer(., dist = 500)
+  
+
+
+##---- Extract road length in each detector grid cell
+ngs25 <- st_filter(ngs, trans25)
+ngs50 <- st_filter(ngs, trans50)
+ngs75 <- st_filter(ngs, trans75)
+
+  
+
+
+##---- Extract length and number of transects in each grid cell
+
+ids_25 <- Reduce(intersect, list(trans25$ID_APP,  transects$transect_i))
+transects25 <- subset(transects, transect_i  %in% ids_25)
+
+intersection25 <- st_intersection(detectors$grid, transects25) %>%
+  mutate(LEN = st_length(.),
+          QI = .$Q.index) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(transect_L25 = sum(LEN),               ## Get total length searched in each detector grid cell
+            transect_N25 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi25 = mean(QI))              ## Get mean transects quality index for each detector grid cell
+  
+##---- Store in detector grid
+detectors$grid <- detectors$grid %>%
+  left_join(intersection25, by = "id")
+detectors$grid$transect_L25[is.na(detectors$grid$transect_L25)] <- 0
+detectors$grid$transect_N25[is.na(detectors$grid$transect_N25)] <- 1
+detectors$grid$transect_qi25[is.na(detectors$grid$transect_qi25)] <- 0
+detectors$grid$transect_L25 <- scale(detectors$grid$transect_L25)
+detectors$grid$mean_transect_L25 <- scale(detectors$grid$transect_L25/detectors$grid$transect_N25)
+
+
+
+##----
+ids_50 <- Reduce(intersect, list(trans50$ID_APP,  transects$transect_i))
+transects50 <- subset(transects, transect_i  %in% ids_50)
+
+intersection50 <- st_intersection(detectors$grid, transects50) %>%
+  mutate(LEN = st_length(.),
+         QI = .$Q.index) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(transect_L50 = sum(LEN),               ## Get total length searched in each detector grid cell
+            transect_N50 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi50 = mean(QI))              ## Get mean transects quality index for each detector grid cell
+
+##---- Store in detector grid
+detectors$grid <- detectors$grid %>%
+  left_join(intersection50, by = "id")
+detectors$grid$transect_L50[is.na(detectors$grid$transect_L50)] <- 0
+detectors$grid$transect_N50[is.na(detectors$grid$transect_N50)] <- 1
+detectors$grid$transect_qi50[is.na(detectors$grid$transect_qi50)] <- 0
+detectors$grid$transect_L50 <- scale(detectors$grid$transect_L50)
+detectors$grid$mean_transect_L50 <- scale(detectors$grid$transect_L50/detectors$grid$transect_N50)
+
+
+##----
+ids_75 <- Reduce(intersect, list(trans75$ID_APP,  transects$transect_i))
+transects75 <- subset(transects, transect_i  %in% ids_75)
+
+
+intersection75 <- st_intersection(detectors$grid, transects75) %>%
+  mutate(LEN = st_length(.),
+         QI = .$Q.index) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(transect_L75 = sum(LEN),               ## Get total length searched in each detector grid cell
+            transect_N75 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi75 = mean(QI))              ## Get mean transects quality index for each detector grid cell
+
+##---- Store in detector grid
+detectors$grid <- detectors$grid %>%
+  left_join(intersection75, by = "id")
+detectors$grid$transect_L75[is.na(detectors$grid$transect_L75)] <- 0
+detectors$grid$transect_N75[is.na(detectors$grid$transect_N75)] <- 1
+detectors$grid$transect_qi75[is.na(detectors$grid$transect_qi75)] <- 0
+detectors$grid$transect_L75 <- scale(detectors$grid$transect_L75)
+detectors$grid$mean_transect_L75 <- scale(detectors$grid$transect_L75/detectors$grid$transect_N75)
+
+
+
   
   
-  
-  ##---- Extract road length in each detector grid cell
-  ngs25 <- st_filter(ngs, trans25)
-  ngs50 <- st_filter(ngs, trans50)
-  ngs75 <- st_filter(ngs, trans75)
+ngs25 <- as.data.frame(ngs25)
+ngs50 <- as.data.frame(ngs50)
+ngs75 <- as.data.frame(ngs75)
   
   
-  ngs25 <- as.data.frame(ngs25)
-  ngs50 <- as.data.frame(ngs50)
-  ngs75 <- as.data.frame(ngs75)
-  
-  
-  ##---- Drop duplicated detections ate the same sub-detectors
+##---- Drop duplicated detections ate the same sub-detectors
   ngs25 <- ngs25[!duplicated(ngs25[ ,c("sub.detector", "Genotype.ID")]), ]
   ngs25 <- droplevels(ngs25)
   
@@ -328,15 +406,15 @@ trans75 <- trans %>%
   detMat50 <- as.matrix(table(ngs50[ , c("Genotype.ID", "detector")]))
   detMat75 <- as.matrix(table(ngs75[ , c("Genotype.ID", "detector")]))
   
-  # ##---- Convert to binary detections (might keep later for binomial model)
-  # detMat[detMat > 0] <- 1
+# ##---- Convert to binary detections (might keep later for binomial model)
+# detMat[detMat > 0] <- 1
   
-  ##---- Retrieve the number of detectors at which each individual is detected
+##---- Retrieve the number of detectors at which each individual is detected
   detNums25 <- apply(detMat25, 1, function(x) sum(x>0))
   detNums50 <- apply(detMat50, 1, function(x) sum(x>0))
   detNums75 <- apply(detMat75, 1, function(x) sum(x>0))
   
-  ##--- Set-up matrices to store individual detection frequencies and indices
+##--- Set-up matrices to store individual detection frequencies and indices
   n.detected25 <- dim(detMat25)[1]
   detIndices25 <- matrix(-1, n.detected25, max(detNums25)*2)
   ySparse25 <- matrix(-1, n.detected25, max(detNums25)*2)
@@ -349,7 +427,7 @@ trans75 <- trans %>%
   detIndices75 <- matrix(-1, n.detected75, max(detNums75)*2)
   ySparse75 <- matrix(-1, n.detected75, max(detNums75)*2)
   
-  ##---- Fill in the matrix
+##---- Fill in the matrix
   for(i in 1:n.detected25){
     ##-- Get where detections occur (detectors index)
     detIndices25[i,1:detNums25[i]] <- as.numeric(names(which(detMat25[i, ] > 0)))
@@ -645,10 +723,10 @@ trans75 <- trans %>%
   
   
   
-  ## ------   2. BUNDLE DATA ------
-  ##---- Set model constants, data & parameter simulated values (==inits)
+## ------   2. BUNDLE DATA ------
+##---- Set model constants, data & parameter simulated values (==inits)
   
-  nimData25 <- list( y = yCombined.aug25,
+nimData25 <- list( y = yCombined.aug25,
                      z = c(rep(1,n.detected25),
                            rep(NA,dim(yCombined.aug25)[1]-n.detected25)),
                      sex = sex.aug25,
@@ -663,8 +741,8 @@ trans75 <- trans %>%
                        "pop" = habitat$grid$pop,
                        "IUCN" = habitat$grid$`IUCN`),
                      det.covs = cbind.data.frame(
-                       "transect_L" = detectors$grid$`transect_L`,
-                       "transect_qi" = detectors$grid$`transect_qi`,
+                       "transect_L" = detectors$grid$transect_L25,
+                       "transect_qi" = detectors$grid$transect_qi25,
                        "snow_fall" = detectors$grid$`snow_fall`,
                        "zone" = detectors$grid$`zone`,
                        "log_pop" = detectors$grid$`log_pop`),
@@ -676,7 +754,7 @@ trans75 <- trans %>%
                      habitatGrid = localObjects$habitatGrid)
   
   
-  nimConstants25 <- list( n.individuals = nrow(nimData25$y),
+nimConstants25 <- list( n.individuals = nrow(nimData25$y),
                           n.maxDets = ncol(nimData25$y),
                           n.habWindows = habitat$n.HabWindows,
                           n.detectors = detectors$n.detectors, 
@@ -689,7 +767,7 @@ trans75 <- trans %>%
   
   
   
-  nimData50 <- list( y = yCombined.aug50,
+nimData50 <- list( y = yCombined.aug50,
                      z = c(rep(1,n.detected50),
                            rep(NA,dim(yCombined.aug50)[1]-n.detected50)),
                      sex = sex.aug50,
@@ -704,8 +782,8 @@ trans75 <- trans %>%
                        "pop" = habitat$grid$pop,
                        "IUCN" = habitat$grid$`IUCN`),
                      det.covs = cbind.data.frame(
-                       "transect_L" = detectors$grid$`transect_L`,
-                       "transect_qi" = detectors$grid$`transect_qi`,
+                       "transect_L" = detectors$grid$`transect_L50`,
+                       "transect_qi" = detectors$grid$`transect_qi50`,
                        "snow_fall" = detectors$grid$`snow_fall`,
                        "zone" = detectors$grid$`zone`,
                        "log_pop" = detectors$grid$`log_pop`),
@@ -717,7 +795,7 @@ trans75 <- trans %>%
                      habitatGrid = localObjects$habitatGrid)
   
   
-  nimConstants50 <- list( n.individuals = nrow(nimData50$y),
+nimConstants50 <- list( n.individuals = nrow(nimData50$y),
                           n.maxDets = ncol(nimData50$y),
                           n.habWindows = habitat$n.HabWindows,
                           n.detectors = detectors$n.detectors, 
@@ -732,7 +810,7 @@ trans75 <- trans %>%
   
   
   
-  nimData75 <- list( y = yCombined.aug75,
+nimData75 <- list( y = yCombined.aug75,
                      z = c(rep(1,n.detected75),
                            rep(NA,dim(yCombined.aug75)[1]-n.detected75)),
                      sex = sex.aug75,
@@ -747,8 +825,8 @@ trans75 <- trans %>%
                        "pop" = habitat$grid$pop,
                        "IUCN" = habitat$grid$`IUCN`),
                      det.covs = cbind.data.frame(
-                       "transect_L" = detectors$grid$`transect_L`,
-                       "transect_qi" = detectors$grid$`transect_qi`,
+                       "transect_L" = detectors$grid$`transect_L75`,
+                       "transect_qi" = detectors$grid$`transect_qi75`,
                        "snow_fall" = detectors$grid$`snow_fall`,
                        "zone" = detectors$grid$`zone`,
                        "log_pop" = detectors$grid$`log_pop`),
@@ -760,7 +838,7 @@ trans75 <- trans %>%
                      habitatGrid = localObjects$habitatGrid)
   
   
-  nimConstants75 <- list( n.individuals = nrow(nimData75$y),
+nimConstants75 <- list( n.individuals = nrow(nimData75$y),
                           n.maxDets = ncol(nimData75$y),
                           n.habWindows = habitat$n.HabWindows,
                           n.detectors = detectors$n.detectors, 
@@ -771,13 +849,13 @@ trans75 <- trans %>%
                           y.max = dim(habitat$matrix)[1],
                           x.max = dim(habitat$matrix)[2])
   
-  nimParams <- c("N", "p0", "sigma", "psi",
+nimParams <- c("N", "p0", "sigma", "psi",
                  "betaDet", "betaHab", "theta", "rho",
                  "z", "s", "status", "sex")
   
   
   
-  ## ------   3. SAVE THE INPUT ------
+## ------   3. SAVE THE INPUT ------
   for(c in 1:4){
     s.init25 <- matrix(NA, nimConstants25$n.individuals, 2)
     for(i in 1:n.detected25){
@@ -833,7 +911,7 @@ trans75 <- trans %>%
           nimInits,
           nimParams,
           file = file.path(thisDir, "input25",
-                           paste0(modelName, "_25_", rep, "_", c,  "rep.RData")))
+                           paste0(modelName, "_25_", "_", c,  "rep.RData")))
     
   }
   
@@ -894,7 +972,7 @@ trans75 <- trans %>%
            nimInits,
            nimParams,
            file = file.path(thisDir, "input50",
-                            paste0(modelName, "_50_", rep, "_", c,  "rep.RData")))
+                            paste0(modelName, "_50_", "_", c,  "rep.RData")))
     
     
   }  
@@ -958,7 +1036,7 @@ trans75 <- trans %>%
           nimInits,
           nimParams,
           file = file.path(thisDir, "input75", 
-                           paste0(modelName, "_75_", rep, "_", c,  "rep.RData")))
+                           paste0(modelName, "_75_", "_", c,  "rep.RData")))
     
     
   }

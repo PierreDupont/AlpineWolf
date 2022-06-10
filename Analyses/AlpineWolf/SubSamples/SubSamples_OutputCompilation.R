@@ -63,8 +63,8 @@ scenarios <- c(25,50,75,100)
 ##----- PLOTS N -----
 
 
-  # pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
-  #      width = 10, height = 3.5)
+  pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
+        width = 10, height = 3.5)
   
   par(mfrow=c(1,2))
   ## MEAN
@@ -624,6 +624,6 @@ scenarios <- c(25,50,75,100)
   }#sc
   
   
-  # graphics.off()
+   graphics.off()
 
 

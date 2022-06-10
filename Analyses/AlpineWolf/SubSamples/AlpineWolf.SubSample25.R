@@ -45,7 +45,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 modelName = "AlpineWolf.SubSample.25"
 thisDir <- file.path(analysisDir, modelName)
 
-## HABITAT SPECIFICATIONS
+get## HABITAT SPECIFICATIONS
 habitat = list( resolution = 5000, 
                 buffer = 30000)
 
@@ -355,17 +355,20 @@ for(i in 1:length(IDs)){
   ##- Social status
   temp <- unique(ngs$Status[ngs$Genotype.ID %in% IDs[i]])
   if(length(temp)>1){
-    warning(print(paste("ID:", IDs[i], " status:", temp)))
-    if(any(temp %in% "na")){status[i] <- NA}
-    if(any(temp %in% "na")){status[i] <- "other"}
-  } else {
+    # warning(print(paste("ID:", IDs[i], " status:", temp)))
+    if(any(temp %in% "na")){
+      status[i] <- temp[!(temp =="na")]
+    }else{
+      status[i] <- NA
+   }
+    }else{
     status[i] <- temp
   }
   
   ##-- Pack membership
   temp <- unique(ngs$Pack[ngs$Genotype.ID %in% IDs[i]])
   if(any(temp %in% "dispersal")){
-    status[i] <- temp
+    status[i] <- "dispersal"
   }
 }
 
@@ -391,15 +394,15 @@ status <- as.numeric(status)
 
 
 yCombined.aug <- MakeAugmentation( y = yCombined,
-                                   M = 3000,
+                                   M = 4000,
                                    replace.value = 0)
 
 sex.aug <- MakeAugmentation( y = sex,
-                             M = 3000,
+                             M = 4000,
                              replace.value = NA)
 
 status.aug <- MakeAugmentation( y = status,
-                                M = 3000,
+                                M = 4000,
                                 replace.value = NA)
 
 
@@ -454,7 +457,7 @@ modelCode <- nimbleCode({
   for(s in 1:n.states){
     for(ss in 1:2){
       p0[s,ss] ~ dunif(0,0.5)
-      sigma[s,ss] ~ dunif(0,12)
+      sigma[s,ss] ~ dunif(0,20)
       logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
     }#ss
@@ -581,8 +584,8 @@ for(c in 1:4){
         nimConstants,
         nimInits,
         nimParams,
-        file = file.path(thisDir, "input",
-                         paste0(modelName, "_", c, ".RData")))
+        file = file.path(thisDir, "input/4000aug",
+                         paste0(modelName ,"_", c, ".RData")))
 }
 
 
@@ -632,9 +635,9 @@ graphics.off()
 
 
 ##---- Process and save MCMC samples
-nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
-res <- ProcessCodaOutput(nimOutput)
+# nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               # burnin = 0)
+res <- ProcessCodaOutput(nimOutput_noZ)
 
 ##---- Save processed MCMC samples
 save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))

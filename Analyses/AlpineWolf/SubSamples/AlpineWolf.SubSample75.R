@@ -355,19 +355,23 @@ for(i in 1:length(IDs)){
   ##- Social status
   temp <- unique(ngs$Status[ngs$Genotype.ID %in% IDs[i]])
   if(length(temp)>1){
-    warning(print(paste("ID:", IDs[i], " status:", temp)))
-    if(any(temp %in% "na")){status[i] <- NA}
-    if(any(temp %in% "na")){status[i] <- "other"}
-  } else {
+    # warning(print(paste("ID:", IDs[i], " status:", temp)))
+    if(any(temp %in% "na")){
+      status[i] <- temp[!(temp =="na")]
+    }else{
+      status[i] <- NA
+    }
+  }else{
     status[i] <- temp
   }
   
   ##-- Pack membership
   temp <- unique(ngs$Pack[ngs$Genotype.ID %in% IDs[i]])
   if(any(temp %in% "dispersal")){
-    status[i] <- temp
+    status[i] <- "dispersal"
   }
 }
+
 
 ##---- Convert to numerical values
 
@@ -391,15 +395,15 @@ status <- as.numeric(status)
 
 
 yCombined.aug <- MakeAugmentation( y = yCombined,
-                                   M = 3000,
+                                   M = 4000,
                                    replace.value = 0)
 
 sex.aug <- MakeAugmentation( y = sex,
-                             M = 3000,
+                             M = 4000,
                              replace.value = NA)
 
 status.aug <- MakeAugmentation( y = status,
-                                M = 3000,
+                                M = 4000,
                                 replace.value = NA)
 
 
@@ -454,7 +458,7 @@ modelCode <- nimbleCode({
   for(s in 1:n.states){
     for(ss in 1:2){
       p0[s,ss] ~ dunif(0,0.5)
-      sigma[s,ss] ~ dunif(0,12)
+      sigma[s,ss] ~ dunif(0,20)
       logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
     }#ss
@@ -581,7 +585,7 @@ for(c in 1:4){
         nimConstants,
         nimInits,
         nimParams,
-        file = file.path(thisDir, "input",
+        file = file.path(thisDir, "input/4000aug",
                          paste0(modelName, "_", c, ".RData")))
 }
 
@@ -632,10 +636,42 @@ graphics.off()
 
 
 ##---- Process and save MCMC samples
-nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
-res <- ProcessCodaOutput(nimOutput)
+# nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               # burnin = 0)
+
+res <- ProcessCodaOutput(nimOutput_noZ)
 
 ##---- Save processed MCMC samples
 save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
+
+
+## ------   5. PARAMETER TABLES ------
+## ------     5.1. SCR PARAMETERS ------
+#paramSimple <- sapply(strsplit(colnames(res$sims.list), split = '\\['), '[', 1)
+params.simple <- names(res$mean)[!names(res$mean) %in% c("s","z")]
+
+params.means <- do.call(c, lapply(params.simple, function(x)res$mean[[x]]))
+params.sd <- do.call(c, lapply(params.simple, function(x)res$sd[[x]]))
+params.q2.5 <- do.call(c, lapply(params.simple, function(x)res$q2.5[[x]]))
+params.q97.5 <- do.call(c, lapply(params.simple, function(x)res$q97.5[[x]]))
+params.Rhat <- do.call(c, lapply(params.simple, function(x)res$Rhat[[x]]))
+params.n.eff <- do.call(c, lapply(params.simple, function(x)res$n.eff[[x]]))
+
+params.summary <- cbind.data.frame( params.means, params.sd,
+                                    params.q2.5, params.q97.5, params.Rhat,
+                                    params.n.eff)
+
+names(params.summary) <- c("mean", "sd", "2.5%CI", "97.5%CI", "Rhat", "n.eff")
+
+## WRITE TABLE
+ # write.csv( x = params.summary,
+ #            file = file.path(myVars$WD, myVars$modelName, "TABLES",
+ #                             paste( myVars$modelName, "_params.csv", sep = "")))
+ # 
+ # print( xtable(params.summary, type = "latex"),
+ #        floating = FALSE,# scalebox=.8,
+ #        add.to.row = list(list(seq(1, nrow(params.summary), by = 2)),"\\rowcolor[gray]{.95} "),
+ #        file = file.path(myVars$WD, myVars$modelName,"TABLES",
+ #                         paste( myVars$modelName, "_params.tex", sep = "")))
+
 
