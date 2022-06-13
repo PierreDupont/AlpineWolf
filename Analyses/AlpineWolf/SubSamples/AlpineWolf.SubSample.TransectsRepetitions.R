@@ -146,6 +146,12 @@ dim(ngs)
 ngs <- ngs[ngs$Dead.recovery == "", ]
 dim(ngs)
 
+##---- Filter out opportunistic samples
+ngs_opp <- ngs[!ngs$Type.of.sample == "Scat", ]
+
+##---- To be added later
+ngs <- ngs[ngs$Type.of.sample == "Scat", ]
+
 ##---- Turn ngs into spatial data frame
 coordinates(ngs) <- cbind.data.frame(ngs$CoordX, ngs$CoordY)
 proj4string(ngs) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
@@ -215,22 +221,39 @@ ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]
 
 ##---- Subsample transects repetitions
 
+
 trans3 <- transects %>% 
   group_by(transect_i)  %>% 
-  mutate(rep_n = n())  %>% 
-  filter(rep_n <= 3) %>% 
+  mutate(rank = row_number()) %>%
+  filter(rank <= 3) %>% 
   st_buffer(., dist = 500)
 
 
 trans6 <- transects %>% 
   group_by(transect_i)  %>% 
-  mutate(rep_n = n())  %>% 
-  filter(rep_n <= 6) %>% 
+  mutate(rank = row_number()) %>%
+  filter(rank <= 6) %>% 
   st_buffer(., dist = 500)
 
 ##---- Extract ngs falling inside trans subsampled buffers
-ngs3 <- st_filter(ngs, trans3)
-ngs6 <- st_filter(ngs, trans6)
+
+ngs3 <- st_filter(ngs, trans3) 
+  ngs3 <-  st_intersection(trans3, ngs3)
+ngs3rep <- ngs3 %>% 
+  filter(Date == Date.1)
+
+ngs3_count <- count(as_tibble(ngs3rep), transect_i) %>%
+  print()
+
+
+ngs6 <- st_filter(ngs, trans6) 
+ngs6 <-  st_intersection(trans6, ngs6)
+ngs6rep <- ngs6 %>% 
+  filter(Date == Date.1)
+
+ngs6_count <- count(as_tibble(ngs6rep), transect_i) %>%
+  print()
+
 
 
 
