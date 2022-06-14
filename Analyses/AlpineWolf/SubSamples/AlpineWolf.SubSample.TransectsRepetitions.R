@@ -43,7 +43,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.SubSample.Transects"
+modelName = "AlpineWolf.SubSample.TransectsRepetitions"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -75,7 +75,7 @@ if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "out
 ## ------   2. SEARCH EFFORT DATA ------
 ##---- Load GPS search transects
 transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
-trans <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/transects_wolfalps_2020-2021.shp"))
+# trans <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/transects_wolfalps_2020-2021.shp"))
 # trans <- st_cast(trans,  "LINESTRING")
 ##---- Convert dates
 transects$Date <- parse_date_time(transects$date, orders = c('ymd'))
@@ -151,12 +151,15 @@ ngs_opp <- ngs[!ngs$Type.of.sample == "Scat", ]
 
 ##---- To be added later
 ngs <- ngs[ngs$Type.of.sample == "Scat", ]
-
+dim(ngs)
 ##---- Turn ngs into spatial data frame
 coordinates(ngs) <- cbind.data.frame(ngs$CoordX, ngs$CoordY)
 proj4string(ngs) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
 ngs <- st_as_sf(ngs)
 
+coordinates(ngs_opp) <- cbind.data.frame(ngs_opp$CoordX, ngs_opp$CoordY)
+proj4string(ngs_opp) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
+ngs_opp <- st_as_sf(ngs_opp)
 ##---- Number of detections per individual
 # numDetsPerId <- table(ngs$Genotype.ID)
 # hist(numDetsPerId)
@@ -199,12 +202,21 @@ closest <- nn2( coordinates(detectors$sub.sp),
                 searchtype = "radius",
                 radius = 10000)
 
+closest_opp <- nn2( coordinates(detectors$sub.sp),
+                st_coordinates(ngs_opp),
+                k = 1,
+                searchtype = "radius",
+                radius = 10000)
 
 
 
 ##---- Assign each detection to a detector based on minimum distance
 ngs$sub.detector <- c(closest$nn.idx)
 ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx] 
+
+
+ngs_opp$sub.detector <- c(closest_opp$nn.idx)
+ngs_opp$detector <- detectors$sub.sp$main.cell.new.id[closest_opp$nn.idx] 
 
 # main.cell.id <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]     
 # ngs$detector <- unlist(
@@ -221,373 +233,290 @@ ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]
 
 ##---- Subsample transects repetitions
 
+# trans3 <- transects %>% 
+#   group_by(transect_i) %>%
+#   mutate(rank = row_number()) %>%
+#   filter(rank = 3) %>% 
+
+for (rep in 1:10) {
 
 trans3 <- transects %>% 
-  group_by(transect_i)  %>% 
-  mutate(rank = row_number()) %>%
-  filter(rank <= 3) %>% 
+  group_by(transect_i) %>%
+  slice(sample(1:n(), pmin(3, n()))) 
+
+trans3_b <- trans3 %>% 
   st_buffer(., dist = 500)
 
 
 trans6 <- transects %>% 
-  group_by(transect_i)  %>% 
-  mutate(rank = row_number()) %>%
-  filter(rank <= 6) %>% 
+  group_by(transect_i) %>%
+  slice(sample(1:n(), pmin(6, n()))) 
+
+trans6_b <-trans6 %>% 
   st_buffer(., dist = 500)
+
+
 
 ##---- Extract ngs falling inside trans subsampled buffers
 
-ngs3 <- st_filter(ngs, trans3) 
-  ngs3 <-  st_intersection(trans3, ngs3)
+ngs3 <- st_filter(ngs, trans3_b) 
+ngs3 <-  st_intersection(ngs3, trans3_b)
 ngs3rep <- ngs3 %>% 
   filter(Date == Date.1)
 
 ngs3_count <- count(as_tibble(ngs3rep), transect_i) %>%
   print()
 
+ngs3rep<-ngs3rep[,(1:19)]
 
-ngs6 <- st_filter(ngs, trans6) 
-ngs6 <-  st_intersection(trans6, ngs6)
+
+ngs6 <- st_filter(ngs, trans6_b) 
+ngs6 <-  st_intersection(ngs6, trans6_b)
 ngs6rep <- ngs6 %>% 
   filter(Date == Date.1)
-
 ngs6_count <- count(as_tibble(ngs6rep), transect_i) %>%
   print()
 
+ngs6rep<-ngs6rep[,(1:19)]
 
 
-
+ngs3 <-rbind(ngs3rep,ngs_opp)
+ngs6 <-rbind(ngs6rep,ngs_opp)
 
 
 ##---- Extract length and number of transects in each grid cell
 
-ids_25 <- Reduce(intersect, list(trans25$ID_APP,  transects$transect_i))
-transects25 <- subset(transects, transect_i  %in% ids_25)
 
-intersection25 <- st_intersection(detectors$grid, transects25) %>%
+intersection3 <- st_intersection(detectors$grid, trans3) %>%
   mutate(LEN = st_length(.),
          QI = .$Q.index) %>%
   st_drop_geometry() %>%
   group_by(id) %>%
-  summarise(transect_L25 = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N25 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
-            transect_qi25 = mean(QI))              ## Get mean transects quality index for each detector grid cell
+  summarise(transect_L3 = sum(LEN),               ## Get total length searched in each detector grid cell
+            transect_N3 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi3 = mean(QI))              ## Get mean transects quality index for each detector grid cell
 
 ##---- Store in detector grid
 detectors$grid <- detectors$grid %>%
-  left_join(intersection25, by = "id")
-detectors$grid$transect_L25[is.na(detectors$grid$transect_L25)] <- 0
-detectors$grid$transect_N25[is.na(detectors$grid$transect_N25)] <- 1
-detectors$grid$transect_qi25[is.na(detectors$grid$transect_qi25)] <- 0
-detectors$grid$transect_L25 <- scale(detectors$grid$transect_L25)
-detectors$grid$mean_transect_L25 <- scale(detectors$grid$transect_L25/detectors$grid$transect_N25)
+  left_join(intersection3, by = "id")
+detectors$grid$transect_L3[is.na(detectors$grid$transect_L3)] <- 0
+detectors$grid$transect_N3[is.na(detectors$grid$transect_N3)] <- 1
+detectors$grid$transect_qi3[is.na(detectors$grid$transect_qi3)] <- 0
+detectors$grid$transect_L3 <- scale(detectors$grid$transect_L3)
+detectors$grid$mean_transect_L3 <- scale(detectors$grid$transect_L3/detectors$grid$transect_N3)
 
 
 
 ##----
-ids_50 <- Reduce(intersect, list(trans50$ID_APP,  transects$transect_i))
-transects50 <- subset(transects, transect_i  %in% ids_50)
 
-intersection50 <- st_intersection(detectors$grid, transects50) %>%
+
+intersection6 <- st_intersection(detectors$grid, trans6) %>%
   mutate(LEN = st_length(.),
          QI = .$Q.index) %>%
   st_drop_geometry() %>%
   group_by(id) %>%
-  summarise(transect_L50 = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N50 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
-            transect_qi50 = mean(QI))              ## Get mean transects quality index for each detector grid cell
+  summarise(transect_L6 = sum(LEN),               ## Get total length searched in each detector grid cell
+            transect_N6 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi6 = mean(QI))              ## Get mean transects quality index for each detector grid cell
 
 ##---- Store in detector grid
 detectors$grid <- detectors$grid %>%
-  left_join(intersection50, by = "id")
-detectors$grid$transect_L50[is.na(detectors$grid$transect_L50)] <- 0
-detectors$grid$transect_N50[is.na(detectors$grid$transect_N50)] <- 1
-detectors$grid$transect_qi50[is.na(detectors$grid$transect_qi50)] <- 0
-detectors$grid$transect_L50 <- scale(detectors$grid$transect_L50)
-detectors$grid$mean_transect_L50 <- scale(detectors$grid$transect_L50/detectors$grid$transect_N50)
-
-
-##----
-ids_75 <- Reduce(intersect, list(trans75$ID_APP,  transects$transect_i))
-transects75 <- subset(transects, transect_i  %in% ids_75)
-
-
-intersection75 <- st_intersection(detectors$grid, transects75) %>%
-  mutate(LEN = st_length(.),
-         QI = .$Q.index) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(transect_L75 = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N75 = length(unique(Date)),   ## Get total number of visits in each detector grid cell
-            transect_qi75 = mean(QI))              ## Get mean transects quality index for each detector grid cell
-
-##---- Store in detector grid
-detectors$grid <- detectors$grid %>%
-  left_join(intersection75, by = "id")
-detectors$grid$transect_L75[is.na(detectors$grid$transect_L75)] <- 0
-detectors$grid$transect_N75[is.na(detectors$grid$transect_N75)] <- 1
-detectors$grid$transect_qi75[is.na(detectors$grid$transect_qi75)] <- 0
-detectors$grid$transect_L75 <- scale(detectors$grid$transect_L75)
-detectors$grid$mean_transect_L75 <- scale(detectors$grid$transect_L75/detectors$grid$transect_N75)
+  left_join(intersection6, by = "id")
+detectors$grid$transect_L6[is.na(detectors$grid$transect_L6)] <- 0
+detectors$grid$transect_N6[is.na(detectors$grid$transect_N6)] <- 1
+detectors$grid$transect_qi6[is.na(detectors$grid$transect_qi6)] <- 0
+detectors$grid$transect_L6 <- scale(detectors$grid$transect_L6)
+detectors$grid$mean_transect_L6 <- scale(detectors$grid$transect_L6/detectors$grid$transect_N6)
 
 
 
 
 
-ngs25 <- as.data.frame(ngs25)
-ngs50 <- as.data.frame(ngs50)
-ngs75 <- as.data.frame(ngs75)
+ngs3 <- as.data.frame(ngs3)
+ngs6 <- as.data.frame(ngs6)
 
 
 ##---- Drop duplicated detections ate the same sub-detectors
-ngs25 <- ngs25[!duplicated(ngs25[ ,c("sub.detector", "Genotype.ID")]), ]
-ngs25 <- droplevels(ngs25)
+ngs3 <- ngs3[!duplicated(ngs3[ ,c("sub.detector", "Genotype.ID")]), ]
+ngs3 <- droplevels(ngs3)
 
-ngs50 <- ngs50[!duplicated(ngs50[ ,c("sub.detector", "Genotype.ID")]), ]
-ngs50 <- droplevels(ngs50)
+ngs6 <- ngs6[!duplicated(ngs6[ ,c("sub.detector", "Genotype.ID")]), ]
+ngs6 <- droplevels(ngs6)
 
-ngs75 <- ngs75[!duplicated(ngs75[ ,c("sub.detector", "Genotype.ID")]), ]
-ngs75 <- droplevels(ngs75)
 
 ##---- Count individual detections per detector
-detMat25 <- as.matrix(table(ngs25[ , c("Genotype.ID", "detector")]))
-detMat50 <- as.matrix(table(ngs50[ , c("Genotype.ID", "detector")]))
-detMat75 <- as.matrix(table(ngs75[ , c("Genotype.ID", "detector")]))
+detMat3 <- as.matrix(table(ngs3[ , c("Genotype.ID", "detector")]))
+detMat6 <- as.matrix(table(ngs6[ , c("Genotype.ID", "detector")]))
 
 # ##---- Convert to binary detections (might keep later for binomial model)
 # detMat[detMat > 0] <- 1
 
 ##---- Retrieve the number of detectors at which each individual is detected
-detNums25 <- apply(detMat25, 1, function(x) sum(x>0))
-detNums50 <- apply(detMat50, 1, function(x) sum(x>0))
-detNums75 <- apply(detMat75, 1, function(x) sum(x>0))
+detNums3 <- apply(detMat3, 1, function(x) sum(x>0))
+detNums6 <- apply(detMat6, 1, function(x) sum(x>0))
+
 
 ##--- Set-up matrices to store individual detection frequencies and indices
-n.detected25 <- dim(detMat25)[1]
-detIndices25 <- matrix(-1, n.detected25, max(detNums25)*2)
-ySparse25 <- matrix(-1, n.detected25, max(detNums25)*2)
+n.detected3 <- dim(detMat3)[1]
+detIndices3 <- matrix(-1, n.detected3, max(detNums3)*2)
+ySparse3 <- matrix(-1, n.detected3, max(detNums3)*2)
 
-n.detected50 <- dim(detMat50)[1]
-detIndices50 <- matrix(-1, n.detected50, max(detNums50)*2)
-ySparse50 <- matrix(-1, n.detected50, max(detNums50)*2)
+n.detected6 <- dim(detMat6)[1]
+detIndices6 <- matrix(-1, n.detected6, max(detNums6)*2)
+ySparse6 <- matrix(-1, n.detected6, max(detNums6)*2)
 
-n.detected75 <- dim(detMat75)[1]
-detIndices75 <- matrix(-1, n.detected75, max(detNums75)*2)
-ySparse75 <- matrix(-1, n.detected75, max(detNums75)*2)
 
 ##---- Fill in the matrix
-for(i in 1:n.detected25){
+for(i in 1:n.detected3){
   ##-- Get where detections occur (detectors index)
-  detIndices25[i,1:detNums25[i]] <- as.numeric(names(which(detMat25[i, ] > 0)))
+  detIndices3[i,1:detNums3[i]] <- as.numeric(names(which(detMat3[i, ] > 0)))
   ##-- Get detection frequencies (always 1 in case of Bernoulli) 
-  ySparse25[i,1:detNums25[i]] <- detMat25[i,which(detMat25[i, ] > 0)]
+  ySparse3[i,1:detNums3[i]] <- detMat3[i,which(detMat3[i, ] > 0)]
 }
 
 
-for(i in 1:n.detected50){
+for(i in 1:n.detected6){
   ##-- Get where detections occur (detectors index)
-  detIndices50[i,1:detNums50[i]] <- as.numeric(names(which(detMat50[i, ] > 0)))
+  detIndices6[i,1:detNums6[i]] <- as.numeric(names(which(detMat6[i, ] > 0)))
   ##-- Get detection frequencies (always 1 in case of Bernoulli) 
-  ySparse50[i,1:detNums50[i]] <- detMat50[i,which(detMat50[i, ] > 0)]
+  ySparse6[i,1:detNums6[i]] <- detMat6[i,which(detMat6[i, ] > 0)]
 }
 
 
-for(i in 1:n.detected75){
-  ##-- Get where detections occur (detectors index)
-  detIndices75[i,1:detNums75[i]] <- as.numeric(names(which(detMat75[i, ] > 0)))
-  ##-- Get detection frequencies (always 1 in case of Bernoulli) 
-  ySparse75[i,1:detNums75[i]] <- detMat75[i,which(detMat75[i, ] > 0)]
-}
 
 
 
 ##---- Combine individual detection number, frequencies and indices
-yCombined25 <- cbind(detNums25, ySparse25, detIndices25)
+yCombined3 <- cbind(detNums3, ySparse3, detIndices3)
 
-yCombined50 <- cbind(detNums50, ySparse50, detIndices50)
-
-yCombined75 <- cbind(detNums75, ySparse75, detIndices75)
+yCombined6 <- cbind(detNums6, ySparse6, detIndices6)
 
 
 ## ------     3.2. INDIVIDUAL COVARIATES ------
 ##---- List detected indivdual names
 
-IDs25 <- dimnames(yCombined25)[[1]]
-IDs50 <- dimnames(yCombined50)[[1]]
-IDs75 <- dimnames(yCombined75)[[1]]
+IDs3 <- dimnames(yCombined3)[[1]]
+IDs6 <- dimnames(yCombined6)[[1]]
+
 
 ##---- Set-up vectors to store individual covariates
 
-sex25 <- status25 <- pack25 <- rep(NA, length(IDs25))
-for(i in 1:length(IDs25)){
+sex3 <- status3 <- pack3 <- rep(NA, length(IDs3))
+for(i in 1:length(IDs3)){
   ##-- Sex 
-  temp25 <- unique(ngs25$Sex[ngs25$Genotype.ID %in% IDs25[i]])
-  if(length(temp25)>1)warning(print(paste("ID:", IDs25[i], " sex:", temp25)))
-  sex25[i] <- ifelse(length(temp25>1),temp25[1],temp25)
+  temp3 <- unique(ngs3$Sex[ngs3$Genotype.ID %in% IDs3[i]])
+  if(length(temp3)>1)warning(print(paste("ID:", IDs3[i], " sex:", temp3)))
+  sex3[i] <- ifelse(length(temp3>1),temp3[1],temp3)
   
   ##- Social status
-  temp25 <- unique(ngs25$Status[ngs25$Genotype.ID %in% IDs25[i]])
-  if(length(temp25)>1){
+  temp3 <- unique(ngs3$Status[ngs3$Genotype.ID %in% IDs3[i]])
+  if(length(temp3)>1){
     #warning(print(paste("ID:", IDs25[i], " status:", temp25)))
-    if(any(temp25 %in% "na")){
-      status25[i] <- temp25[!(temp25 =="na")]
+    if(any(temp3 %in% "na")){
+      status3[i] <- temp3[!(temp3 =="na")]
     }else{
-      status25[i] <- NA
+      status3[i] <- NA
     }
   } else {
-    status25[i] <- temp25
+    status3[i] <- temp3
   }
   
   
   ##-- Pack membership
-  temp25 <- unique(ngs25$Pack[ngs25$Genotype.ID %in% IDs25[i]])
-  if(any(temp25 %in% "dispersal")){
-    status25[i] <- "dispersal"
+  temp3 <- unique(ngs3$Pack[ngs3$Genotype.ID %in% IDs3[i]])
+  if(any(temp3 %in% "dispersal")){
+    status3[i] <- "dispersal"
   }
 }
 
 
 
-sex50 <- status50 <- pack50 <- rep(NA, length(IDs50))
-for(i in 1:length(IDs50)){
+sex6 <- status6 <- pack6 <- rep(NA, length(IDs6))
+for(i in 1:length(IDs6)){
   ##-- Sex 
-  temp50 <- unique(ngs50$Sex[ngs50$Genotype.ID %in% IDs50[i]])
-  if(length(temp50)>1)warning(print(paste("ID:", IDs50[i], " sex:", temp50)))
-  sex50[i] <- ifelse(length(temp50>1),temp50[1],temp50)
+  temp6 <- unique(ngs6$Sex[ngs6$Genotype.ID %in% IDs6[i]])
+  if(length(temp6)>1)warning(print(paste("ID:", IDs6[i], " sex:", temp6)))
+  sex6[i] <- ifelse(length(temp6>1),temp6[1],temp6)
   
   ##- Social status
-  temp50 <- unique(ngs50$Status[ngs50$Genotype.ID %in% IDs50[i]])
-  if(length(temp50)>1){
+  temp6 <- unique(ngs6$Status[ngs6$Genotype.ID %in% IDs6[i]])
+  if(length(temp6)>1){
     #warning(print(paste("ID:", IDs50[i], " status:", temp50)))
-    if(any(temp50 %in% "na")){
-      status50[i] <- temp50[!(temp50 =="na")]
+    if(any(temp6 %in% "na")){
+      status6[i] <- temp6[!(temp6 =="na")]
     }else{
-      status50[i] <- NA
+      status6[i] <- NA
     }
   } else {
-    status50[i] <- temp50
+    status6[i] <- temp6
   }
   
   ##-- Pack membership
-  temp50 <- unique(ngs50$Pack[ngs50$Genotype.ID %in% IDs50[i]])
-  if(any(temp50 %in% "dispersal")){
-    status50[i] <- "dispersal"
+  temp6 <- unique(ngs6$Pack[ngs6$Genotype.ID %in% IDs6[i]])
+  if(any(temp6 %in% "dispersal")){
+    status6[i] <- "dispersal"
   }
 }
 
 
 
-sex75 <- status75 <- pack75 <- rep(NA, length(IDs75))
-for(i in 1:length(IDs75)){
-  ##-- Sex 
-  temp75 <- unique(ngs75$Sex[ngs75$Genotype.ID %in% IDs75[i]])
-  if(length(temp75)>1)warning(print(paste("ID:", IDs75[i], " sex:", temp75)))
-  sex75[i] <- ifelse(length(temp75>1),temp75[1],temp75)
-  
-  ##- Social status
-  temp75 <- unique(ngs75$Status[ngs75$Genotype.ID %in% IDs75[i]])
-  if(length(temp75)>1){
-    #warning(print(paste("ID:", IDs75[i], " status:", temp75)))
-    if(any(temp75 %in% "na")){
-      status75[i] <- temp75[!(temp75 =="na")]
-    }else{
-      status50[i] <- NA
-    }
-  } else {
-    status75[i] <- temp75
-  }
-  
-  ##-- Pack membership
-  temp75 <- unique(ngs75$Pack[ngs75$Genotype.ID %in% IDs75[i]])
-  if(any(temp75 %in% "dispersal")){
-    status75[i] <- "dispersal"
-  }
-}
 
 ##----- Convert to numerical values 
 # ----
 
-sex25[sex25 == "F"] <- 0
-sex25[sex25 == "M"] <- 1
-sex25[sex25 == ""] <- NA
-sex25 <- as.numeric(sex25)
+sex3[sex3 == "F"] <- 0
+sex3[sex3 == "M"] <- 1
+sex3[sex3 == ""] <- NA
+sex3 <- as.numeric(sex3)
 
-status25[status25 == "alpha"] <- 1
-status25[status25 == "pup"] <- 2
-status25[status25 == "other"] <- 3
-status25[status25 == "dispersal"] <- 3
-status25[status25 == ""] <- NA
-status25 <- as.numeric(status25)
-
-##----
-sex50[sex50 == "F"] <- 0
-sex50[sex50 == "M"] <- 1
-sex50[sex50 == ""] <- NA
-sex50 <- as.numeric(sex50)
-
-status50[status50 == "alpha"] <- 1
-status50[status50 == "pup"] <- 2
-status50[status50 == "other"] <- 3
-status50[status50 == "dispersal"] <- 3
-status50[status50 == ""] <- NA
-status50 <- as.numeric(status50)
+status3[status3 == "alpha"] <- 1
+status3[status3 == "pup"] <- 2
+status3[status3 == "other"] <- 3
+status3[status3 == "dispersal"] <- 3
+status3[status3 == ""] <- NA
+status3 <- as.numeric(status3)
 
 ##----
-sex75[sex75 == "F"] <- 0
-sex75[sex75 == "M"] <- 1
-sex75[sex75 == ""] <- NA
-sex75 <- as.numeric(sex75)
+sex6[sex6 == "F"] <- 0
+sex6[sex6 == "M"] <- 1
+sex6[sex6 == ""] <- NA
+sex6 <- as.numeric(sex6)
 
-status75[status75 == "alpha"] <- 1
-status75[status75 == "pup"] <- 2
-status75[status75 == "other"] <- 3
-status75[status75 == "dispersal"] <- 3
-status75[status75 == ""] <- NA
-status75 <- as.numeric(status75)
+status6[status6 == "alpha"] <- 1
+status6[status6 == "pup"] <- 2
+status6[status6 == "other"] <- 3
+status6[status6 == "dispersal"] <- 3
+status6[status6 == ""] <- NA
+status6 <- as.numeric(status6)
 
 
 
 ## ------     3.3. DATA AUGMENTATION ------
 
 
-yCombined.aug25 <- MakeAugmentation( y = yCombined25,
+yCombined.aug3 <- MakeAugmentation( y = yCombined3,
                                      M = 4000,
                                      replace.value = 0)
 
-sex.aug25 <- MakeAugmentation( y = sex25,
+sex.aug3 <- MakeAugmentation( y = sex3,
                                M = 4000,
                                replace.value = NA)
 
-status.aug25 <- MakeAugmentation( y = status25,
+status.aug3 <- MakeAugmentation( y = status3,
                                   M = 4000,
                                   replace.value = NA)
 
 ## ---
 
-yCombined.aug50 <- MakeAugmentation( y = yCombined50,
+yCombined.aug6 <- MakeAugmentation( y = yCombined6,
                                      M = 4000,
                                      replace.value = 0)
 
-sex.aug50 <- MakeAugmentation( y = sex50,
+sex.aug6 <- MakeAugmentation( y = sex6,
                                M = 4000,
                                replace.value = NA)
 
-status.aug50 <- MakeAugmentation( y = status50,
-                                  M = 4000,
-                                  replace.value = NA)
-
-
-## ---
-
-yCombined.aug75 <- MakeAugmentation( y = yCombined75,
-                                     M = 4000,
-                                     replace.value = 0)
-
-sex.aug75 <- MakeAugmentation( y = sex75,
-                               M = 4000,
-                               replace.value = NA)
-
-status.aug75 <- MakeAugmentation( y = status75,
+status.aug6 <- MakeAugmentation( y = status6,
                                   M = 4000,
                                   replace.value = NA)
 
@@ -674,11 +603,11 @@ modelCode <- nimbleCode({
 ## ------   2. BUNDLE DATA ------
 ##---- Set model constants, data & parameter simulated values (==inits)
 
-nimData25 <- list( y = yCombined.aug25,
-                   z = c(rep(1,n.detected25),
-                         rep(NA,dim(yCombined.aug25)[1]-n.detected25)),
-                   sex = sex.aug25,
-                   status = status.aug25,
+nimData3 <- list( y = yCombined.aug3,
+                   z = c(rep(1,n.detected3),
+                         rep(NA,dim(yCombined.aug3)[1]-n.detected3)),
+                   sex = sex.aug3,
+                   status = status.aug3,
                    alpha = matrix(1,3,2),
                    lowerHabCoords = habitat$loScaledCoords, 
                    upperHabCoords = habitat$upScaledCoords, 
@@ -689,8 +618,8 @@ nimData25 <- list( y = yCombined.aug25,
                      "pop" = habitat$grid$pop,
                      "IUCN" = habitat$grid$`IUCN`),
                    det.covs = cbind.data.frame(
-                     "transect_L" = detectors$grid$transect_L25,
-                     "transect_qi" = detectors$grid$transect_qi25,
+                     "transect_L" = detectors$grid$transect_L3,
+                     "transect_qi" = detectors$grid$transect_qi3,
                      "snow_fall" = detectors$grid$`snow_fall`,
                      "zone" = detectors$grid$`zone`,
                      "log_pop" = detectors$grid$`log_pop`),
@@ -702,12 +631,12 @@ nimData25 <- list( y = yCombined.aug25,
                    habitatGrid = localObjects$habitatGrid)
 
 
-nimConstants25 <- list( n.individuals = nrow(nimData25$y),
-                        n.maxDets = ncol(nimData25$y),
+nimConstants3 <- list( n.individuals = nrow(nimData3$y),
+                        n.maxDets = ncol(nimData3$y),
                         n.habWindows = habitat$n.HabWindows,
                         n.detectors = detectors$n.detectors, 
-                        n.habCovs = ncol(nimData25$hab.covs),
-                        n.detCovs = ncol(nimData25$det.covs),
+                        n.habCovs = ncol(nimData3$hab.covs),
+                        n.detCovs = ncol(nimData3$det.covs),
                         n.states = 3,
                         n.localIndicesMax = localObjects$numLocalIndicesMax,
                         y.max = dim(habitat$matrix)[1],
@@ -715,11 +644,11 @@ nimConstants25 <- list( n.individuals = nrow(nimData25$y),
 
 
 
-nimData50 <- list( y = yCombined.aug50,
-                   z = c(rep(1,n.detected50),
-                         rep(NA,dim(yCombined.aug50)[1]-n.detected50)),
-                   sex = sex.aug50,
-                   status = status.aug50,
+nimData6 <- list( y = yCombined.aug6,
+                   z = c(rep(1,n.detected6),
+                         rep(NA,dim(yCombined.aug6)[1]-n.detected6)),
+                   sex = sex.aug6,
+                   status = status.aug6,
                    alpha = matrix(1,3,2),
                    lowerHabCoords = habitat$loScaledCoords, 
                    upperHabCoords = habitat$upScaledCoords, 
@@ -730,8 +659,8 @@ nimData50 <- list( y = yCombined.aug50,
                      "pop" = habitat$grid$pop,
                      "IUCN" = habitat$grid$`IUCN`),
                    det.covs = cbind.data.frame(
-                     "transect_L" = detectors$grid$`transect_L50`,
-                     "transect_qi" = detectors$grid$`transect_qi50`,
+                     "transect_L" = detectors$grid$`transect_L6`,
+                     "transect_qi" = detectors$grid$`transect_qi6`,
                      "snow_fall" = detectors$grid$`snow_fall`,
                      "zone" = detectors$grid$`zone`,
                      "log_pop" = detectors$grid$`log_pop`),
@@ -743,12 +672,12 @@ nimData50 <- list( y = yCombined.aug50,
                    habitatGrid = localObjects$habitatGrid)
 
 
-nimConstants50 <- list( n.individuals = nrow(nimData50$y),
-                        n.maxDets = ncol(nimData50$y),
+nimConstants6 <- list( n.individuals = nrow(nimData6$y),
+                        n.maxDets = ncol(nimData6$y),
                         n.habWindows = habitat$n.HabWindows,
                         n.detectors = detectors$n.detectors, 
-                        n.habCovs = ncol(nimData50$hab.covs),
-                        n.detCovs = ncol(nimData50$det.covs),
+                        n.habCovs = ncol(nimData6$hab.covs),
+                        n.detCovs = ncol(nimData6$det.covs),
                         n.states = 3,
                         n.localIndicesMax = localObjects$numLocalIndicesMax,
                         y.max = dim(habitat$matrix)[1],
@@ -758,44 +687,6 @@ nimConstants50 <- list( n.individuals = nrow(nimData50$y),
 
 
 
-nimData75 <- list( y = yCombined.aug75,
-                   z = c(rep(1,n.detected75),
-                         rep(NA,dim(yCombined.aug75)[1]-n.detected75)),
-                   sex = sex.aug75,
-                   status = status.aug75,
-                   alpha = matrix(1,3,2),
-                   lowerHabCoords = habitat$loScaledCoords, 
-                   upperHabCoords = habitat$upScaledCoords, 
-                   hab.covs = cbind.data.frame(
-                     "bare rock" = habitat$grid$`bare rock`,
-                     "herbaceous" = habitat$grid$`herbaceous`,
-                     "forest" = habitat$grid$`forest`,
-                     "pop" = habitat$grid$pop,
-                     "IUCN" = habitat$grid$`IUCN`),
-                   det.covs = cbind.data.frame(
-                     "transect_L" = detectors$grid$`transect_L75`,
-                     "transect_qi" = detectors$grid$`transect_qi75`,
-                     "snow_fall" = detectors$grid$`snow_fall`,
-                     "zone" = detectors$grid$`zone`,
-                     "log_pop" = detectors$grid$`log_pop`),
-                   size = detectors$size,
-                   detCoords = detectors$scaledCoords,
-                   localTrapsIndices = localObjects$localIndices,
-                   localTrapsNum = localObjects$numLocalIndices,
-                   habitatGrid2 = habitat$matrix,
-                   habitatGrid = localObjects$habitatGrid)
-
-
-nimConstants75 <- list( n.individuals = nrow(nimData75$y),
-                        n.maxDets = ncol(nimData75$y),
-                        n.habWindows = habitat$n.HabWindows,
-                        n.detectors = detectors$n.detectors, 
-                        n.habCovs = ncol(nimData75$hab.covs),
-                        n.detCovs = ncol(nimData75$det.covs),
-                        n.states = 3,
-                        n.localIndicesMax = localObjects$numLocalIndicesMax,
-                        y.max = dim(habitat$matrix)[1],
-                        x.max = dim(habitat$matrix)[2])
 
 nimParams <- c("N", "p0", "sigma", "psi",
                "betaDet", "betaHab", "theta", "rho",
@@ -805,195 +696,129 @@ nimParams <- c("N", "p0", "sigma", "psi",
 
 ## ------   3. SAVE THE INPUT ------
 for(c in 1:4){
-  s.init25 <- matrix(NA, nimConstants25$n.individuals, 2)
-  for(i in 1:n.detected25){
-    if(detNums25[i] > 1){
-      s.init25[i, ] <- colMeans(detectors$scaledCoords[detIndices25[i,1:detNums25[i]], ])
+  s.init3 <- matrix(NA, nimConstants3$n.individuals, 2)
+  for(i in 1:n.detected3){
+    if(detNums3[i] > 1){
+      s.init3[i, ] <- colMeans(detectors$scaledCoords[detIndices3[i,1:detNums3[i]], ])
     } else {
-      s.init25[i, ] <- detectors$scaledCoords[detIndices25[i,1:detNums25[i]], ] + rnorm(2,0,0.1)
+      s.init3[i, ] <- detectors$scaledCoords[detIndices3[i,1:detNums3[i]], ] + rnorm(2,0,0.1)
     }
   }#i
-  for(i in (n.detected25 + 1):nimConstants25$n.individuals){
-    s.init25[i, ] <- rbernppAC( n = 1,
-                                lowerCoords = nimData25$lowerHabCoords,
-                                upperCoords = nimData25$upperHabCoords,
+  for(i in (n.detected3 + 1):nimConstants3$n.individuals){
+    s.init3[i, ] <- rbernppAC( n = 1,
+                                lowerCoords = nimData3$lowerHabCoords,
+                                upperCoords = nimData3$upperHabCoords,
                                 logIntensities = log(rep(1,habitat$n.HabWindows)),
                                 logSumIntensity = log(sum(rep(1,habitat$n.HabWindows))),
-                                habitatGrid = nimData25$habitatGrid,
-                                numGridRows = nrow(nimData25$habitatGrid),
-                                numGridCols = ncol(nimData25$habitatGrid))
+                                habitatGrid = nimData3$habitatGrid,
+                                numGridRows = nrow(nimData3$habitatGrid),
+                                numGridCols = ncol(nimData3$habitatGrid))
   }#i
   
-  sex.init25 <- rbinom(n = nimConstants25$n.individuals, 1, prob = 0.5)
-  sex.init25[!is.na(nimData25$sex)] <- NA
-  sex1.init25 <- sex.init25 + 1
+  sex.init3 <- rbinom(n = nimConstants3$n.individuals, 1, prob = 0.5)
+  sex.init3[!is.na(nimData3$sex)] <- NA
+  sex1.init3 <- sex.init3 + 1
   
-  status.init25 <- rcat(n = nimConstants25$n.individuals, prob = c(0.5,0.45,0.05))
-  status.init25[!is.na(nimData25$status)] <- NA
+  status.init3 <- rcat(n = nimConstants3$n.individuals, prob = c(0.5,0.45,0.05))
+  status.init3[!is.na(nimData3$status)] <- NA
   
-  z.init25 <- rbinom(n = nimConstants25$n.individuals, 1, prob = 0.1)
-  z.init25[!is.na(nimData25$z)] <- NA
+  z.init3 <- rbinom(n = nimConstants3$n.individuals, 1, prob = 0.1)
+  z.init3[!is.na(nimData3$z)] <- NA
   
-  nimInits25 <- list( "s" = s.init25,
-                      "z" = z.init25,
-                      "sex" = sex.init25,
-                      "status" = status.init25,
+  nimInits3 <- list( "s" = s.init3,
+                      "z" = z.init3,
+                      "sex" = sex.init3,
+                      "status" = status.init3,
                       "psi" = 0.5,
                       "rho" = 0.5,
                       "theta" = cbind(c(0.5,0.45,0.05),
                                       c(0.5,0.3,0.2)),
-                      "betaDet" = rep(0,nimConstants25$n.detCovs),
-                      "betaHab" = rep(0,nimConstants25$n.habCovs),
+                      "betaDet" = rep(0,nimConstants3$n.detCovs),
+                      "betaHab" = rep(0,nimConstants3$n.habCovs),
                       "p0" = cbind(c(0.1,0.1,0.05),
                                    c(0.1,0.1,0.05)),
                       "sigma" = cbind(c(1,1,2),
                                       c(1,1,2)))
   
-  nimData <- nimData25
-  nimConstants<- nimConstants25
-  nimInits <- nimInits25
+  nimData <- nimData3
+  nimConstants<- nimConstants3
+  nimInits <- nimInits3
   
   save( modelCode,
         nimData,
         nimConstants,
         nimInits,
         nimParams,
-        file = file.path(thisDir, "input25",
-                         paste0(modelName, "_25_", "_", c,  "rep.RData")))
+        file = file.path(thisDir, "input3",
+                         paste0(modelName, "_3_",rep, "_", c, "rep.RData")))
   
 }
 
 for(c in 1:4){
-  s.init50 <- matrix(NA, nimConstants50$n.individuals, 2)
-  for(i in 1:n.detected50){
-    if(detNums50[i] > 1){
-      s.init50[i, ] <- colMeans(detectors$scaledCoords[detIndices50[i,1:detNums50[i]], ])
+  s.init6 <- matrix(NA, nimConstants6$n.individuals, 2)
+  for(i in 1:n.detected6){
+    if(detNums6[i] > 1){
+      s.init6[i, ] <- colMeans(detectors$scaledCoords[detIndices6[i,1:detNums6[i]], ])
     } else {
-      s.init50[i, ] <- detectors$scaledCoords[detIndices50[i,1:detNums50[i]], ] + rnorm(2,0,0.1)
+      s.init6[i, ] <- detectors$scaledCoords[detIndices6[i,1:detNums6[i]], ] + rnorm(2,0,0.1)
     }
   }#i
-  for(i in (n.detected50 + 1):nimConstants50$n.individuals){
-    s.init50[i, ] <- rbernppAC( n = 1,
-                                lowerCoords = nimData50$lowerHabCoords,
-                                upperCoords = nimData50$upperHabCoords,
+  for(i in (n.detected6 + 1):nimConstants6$n.individuals){
+    s.init6[i, ] <- rbernppAC( n = 1,
+                                lowerCoords = nimData6$lowerHabCoords,
+                                upperCoords = nimData6$upperHabCoords,
                                 logIntensities = log(rep(1,habitat$n.HabWindows)),
                                 logSumIntensity = log(sum(rep(1,habitat$n.HabWindows))),
-                                habitatGrid = nimData50$habitatGrid,
-                                numGridRows = nrow(nimData50$habitatGrid),
-                                numGridCols = ncol(nimData50$habitatGrid))
+                                habitatGrid = nimData6$habitatGrid,
+                                numGridRows = nrow(nimData6$habitatGrid),
+                                numGridCols = ncol(nimData6$habitatGrid))
   }#i
   
   
-  sex.init50 <- rbinom(n = nimConstants50$n.individuals, 1, prob = 0.5)
-  sex.init50[!is.na(nimData50$sex)] <- NA
-  sex1.init50 <- sex.init50 + 1
+  sex.init6 <- rbinom(n = nimConstants6$n.individuals, 1, prob = 0.5)
+  sex.init6[!is.na(nimData6$sex)] <- NA
+  sex1.init6 <- sex.init6 + 1
   
-  status.init50 <- rcat(n = nimConstants50$n.individuals, prob = c(0.5,0.45,0.05))
-  status.init50[!is.na(nimData50$status)] <- NA
+  status.init6 <- rcat(n = nimConstants6$n.individuals, prob = c(0.5,0.45,0.05))
+  status.init6[!is.na(nimData6$status)] <- NA
   
-  z.init50 <- rbinom(n = nimConstants50$n.individuals, 1, prob = 0.1)
-  z.init50[!is.na(nimData50$z)] <- NA
+  z.init6 <- rbinom(n = nimConstants6$n.individuals, 1, prob = 0.1)
+  z.init6[!is.na(nimData6$z)] <- NA
   
-  nimInits50 <- list( "s" = s.init50,
-                      "z" = z.init50,
-                      "sex" = sex.init50,
-                      "status" = status.init50,
+  nimInits6 <- list( "s" = s.init6,
+                      "z" = z.init6,
+                      "sex" = sex.init6,
+                      "status" = status.init6,
                       "psi" = 0.5,
                       "rho" = 0.5,
                       "theta" = cbind(c(0.5,0.45,0.05),
                                       c(0.5,0.3,0.2)),
-                      "betaDet" = rep(0,nimConstants50$n.detCovs),
-                      "betaHab" = rep(0,nimConstants50$n.habCovs),
+                      "betaDet" = rep(0,nimConstants6$n.detCovs),
+                      "betaHab" = rep(0,nimConstants6$n.habCovs),
                       "p0" = cbind(c(0.1,0.1,0.05),
                                    c(0.1,0.1,0.05)),
                       "sigma" = cbind(c(1,1,2),
                                       c(1,1,2)))
   
   
-  nimData <- nimData50
-  nimConstants<- nimConstants50
-  nimInits <- nimInits50
+  nimData <- nimData6
+  nimConstants<- nimConstants6
+  nimInits <- nimInits6
   
   save(  modelCode,
          nimData,
          nimConstants,
          nimInits,
          nimParams,
-         file = file.path(thisDir, "input50",
-                          paste0(modelName, "_50_", "_", c,  "rep.RData")))
+         file = file.path(thisDir, "input6",
+                          paste0(modelName, "_6_",rep, "_", c,"rep.RData")))
   
   
 }  
 
-for(c in 1:4){
-  s.init75 <- matrix(NA, nimConstants75$n.individuals, 2)
-  for(i in 1:n.detected75){
-    if(detNums75[i] > 1){
-      s.init75[i, ] <- colMeans(detectors$scaledCoords[detIndices75[i,1:detNums75[i]], ])
-    } else {
-      s.init75[i, ] <- detectors$scaledCoords[detIndices75[i,1:detNums75[i]], ] + rnorm(2,0,0.1)
-    }
-  }#i
-  for(i in (n.detected75 + 1):nimConstants75$n.individuals){
-    s.init75[i, ] <- rbernppAC( n = 1,
-                                lowerCoords = nimData75$lowerHabCoords,
-                                upperCoords = nimData75$upperHabCoords,
-                                logIntensities = log(rep(1,habitat$n.HabWindows)),
-                                logSumIntensity = log(sum(rep(1,habitat$n.HabWindows))),
-                                habitatGrid = nimData75$habitatGrid,
-                                numGridRows = nrow(nimData75$habitatGrid),
-                                numGridCols = ncol(nimData75$habitatGrid))
-  }#i
-  
-  
-  
-  
-  
-  sex.init75 <- rbinom(n = nimConstants75$n.individuals, 1, prob = 0.5)
-  sex.init75[!is.na(nimData75$sex)] <- NA
-  sex.init75 <- sex.init75 + 1
-  
-  status.init75 <- rcat(n = nimConstants75$n.individuals, prob = c(0.5,0.45,0.05))
-  status.init75[!is.na(nimData75$status)] <- NA
-  
-  z.init75 <- rbinom(n = nimConstants75$n.individuals, 1, prob = 0.1)
-  z.init75[!is.na(nimData75$z)] <- NA
-  
-  nimInits75 <- list( "s" = s.init75,
-                      "z" = z.init75,
-                      "sex" = sex.init75,
-                      "status" = status.init75,
-                      "psi" = 0.5,
-                      "rho" = 0.5,
-                      "theta" = cbind(c(0.5,0.45,0.05),
-                                      c(0.5,0.3,0.2)),
-                      "betaDet" = rep(0,nimConstants75$n.detCovs),
-                      "betaHab" = rep(0,nimConstants75$n.habCovs),
-                      "p0" = cbind(c(0.1,0.1,0.05),
-                                   c(0.1,0.1,0.05)),
-                      "sigma" = cbind(c(1,1,2),
-                                      c(1,1,2)))
-  
-  nimData <- nimData75
-  nimConstants<- nimConstants75
-  nimInits <- nimInits75
-  
-  save( modelCode,
-        nimData,
-        nimConstants,
-        nimInits,
-        nimParams,
-        file = file.path(thisDir, "input75", 
-                         paste0(modelName, "_75_", "_", c,  "rep.RData")))
-  
-  
-}
-
 print(rep)
+
 }
-
-
-
 
 
 
