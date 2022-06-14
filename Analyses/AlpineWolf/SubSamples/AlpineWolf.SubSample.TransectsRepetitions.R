@@ -252,7 +252,7 @@ trans6 <- transects %>%
   group_by(transect_i) %>%
   slice(sample(1:n(), pmin(6, n()))) 
 
-trans6_b <-trans6 %>% 
+trans6_b <- trans6 %>% 
   st_buffer(., dist = 500)
 
 
@@ -261,33 +261,33 @@ trans6_b <-trans6 %>%
 
 ngs3 <- st_filter(ngs, trans3_b) 
 ngs3 <-  st_intersection(ngs3, trans3_b)
-ngs3rep <- ngs3 %>% 
+ngs3 <- ngs3 %>% 
   filter(Date == Date.1)
 
-ngs3_count <- count(as_tibble(ngs3rep), transect_i) %>%
-  print()
+# ngs3_count <- count(as_tibble(ngs3rep), transect_i) %>%
+#   print()
 
-ngs3rep<-ngs3rep[,(1:19)]
+ngs3 <- ngs3[,(1:19)]
 
 
 ngs6 <- st_filter(ngs, trans6_b) 
 ngs6 <-  st_intersection(ngs6, trans6_b)
-ngs6rep <- ngs6 %>% 
+ngs6 <- ngs6 %>% 
   filter(Date == Date.1)
-ngs6_count <- count(as_tibble(ngs6rep), transect_i) %>%
-  print()
+# ngs6_count <- count(as_tibble(ngs6rep), transect_i) %>%
+#   print()
 
-ngs6rep<-ngs6rep[,(1:19)]
+ngs6 <- ngs6[,(1:19)]
 
 
-ngs3 <-rbind(ngs3rep,ngs_opp)
-ngs6 <-rbind(ngs6rep,ngs_opp)
+ngs3 <- rbind(ngs3,ngs_opp)
+ngs6 <- rbind(ngs6,ngs_opp)
 
 
 ##---- Extract length and number of transects in each grid cell
+detectors3 <- detectors
 
-
-intersection3 <- st_intersection(detectors$grid, trans3) %>%
+intersection3 <- st_intersection(detectors3$grid, trans3) %>%
   mutate(LEN = st_length(.),
          QI = .$Q.index) %>%
   st_drop_geometry() %>%
@@ -297,20 +297,21 @@ intersection3 <- st_intersection(detectors$grid, trans3) %>%
             transect_qi3 = mean(QI))              ## Get mean transects quality index for each detector grid cell
 
 ##---- Store in detector grid
-detectors$grid <- detectors$grid %>%
+detectors3$grid <- detectors3$grid %>%
   left_join(intersection3, by = "id")
-detectors$grid$transect_L3[is.na(detectors$grid$transect_L3)] <- 0
-detectors$grid$transect_N3[is.na(detectors$grid$transect_N3)] <- 1
-detectors$grid$transect_qi3[is.na(detectors$grid$transect_qi3)] <- 0
-detectors$grid$transect_L3 <- scale(detectors$grid$transect_L3)
-detectors$grid$mean_transect_L3 <- scale(detectors$grid$transect_L3/detectors$grid$transect_N3)
+detectors3$grid$transect_L3[is.na(detectors3$grid$transect_L3)] <- 0
+detectors3$grid$transect_N3[is.na(detectors3$grid$transect_N3)] <- 1
+detectors3$grid$transect_qi3[is.na(detectors3$grid$transect_qi3)] <- 0
+detectors3$grid$transect_L3 <- scale(detectors3$grid$transect_L3)
+detectors3$grid$mean_transect_L3 <- scale(detectors3$grid$transect_L3/detectors3$grid$transect_N3)
 
 
 
 ##----
+detectors6 <- detectors
 
 
-intersection6 <- st_intersection(detectors$grid, trans6) %>%
+intersection6 <- st_intersection(detectors6$grid, trans6) %>%
   mutate(LEN = st_length(.),
          QI = .$Q.index) %>%
   st_drop_geometry() %>%
@@ -320,13 +321,13 @@ intersection6 <- st_intersection(detectors$grid, trans6) %>%
             transect_qi6 = mean(QI))              ## Get mean transects quality index for each detector grid cell
 
 ##---- Store in detector grid
-detectors$grid <- detectors$grid %>%
+detectors6$grid <- detectors6$grid %>%
   left_join(intersection6, by = "id")
-detectors$grid$transect_L6[is.na(detectors$grid$transect_L6)] <- 0
-detectors$grid$transect_N6[is.na(detectors$grid$transect_N6)] <- 1
-detectors$grid$transect_qi6[is.na(detectors$grid$transect_qi6)] <- 0
-detectors$grid$transect_L6 <- scale(detectors$grid$transect_L6)
-detectors$grid$mean_transect_L6 <- scale(detectors$grid$transect_L6/detectors$grid$transect_N6)
+detectors6$grid$transect_L6[is.na(detectors6$grid$transect_L6)] <- 0
+detectors6$grid$transect_N6[is.na(detectors6$grid$transect_N6)] <- 1
+detectors6$grid$transect_qi6[is.na(detectors6$grid$transect_qi6)] <- 0
+detectors6$grid$transect_L6 <- scale(detectors6$grid$transect_L6)
+detectors6$grid$mean_transect_L6 <- scale(detectors6$grid$transect_L6/detectors6$grid$transect_N6)
 
 
 
@@ -618,13 +619,13 @@ nimData3 <- list( y = yCombined.aug3,
                      "pop" = habitat$grid$pop,
                      "IUCN" = habitat$grid$`IUCN`),
                    det.covs = cbind.data.frame(
-                     "transect_L" = detectors$grid$transect_L3,
-                     "transect_qi" = detectors$grid$transect_qi3,
-                     "snow_fall" = detectors$grid$`snow_fall`,
-                     "zone" = detectors$grid$`zone`,
-                     "log_pop" = detectors$grid$`log_pop`),
-                   size = detectors$size,
-                   detCoords = detectors$scaledCoords,
+                     "transect_L" = detectors3$grid$transect_L3,
+                     "transect_qi" = detectors3$grid$transect_qi3,
+                     "snow_fall" = detectors3$grid$`snow_fall`,
+                     "zone" = detectors3$grid$`zone`,
+                     "log_pop" = detectors3$grid$`log_pop`),
+                   size = detectors3$size,
+                   detCoords = detectors3$scaledCoords,
                    localTrapsIndices = localObjects$localIndices,
                    localTrapsNum = localObjects$numLocalIndices,
                    habitatGrid2 = habitat$matrix,
@@ -634,7 +635,7 @@ nimData3 <- list( y = yCombined.aug3,
 nimConstants3 <- list( n.individuals = nrow(nimData3$y),
                         n.maxDets = ncol(nimData3$y),
                         n.habWindows = habitat$n.HabWindows,
-                        n.detectors = detectors$n.detectors, 
+                        n.detectors = detectors3$n.detectors, 
                         n.habCovs = ncol(nimData3$hab.covs),
                         n.detCovs = ncol(nimData3$det.covs),
                         n.states = 3,
@@ -659,13 +660,13 @@ nimData6 <- list( y = yCombined.aug6,
                      "pop" = habitat$grid$pop,
                      "IUCN" = habitat$grid$`IUCN`),
                    det.covs = cbind.data.frame(
-                     "transect_L" = detectors$grid$`transect_L6`,
-                     "transect_qi" = detectors$grid$`transect_qi6`,
-                     "snow_fall" = detectors$grid$`snow_fall`,
-                     "zone" = detectors$grid$`zone`,
-                     "log_pop" = detectors$grid$`log_pop`),
-                   size = detectors$size,
-                   detCoords = detectors$scaledCoords,
+                     "transect_L" = detectors6$grid$`transect_L6`,
+                     "transect_qi" = detectors6$grid$`transect_qi6`,
+                     "snow_fall" = detectors6$grid$`snow_fall`,
+                     "zone" = detectors6$grid$`zone`,
+                     "log_pop" = detectors6$grid$`log_pop`),
+                   size = detectors6$size,
+                   detCoords = detectors6$scaledCoords,
                    localTrapsIndices = localObjects$localIndices,
                    localTrapsNum = localObjects$numLocalIndices,
                    habitatGrid2 = habitat$matrix,
@@ -675,7 +676,7 @@ nimData6 <- list( y = yCombined.aug6,
 nimConstants6 <- list( n.individuals = nrow(nimData6$y),
                         n.maxDets = ncol(nimData6$y),
                         n.habWindows = habitat$n.HabWindows,
-                        n.detectors = detectors$n.detectors, 
+                        n.detectors = detectors6$n.detectors, 
                         n.habCovs = ncol(nimData6$hab.covs),
                         n.detCovs = ncol(nimData6$det.covs),
                         n.states = 3,
