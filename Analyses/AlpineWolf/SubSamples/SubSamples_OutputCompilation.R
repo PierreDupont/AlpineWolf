@@ -88,6 +88,53 @@ for(sc in 1:length(scenarios)){
 }#sc
 
 
+  pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
+        width = 10, height = 3.5)
+  
+  
+  par(mfrow=c(1,2))
+  ## MEAN
+  ylim <- 5000
+
+  plot(1,1, xlim = c(0,5), ylim = c(0,ylim),
+       type = "n", xaxt = "n", main = "Mean estimate",
+       ylab = "Population size (N)", xlab = "", axes = F)
+  axis(1, at = c(1,2,3,4), labels = c(0.25,0.50,0.75,1))
+  axis(2, at = seq(0,ylim,length.out = 5),
+       labels = seq(0,ylim,length.out = 5))
+  
+  for(sc in 1:length(scenarios)){
+    load(file.path(thisDir, paste0("AlpineWolf.SubSample.",scenarios[sc],"_mcmc.RData")))
+    
+    plot.violins2( dat.list = list(res$sims.list$N),
+                   x = sc,
+                   at = sc,
+                   add = T,
+                   col = "dodgerblue4",
+                   violin.width = 0.05,
+                   alpha = 0.9,
+                   border.col = "dodgerblue4",
+                   scale.width = F)
+  }#sc
+  
+  plot(1,1, xlim = c(0,5), ylim = c(0,0.5),
+       type = "n", xaxt = "n", main = "Coefficient of variation",
+       ylab = "CV(N)", xlab = "", axes = F)
+  axis(1, at = c(1,2,3,4), labels = c(0.25,0.50,0.75,1))
+  axis(2, at = seq(0,0.5,length.out = 6),
+       labels = seq(0,0.5,length.out = 6))
+  
+  for(sc in 1:length(scenarios)){
+    load(file.path(thisDir, paste0("AlpineWolf.SubSample.",scenarios[sc],"_mcmc.RData")))
+    
+    points( y = res$sd$N/res$mean$N,
+            x = sc,
+            pch = 21, cex = 2,
+            bg = "dodgerblue4",
+            col = "dodgerblue4")
+  }#sc
+
+
 ## CV
 ylim <- 0.3
 plot(1,1, xlim = c(0,5), ylim = c(0,ylim),
@@ -104,7 +151,6 @@ for(sc in 1:length(scenarios)){
           bg = "dodgerblue4",
           col = "dodgerblue4")
 }#sc
-
 
   
 
@@ -237,8 +283,6 @@ for(sc in 1:length(scenarios)){
 
 
 
-
-
 ##----- PLOTS p0 -----
 par(mfrow=c(1,2))
 
@@ -347,7 +391,6 @@ for(sc in 1:length(scenarios)){
           bg = "dodgerblue4",
           col = "dodgerblue4")
 }#sc
-
 
 
 
@@ -498,7 +541,67 @@ for(b in 1:length(HabCov)){
 }#b
 
 
-graphics.off()
+  
+  plot(1,1, xlim = c(0,5), ylim = c(-3,ylim),
+       type = "n", xaxt = "n", main = "Mean estimate",
+       ylab = "BetaHab", xlab = "", axes = F)
+  axis(1, at = c(1,2,3,4), labels = c(0.25,0.50,0.75,1))
+  axis(2, at = seq(-3,ylim,length.out = 5),
+       labels = seq(-3,ylim,length.out = 5))
+  
+  for(sc in 1:length(scenarios)){
+    load(file.path(thisDir, paste0("AlpineWolf.SubSample.",scenarios[sc],"_mcmc.RData")))
+    
+    for(dc in 1:length(HabCov)){
+      temp <- res$sims.list$betaHab[,dc]
+    
+    plot.violins2( dat.list = list(temp),
+                   x = sc + valNoise[dc],
+                   at = sc + valNoise[dc],
+                   add = T,
+                   col = myCols2[dc],
+                   violin.width = 0.05,
+                   alpha = 0.9,
+                   border.col = myCols2[dc],
+                   scale.width = F)
+    }
+  }#sc
+  
+  
+  legend(title = "Habitat Covariates",
+         legend = c("Bare Rocks","Herbaceous", "Forest","Human Pop","Wolf presence"),
+         x=4, y=5, fill = myCols2[1:5], cex = 0.5)
+  
+#CV  
+  
+  plot(1,1, xlim = c(0,5), ylim = c(0,2.5),
+       type = "n", xaxt = "n", main = "Coefficient of variation",
+       ylab = "CV(BetaHab)", xlab = "", axes = F)
+  axis(1, at = c(1,2,3,4), labels = c(0.25,0.50,0.75,1))
+  axis(2, at = seq(0,2.5,length.out = 6),
+       labels = seq(0,2.5,length.out = 6))
+  
+  for(sc in 1:length(scenarios)) {
+    load(file.path(thisDir, paste0("AlpineWolf.SubSample.",scenarios[sc],"_mcmc.RData")))
+    
+    for(dc1 in 1:length(DetCov)) {
+      temp1 <- res$mean$betaHab[dc1]
+      
+      for(dc2 in 1:length(DetCov)) {
+        temp2 <- res$sd$betaHab[dc2]
+    points( y = temp2/temp1,
+            x = sc,
+            pch = 21, cex = 2,
+            bg  = c(myCols2[dc1]),
+            col = c(myCols2[dc1]))
+  
+      }
+    }
+  }#sc
+  
+  
+   graphics.off()
+
 
 
 

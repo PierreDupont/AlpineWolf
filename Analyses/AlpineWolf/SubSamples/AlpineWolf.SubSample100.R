@@ -628,15 +628,15 @@ nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
                                    param.omit = c("s","z","sex","status"))
 
 ##---- Traceplots
-pdf(file = file.path(thisDir, paste0(modelName, "_traceplots_chain-1_bi2.pdf")))
+pdf(file = file.path(thisDir, paste0(modelName, "_traceplots_bi2.pdf")))
 plot(nimOutput_noZ)
 graphics.off()
 
 
 ##---- Process and save MCMC samples
-nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
-res <- ProcessCodaOutput(nimOutput)
+# nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               # burnin = 0)
+res <- ProcessCodaOutput(nimOutput_noZ)
 
 ##---- Save processed MCMC samples
 save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))

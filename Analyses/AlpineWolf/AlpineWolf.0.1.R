@@ -202,14 +202,21 @@ plot(grid)
 # transect.grid <- st_as_sf(st_make_grid( transects_west,
 #                                detectors$detResolution))
 
-##---- Extract length and number of transects in each grid cell
+##---- Extract length, number and the quality index of transects in each grid cell
+#the index is obtained by the interaction of information given
+#by provinces and operators background expirience with wolves monitoring
+
 #transects_west <- st_intersection(transects, studyArea_west)
 intersection <- st_intersection(grid, transects) %>%
-  mutate(LEN = st_length(.))  %>%
+  mutate(LEN = st_length(.),
+         QI =  .$Q.index)  %>%
   st_drop_geometry() %>%
   group_by(id) %>%
   summarise(transect_L = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N = length(unique(Date)))   ## Get total number of visits in each detector grid cell
+            transect_N = length(unique(Date)),   ## Get total number of visits in each detector grid cell
+            transect_qi = mean(QI))              ## Get mean number of the quality index in each detector grid cell
+
+
 
 ##---- Store in detector grid
 grid <- grid %>% 
@@ -218,6 +225,7 @@ grid <- grid %>%
 # filter(!is.na(transect_L))
 grid$transect_L[is.na(grid$transect_L)] <- 0
 grid$transect_N[is.na(grid$transect_N)] <- 1
+grid$transect_qi[is.na(grid$transect_qi)] <- 0 
 detectors$grid <- grid
 
 detectors$grid$mean_transect_L <- scale(detectors$grid$transect_L/detectors$grid$transect_N)
@@ -958,8 +966,8 @@ nimConstants <- list( n.individuals = dim(yCombined.aug)[1],
                       n.habWindows = habitat$n.HabWindows,
                       #habIntensity = rep(1,habitat$n.HabWindows),
                       n.detectors = detectors$n.detectors, 
-                      n.habCovs = 5,
-                      #n.detCovs = 2,
+                      n.habCovs = 6,
+                      n.detCovs = 2,
                       n.states = 3,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
@@ -974,11 +982,12 @@ nimData <- list( y = yCombined.aug,
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords, 
                  hab.covs = cbind(habitat$grid$`log_pop`,
+                                  habitat$grid$mainRoads_L,
+                                  habitat$grid$agriculture,
                                   habitat$grid$`forest`,
-                                  habitat$grid$`herbaceous`,
                                   habitat$grid$`bare rock`,
                                   habitat$grid$`perpetual snow`),
-                 det.covs = c(scale(st_drop_geometry(detectors$grid[ ,c("transect_L")]))),
+                 det.covs = c(scale(st_drop_geometry(detectors$grid[ ,c("transect_L", "transect_qi")]))),
                  size = rep(1,detectors$n.detectors),# detectors$grid$transect_N,
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,

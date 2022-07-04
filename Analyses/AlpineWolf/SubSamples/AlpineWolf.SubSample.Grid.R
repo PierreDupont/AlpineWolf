@@ -76,88 +76,88 @@ countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCou
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
 studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
-studyArea <- studyAreaGrid %>%
-  st_snap(x = ., y = ., tolerance = 0.0001) %>%
-  st_union() 
-
-##--- SCR grid
-SCRGrid <- read_sf(file.path(dataDir,"GISData/SECR_presence_layer_2020_2021/SECR_presence_layer_2021.shp"))
-SCRGrid <- st_transform(x = SCRGrid, crs = st_crs(countries))
-SCRGrid <- SCRGrid[SCRGrid$Pres_20.21 == 1, ]
-
-##--- Regions 
-regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
-regions <- st_transform(x = regions, crs = st_crs(countries))
-regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
-plot(regions)
-
-##--- Alps
-alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
-alps <- st_transform(x = alps, crs = st_crs(countries))
-plot(alps)
-
-##---- Plot check
-pdf(file = file.path(thisDir, "figures", paste0(modelName, "_ngs_map.pdf" )),
-    width = 15, height = 12)
-cols <- met.brewer(name="Isfahan1",n=10,type="continuous")
-plot(st_geometry(st_intersection(studyArea,countries)),border = F)
-plot(st_geometry(countries), col = "gray80", add = T, border = F)
-plot(st_geometry(temp), col = "gray80",add=T,border = F)
-plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="gray60",border = F)
-plot(transects,add=T,col="red")
-plot(ngs[ngs$Sex == "M", ], add=T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
-plot(ngs[ngs$Sex == "F", ], add=T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
-legend( "bottomright", pch = 21, cex = 1.5, bty = "n", 
-        legend = c("female","male"),
-        col = cols[c(5,7)], 
-        pt.bg = c(adjustcolor(cols[5],0.3),
-                  adjustcolor(cols[7],0.3)))
-graphics.off()
-
-
-plot(st_geometry(countries), col = "gray80", border = F)
-plot(st_geometry(temp), col = "gray80",add=T,border = F)
-plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="red",border = F)
-
-# plot(studyAreaGrid["SCR"], add = T)
-
-count <- read_sf(file.path(dataDir,
-                           "GISData/Countries/Countries_WGS84.shp"))
-temp <- count[count$CNTRY_NAME %in% c("Albania",
-                                      "Austria",
-                                      "Bosnia and Herzegovina",
-                                      "Bulgaria",
-                                      #"Czech Republic",
-                                      "France",
-                                      "Germany",
-                                      "Greece",
-                                      "Croatia",
-                                      "Hungary",
-                                      "Macedonia",
-                                      "Malta",
-                                      "Montenegro",
-                                      "Serbia",
-                                      #"Romania",
-                                      "Slovenia",
-                                      "San Marino",
-                                      "Switzerland"), ]
-plot(st_geometry(temp),col="gray60")
-temp <- st_transform(temp, st_crs(studyArea))
-
-
-## ------   2. SEARCH EFFORT DATA ------
-##---- Load GPS search transects
-transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
-trans <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/wolfalps_transects_20202021.shp"))
-
-##---- Convert dates
-transects$Date <- parse_date_time(transects$date, orders = c('ymd'))
-transects$Year <- as.numeric(format(transects$Date,"%Y"))
-transects$Month <- as.numeric(format(transects$Date,"%m"))
-
-##---- Plot check
-plot(transects, col = "red", add = T)
-
+# # studyArea <- studyAreaGrid %>%
+# #   st_snap(x = ., y = ., tolerance = 0.0001) %>%
+# #   st_union() 
+# 
+# ##--- SCR grid
+# SCRGrid <- read_sf(file.path(dataDir,"GISData/SECR_presence_layer_2020_2021/SECR_presence_layer_2021.shp"))
+# SCRGrid <- st_transform(x = SCRGrid, crs = st_crs(countries))
+# SCRGrid <- SCRGrid[SCRGrid$Pres_20.21 == 1, ]
+# 
+# ##--- Regions 
+# regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
+# regions <- st_transform(x = regions, crs = st_crs(countries))
+# regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
+# plot(regions)
+# 
+# ##--- Alps
+# alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
+# alps <- st_transform(x = alps, crs = st_crs(countries))
+# plot(alps)
+# 
+# ##---- Plot check
+# pdf(file = file.path(thisDir, "figures", paste0(modelName, "_ngs_map.pdf" )),
+#     width = 15, height = 12)
+# cols <- met.brewer(name="Isfahan1",n=10,type="continuous")
+# plot(st_geometry(st_intersection(studyArea,countries)),border = F)
+# plot(st_geometry(countries), col = "gray80", add = T, border = F)
+# plot(st_geometry(temp), col = "gray80",add=T,border = F)
+# plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="gray60",border = F)
+# plot(transects,add=T,col="red")
+# plot(ngs[ngs$Sex == "M", ], add=T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
+# plot(ngs[ngs$Sex == "F", ], add=T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
+# legend( "bottomright", pch = 21, cex = 1.5, bty = "n", 
+#         legend = c("female","male"),
+#         col = cols[c(5,7)], 
+#         pt.bg = c(adjustcolor(cols[5],0.3),
+#                   adjustcolor(cols[7],0.3)))
+# graphics.off()
+# 
+# 
+# plot(st_geometry(countries), col = "gray80", border = F)
+# plot(st_geometry(temp), col = "gray80",add=T,border = F)
+# plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="red",border = F)
+# 
+# # plot(studyAreaGrid["SCR"], add = T)
+# 
+# count <- read_sf(file.path(dataDir,
+#                            "GISData/Countries/Countries_WGS84.shp"))
+# temp <- count[count$CNTRY_NAME %in% c("Albania",
+#                                       "Austria",
+#                                       "Bosnia and Herzegovina",
+#                                       "Bulgaria",
+#                                       #"Czech Republic",
+#                                       "France",
+#                                       "Germany",
+#                                       "Greece",
+#                                       "Croatia",
+#                                       "Hungary",
+#                                       "Macedonia",
+#                                       "Malta",
+#                                       "Montenegro",
+#                                       "Serbia",
+#                                       #"Romania",
+#                                       "Slovenia",
+#                                       "San Marino",
+#                                       "Switzerland"), ]
+# plot(st_geometry(temp),col="gray60")
+# temp <- st_transform(temp, st_crs(studyArea))
+# 
+# 
+# ## ------   2. SEARCH EFFORT DATA ------
+# ##---- Load GPS search transects
+# transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
+# trans <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/wolfalps_transects_20202021.shp"))
+# 
+# ##---- Convert dates
+# transects$Date <- parse_date_time(transects$date, orders = c('ymd'))
+# transects$Year <- as.numeric(format(transects$Date,"%Y"))
+# transects$Month <- as.numeric(format(transects$Date,"%m"))
+# 
+# ##---- Plot check
+# plot(transects, col = "red", add = T)
+# 
 
 
 ## ------   3. PRE-PROCESSED STUFF ------ 
@@ -283,7 +283,7 @@ ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]
 
 
 ngs <- as.data.frame(ngs)
-for (rep in 1:100) {
+# for (rep in 1:100) {
   
   grid25 <- studyAreaGrid %>% sample_frac(0.25)
   grid50 <- studyAreaGrid %>% sample_frac(0.50)
@@ -823,7 +823,7 @@ for (rep in 1:100) {
           nimInits,
           nimParams,
           file = file.path(thisDir, "input25",
-                           paste0(modelName, "_25_", rep, "_", c,  "rep.RData")))
+                           paste0(modelName, "_25_", "_", c,  "rep.RData")))
     
   }
   
@@ -884,7 +884,7 @@ for (rep in 1:100) {
            nimInits,
            nimParams,
            file = file.path(thisDir, "input50",
-                            paste0(modelName, "_50_", rep, "_", c,  "rep.RData")))
+                            paste0(modelName, "_50_", "_", c,  "rep.RData")))
     
     
   }  
@@ -948,7 +948,8 @@ for (rep in 1:100) {
           nimInits,
           nimParams,
           file = file.path(thisDir, "input75", 
-                           paste0(modelName, "_75_", rep, "_", c,  "rep.RData")))
+                           paste0(modelName, "_75_", "_", c,  "rep.RData")))
+    
     
     
   }
