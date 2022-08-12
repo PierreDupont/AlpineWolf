@@ -1524,7 +1524,6 @@ modelCode <- nimbleCode({
     theta[1:n.states,ss] ~ ddirch(alpha[1:n.states,ss])
   }#ss
   
-  
   for(i in 1:n.individuals){ 
     sex[i] ~ dbern(rho)
     z[i] ~ dbern(psi)
@@ -1538,12 +1537,21 @@ modelCode <- nimbleCode({
   ##---- DETECTION PROCESS 
   betaDens  ~ dnorm(0.0,0.01)
   
-  dens[1:n.habWindows] <- calculateDensity(
+  dens[1:n.habWindows.reduced] <- calculateDensity(
     s = s[1:n.individuals,1:2],
     habitatGrid = habitatGrid2[1:y.max,1:x.max], 
     indicator = z[1:n.individuals], 
-    numWindows = n.habWindows)
-
+    numWindows = n.habWindows.reduced)
+  
+  # ## CALCULATE DENSITY
+  # dens[1:n.cells1] <- calculateDensityAlive(
+  #   sxy = sxy[1:n.individuals,1:2],
+  #   habitatGrid = habitatGrid1[1:y.max,1:x.max], 
+  #   isAlive=isAlive[1:n.individuals,t], 
+  #   nCells = n.cells1, 
+  #   centeredValue = 0)
+  
+  
   for(c in 1:n.detCovs){
     betaDet[c] ~ dnorm(0.0,0.01)
   }
@@ -1620,9 +1628,32 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2])
 
-nimParams <- c("N", "p0", "sigma", "psi", "eta",
-               "betaDens","betaDet", "betaHab", "theta", "rho",
-               "z", "s", "status", "sex")
+nimParams <- c("N", "p0", "log.sigma0", "psi",
+               "betaDens","betaDet", "betaHab", "theta", "rho")
+
+nimParams2 <-  c("z", "s", "status", "sex", "dens")
+
+# for(c in 1:4){
+#   load(file.path(thisDir, "input",
+#                  paste0(modelName, "_", c, ".RData")))
+# 
+#   nimParams <- c("N", "p0", "log.sigma0", "psi",
+#                  "betaDens","betaDet", "betaHab",
+#                  "theta", "rho")
+# 
+#   nimParams2 <-  c("z", "s", "status", "sex", "dens")
+# 
+#   save( modelCode,
+#         nimData,
+#         nimConstants,
+#         nimInits,
+#         nimParams,
+#         nimParams2,
+#         file = file.path(thisDir, "input",
+#                          paste0(modelName, "_", c, ".RData")))
+# }
+
+
 
 
 ## ------   3. SAVE THE INPUT ------
@@ -1680,6 +1711,7 @@ for(c in 1:4){
         nimConstants,
         nimInits,
         nimParams,
+        nimParams2,
         file = file.path(thisDir, "input",
                          paste0(modelName, "_", c, ".RData")))
 }
