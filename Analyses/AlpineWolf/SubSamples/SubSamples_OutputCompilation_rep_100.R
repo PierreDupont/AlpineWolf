@@ -28,6 +28,7 @@ library(RcppArmadillo)
 library(RcppProgress)
 library(gridExtra)
 library(MetBrewer)
+library(fs)
 
 
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
@@ -46,44 +47,131 @@ sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
 modelName = "AlpineWolf.SubSample.rep_100"
 thisDir <- file.path(analysisDir, modelName)
 
+
 sex <- c("female","male")
 status <- c("alpha","pup","other")
 HabCov <- c("Bare Rocks","Herbaceous", "Forest","Pop","Wolf presence")
 DetCov <- c("Transects_L", "Transect_Exp", "Snow", "East/West", "Log Pop")
 
-myCols <- matrix(met.brewer(name = "Isfahan1", n = 8, type = "discrete")[c(2:4,7:5)],
-                 nrow = 3, ncol = 2, byrow = F)
-myCols2 <- matrix(met.brewer(name = "Pissaro", n = 7, type = "discrete")[c(1:2,4,5:6)],
-                  nrow = 5, ncol = 1, byrow = F)
+# myCols <- matrix(met.brewer(name = "Isfahan1", n = 8, type = "discrete")[c(2:4,7:5)],
+#                  nrow = 3, ncol = 2, byrow = F)
+# myCols2 <- matrix(met.brewer(name = "Pissaro", n = 7, type = "discrete")[c(1:2,4,5:6)],
+#                   nrow = 5, ncol = 1, byrow = F)
 
 
 ## -----------------------------------------------------------------------------
 ## ------   1. PROCESS OUTPUTS -----
-load(file.path(thisDir, "parm.df.RData"))
+ 
+# load(file.path(thisDir, "parm.df.RData"))
+# 
+# inFiles <- list.files(path.IN)
+# outFiles <- list.files(path.OUT)[grep("NimbleOutFOR", list.files(path.OUT))]
+# ref <- expand.grid(list(G = c(F,T), H = c(F,T), A = c(F,T)))
+# for(s in 1:nrow(parm.df)){
+#   parm.df$scenario[s] <- which(ref$G == parm.df$Grouping[s] &
+#                                  ref$H == parm.df$Heterogeneity[s] &
+#                                  ref$A == parm.df$Adaptive[s])
+# }#s
 
-inFiles <- list.files(path.IN)
-outFiles <- list.files(path.OUT)[grep("NimbleOutFOR", list.files(path.OUT))]
-ref <- expand.grid(list(G = c(F,T), H = c(F,T), A = c(F,T)))
-for(s in 1:nrow(parm.df)){
-  parm.df$scenario[s] <- which(ref$G == parm.df$Grouping[s] &
-                                 ref$H == parm.df$Heterogeneity[s] &
-                                 ref$A == parm.df$Adaptive[s])
-}#s
+OutDir <- file.path(thisDir, "output")
 
 
-## PROCESS OUTPUTS
-myParams <- c("N","psi","sexRatio")
 
-myResults <- list()
-for(p in 1:length(myParams)){
-  myResults[[p]] <- parm.df
-  myResults[[p]]$mean <- rep(NA, nrow(parm.df))
-  myResults[[p]]$lci <- rep(NA, nrow(parm.df))
-  myResults[[p]]$uci <- rep(NA, nrow(parm.df))
-  myResults[[p]]$sd <- rep(NA, nrow(parm.df))
-  myResults[[p]]$CV <- rep(NA, nrow(parm.df))
-  myResults[[p]]$Rhat <- rep(NA, nrow(parm.df))
-}#p
+sc <-25
+rp <- 2:3
+params.omit <- c("s","z","sex","status")
+for(sc in c(25,50,75)){
+  for(rp in 1:50){
+    # tryCatch({ 
+    ## List output files for scenario "sc" and repetition "rp" only
+    outputs <- list.files(OutDir, paste0("AlpineWolf.SubSample.rep_100_",sc,"_",rp,"_"))
+    print(outputs)
+    # if (file.size(outputs) < 0) stop("file is 0 KB!")
+    # }, error= function(e){cat("ERROR:", conditionMessage(e), "\n")})
+     # I dont know how to it either - V
+    ## Maybe add a check to make sure all files listed in "outputs" are bigger than 0 KB (but I don't know how to do this?)
+
+    ## Collect bites from the different chains for this percentage and this repetition only
+    nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
+                                   burnin = 0,
+                                   param.omit = c("s","z","sex","status"))
+
+    ## Continue processing for this output inside the loop 
+    # (e.g. extract mean values and CI for N, sigma etc...)
+    params <- colnames(nimOutput[[1]])
+    m <- length(nimOutput)
+    expand <- sapply(strsplit(params, "\\["), "[", 1)
+    params.simple <- unique(sapply(strsplit(params, "\\["), "[", 1))
+    sims.list <- means <- rhat <- sd <- as.list(rep(NA,length(params.simple)))
+    q25 <- q75 <- as.list(rep(NA,length(params.simple)))
+    names(sims.list) <- names(means) <- names(rhat) <- params.simple
+    names(sd) <- names(q25)<- names(q75) <- params.simple
+
+    for(p in 1:length(params)){
+      if(!is.na(dim[params][1])){
+      mat = do.call(rbind,nimOutput)
+      sims.list[[p]] <<- mat[,expand==p]
+      sd[[p]] <<- populate(apply(sims.list[[p]],c(2:ld),sd),dim=dim[[p]])
+      q25[[p]] <<- populate(apply(sims.list[[p]],c(2:ld),qs,0.25),dim=dim[[p]])
+      q75[[p]] <<- populate(apply(sims.list[[p]],c(2:ld),qs,0.75),dim=dim[[p]])
+    }#p
+     else {
+      
+      if(m > 1 && (!params%in%params.omit))
+      
+      sims.list[[p]] <<- mat[,p]
+      
+      means[[i]] <<- mean(sims.list[[p]])
+      if(!i%in%params.omit){
+        sd[[p]] <<- sd(sims.list[[p]])
+        q25[[i]] <<- qs(sims.list[[p]],0.25)
+        q75[[i]] <<- qs(sims.list[[p]],0.75)}
+    }
+    
+    # n <- as.data.frame(nimOutput[[1]])
+    # 
+    # output_Nmean <-mean(n$N)
+    # output_Nmean <-mean(n$N)
+    # output_Nmean <-mean(n$N)
+    # output_Nmean <-mean(n$N)
+    # 
+    
+    N <- list()
+    # for(p in 1:length(myParams)){
+    res[] <- mean(nimOutput[ ,"N"])
+    BetaDet[sc,rp] <- nimOutput$mean[[myParams[p]]]
+    BetaDet[sc,rp] <- mean(nimOutput[ ,"BetaHab"])
+    p0[sc,rp] <- mean(nimOutput[ ,"p0"])
+    psi[sc,rp] <- mean(nimOutput[ ,"psi"])
+    rho[sc,rp] <- mean(nimOutput[ ,"rho"])
+    sigma[sc,rp] <- mean(nimOutput[ ,"sigma"])
+    theta[sc,rp] <- mean(nimOutput[ ,"theta"])
+    # }#p 
+    
+    ## Store only the minimum in an object to summarize your results 
+    # (e.g. N[sc,rp] <- mean(nimOutput[ ,"N"])
+    
+
+
+
+    
+  }#rp
+}#sc    
+    
+
+# ## PROCESS OUTPUTS
+# myParams <- c("N","psi","rho", "theta", "sigma", "BetaHab", "BetaDet" )
+# 
+# myResults <- list()
+# for(p in 1:length(myParams)){
+#   myResults[[p]] <- parm.df
+#   myResults[[p]]$mean <- rep(NA, nrow(parm.df))
+#   myResults[[p]]$lci <- rep(NA, nrow(parm.df))
+#   myResults[[p]]$uci <- rep(NA, nrow(parm.df))
+#   myResults[[p]]$sd <- rep(NA, nrow(parm.df))
+#   myResults[[p]]$CV <- rep(NA, nrow(parm.df))
+#   myResults[[p]]$Rhat <- rep(NA, nrow(parm.df))
+# }#p
 
 n.rep <- max(parm.df$rep_ID)
 n.set <- max(parm.df$set_ID)
