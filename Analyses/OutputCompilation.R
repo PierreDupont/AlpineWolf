@@ -87,191 +87,219 @@ studyArea <- studyAreaGrid %>%
 
 ## -----------------------------------------------------------------------------
 ## ------ 1. CALCULATE AC-BASED DENSITY ------
-## ------   1.1. PREPARE INPUT FOR EXTRACTION ------
-##---- Disaggregate habitat raster to a 1x1km resolution
-habitat.r <- disaggregate(x = habitat$raster, fact = 1)
-italia.r <- disaggregate(x = habitat$Italia, fact = 1)
-
+# ## ------   1.1. PREPARE INPUT FOR EXTRACTION ------
+# ##---- Disaggregate habitat raster to a 1x1km resolution
+# habitat.r <- disaggregate(x = habitat$raster, fact = 1)
+# italia.r <- disaggregate(x = habitat$Italia, fact = 1)
+# 
 # ##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
 # habitat.id <- matrix( data = 1:ncell(habitat.r),
 #                       nrow = nrow(habitat.r),
 #                       ncol = ncol(habitat.r),
 #                       byrow = TRUE)
-
-##---- Rescale sxy coords to original projection and reproject to the new raster
-dimnames(res$sims.list$s) <- list(1:dim(res$sims.list$s)[1],
-                                  1:dim(res$sims.list$s)[2],
-                                  c("x","y"))
-s.original <- scaleCoordsToHabitatGrid(
-  coordsData = res$sims.list$s,
-  coordsHabitatGridCenter = coordinates(habitat$raster),
-  scaleToGrid = F)$coordsDataScaled
-
-##---- ... and reproject to the new raster
-s.rescaled <- scaleCoordsToHabitatGrid(
-  coordsData = s.original,
-  coordsHabitatGridCenter = coordinates(habitat.r),
-  scaleToGrid = T)$coordsDataScaled
-
-##---- Create a matrix of East/west regions
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = NA)
-west <- st_buffer(st_union(west), dist = 10000)
-west <- st_difference(west,st_union(east))
-west.r <- fasterize( sf = st_as_sf(west),
-                     raster = habitat.r,
-                     background = 0)
-reg.r <- regions.r
-reg.r[reg.r>0] <- 1
-regions2.r <- reg.r + west.r 
-regions2.r[regions2.r[]==1] <- "east"
-regions2.r[regions2.r[]==2] <- "west"
-regions.r <- regions.r + italia.r - 1
-
-regions.unique <- sort(na.omit(unique(regions2.r[])))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions2.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions.unique
-
-
-# ##---- Create a matrix of Italian regions
+# 
+# ##---- Rescale sxy coords to original projection and reproject to the new raster
+# dimnames(res$sims.list$s) <- list(1:dim(res$sims.list$s)[1],
+#                                   1:dim(res$sims.list$s)[2],
+#                                   c("x","y"))
+# s.original <- scaleCoordsToHabitatGrid(
+#   coordsData = res$sims.list$s,
+#   coordsHabitatGridCenter = coordinates(habitat$raster),
+#   scaleToGrid = F)$coordsDataScaled
+# 
+# ##---- ... and reproject to the new raster
+# s.rescaled <- scaleCoordsToHabitatGrid(
+#   coordsData = s.original,
+#   coordsHabitatGridCenter = coordinates(habitat.r),
+#   scaleToGrid = T)$coordsDataScaled
+# 
+# ##---- Create a matrix of East/west regions
 # ##---- (rows == regions ; columns == habitat raster cells)
-# regions.r <- fasterize(sf = presTrans,
+# regions.r <- fasterize(sf = st_as_sf(regions),
 #                        raster = habitat.r,
 #                        field = "ID",
-#                        background = 0)
-# regions.r[regions.r[]==0] <- NA
+#                        background = NA)
+# west <- st_buffer(st_union(west), dist = 10000)
+# west <- st_difference(west,st_union(east))
+# west.r <- fasterize( sf = st_as_sf(west),
+#                      raster = habitat.r,
+#                      background = 0)
+# reg.r <- regions.r
+# reg.r[reg.r>0] <- 1
+# regions2.r <- reg.r + west.r 
+# regions2.r[regions2.r[]==1] <- "east"
+# regions2.r[regions2.r[]==2] <- "west"
 # regions.r <- regions.r + italia.r - 1
-# for(i in 1:length(presTrans$DEN_UTS)){
-#   regions.r[regions.r %in% regions$ID[i]] <- presTrans$DEN_UTS[i]
-# }
-# regions.unique <- sort(na.omit(unique(regions.r[])))
-# regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
+# 
+# regions.unique <- sort(na.omit(unique(regions2.r[])))
+# regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions2.r[] == x}))
 # regions.rgmx[is.na(regions.rgmx)] <- 0
 # row.names(regions.rgmx) <- regions.unique
-
-
-##---- Create a matrix of the Alpine region
-##---- (rows == regions ; columns == habitat raster cells)
-alps.r <- fasterize( sf = st_as_sf(alps),
-                     raster = habitat.r,
-                     background = NA)
-alps.r[alps.r[]==0] <- NA
-alps.r <- alps.r + italia.r - 1
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
-
-##---- Thin MCMC samples for faster calculation 
-##---- (60000 iterations in too much for the getDensity fucntion at 1x1km)
-iter <- seq(1,dim(res$sims.list$z)[1],length.out = 20000)
-
-
-
-## ------   1.2. EXTRACT TOTAL & REGION-SPECIFIC DENSITIES ------
-##---- Calculate total and regional densities
-WA_regions <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = regions.rgmx)
-
-##---- Calculate sex and status-specific densities
-WA_status <- list()
-for(s in 0:1){
-  WA_status[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
-
-    WA_status[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = regions.rgmx)
-  }#ss
-}#s
-
-##---- Name the object to fill up rapidly the tables 
-names(WA_status) <- c("F","M")
-names(WA_status[["F"]]) <- c("Alpha", "Pups", "Others")
-names(WA_status[["M"]]) <- c("Alpha", "Pups", "Others")
-
-
-
-## ------   1.3. EXTRACT ALPINE REGION DENSITY ------
-WA_alps <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = alps.rgmx)
-
-
-## ------   1.4. EXTRACT PREDICTED DENSITY ------
-predDensities <- sapply(iter,
-                        function(x){
-                          intens <- c(exp(res$sims.list$betaHab[x, ] %*% t(nimData$hab.covs)))
-                          pred <- res$sims.list$N[x]*(intens/sum(intens))
-                          return(pred)
-                        })
-
-meanPred.r <- habitat$raster
-meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
-meanPred.r[is.na(habitat$Italia[])] <- NA
-
-
-
-## ------   1.5. EXTRACT TOTAL DENSITY (for plots) ------
-##---- Create a density map for plotting at a a 1x1km resolution
-habitat.r <- disaggregate(x = habitat$raster, fact = 5)
-italia.r <- disaggregate(x = habitat$Italia, fact = 5)
-s.original <- scaleCoordsToHabitatGrid(
-  coordsData = res$sims.list$s,
-  coordsHabitatGridCenter = coordinates(habitat$raster),
-  scaleToGrid = F)$coordsDataScaled
-s.rescaled <- scaleCoordsToHabitatGrid(
-  coordsData = s.original,
-  coordsHabitatGridCenter = coordinates(habitat.r),
-  scaleToGrid = T)$coordsDataScaled
-regions.r <- fasterize( sf = st_as_sf(regions),
-                        raster = habitat.r,
-                        background = NA)
-regions.r[regions.r[]==0] <- NA
-regions.r <- regions.r + italia.r - 1
-regions.rgmx <- matrix(regions.r[] == 1, nrow = 1)
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- "Italian Alps"
-habitat.id <- matrix( data = 1:ncell(habitat.r),
-                      nrow = nrow(habitat.r),
-                      ncol = ncol(habitat.r),
-                      byrow = TRUE)
-iter <- seq(1,dim(res$sims.list$z)[1],length.out = 10000)
-WA_plot <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = regions.rgmx)
-
-
-
-## ------   1.6. SAVE DENSITIES -----
-# save(WA_regions, WA_status, WA_alps, meanPred.r, WA_plot,
+# 
+# 
+# # ##---- Create a matrix of Italian regions
+# # ##---- (rows == regions ; columns == habitat raster cells)
+# # regions.r <- fasterize(sf = presTrans,
+# #                        raster = habitat.r,
+# #                        field = "ID",
+# #                        background = 0)
+# # regions.r[regions.r[]==0] <- NA
+# # regions.r <- regions.r + italia.r - 1
+# # for(i in 1:length(presTrans$DEN_UTS)){
+# #   regions.r[regions.r %in% regions$ID[i]] <- presTrans$DEN_UTS[i]
+# # }
+# # regions.unique <- sort(na.omit(unique(regions.r[])))
+# # regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
+# # regions.rgmx[is.na(regions.rgmx)] <- 0
+# # row.names(regions.rgmx) <- regions.unique
+# 
+# 
+# ##---- Create a matrix of the Alpine region
+# ##---- (rows == regions ; columns == habitat raster cells)
+# alps.r <- fasterize( sf = st_as_sf(alps),
+#                      raster = habitat.r,
+#                      background = NA)
+# alps.r[alps.r[]==0] <- NA
+# alps.r <- alps.r + italia.r - 1
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
+# 
+# ##---- Thin MCMC samples for faster calculation 
+# ##---- (60000 iterations in too much for the getDensity fucntion at 1x1km)
+# iter <- seq(1,dim(res$sims.list$z)[1],length.out = 20000)
+# 
+# 
+# 
+# ## ------   1.2. EXTRACT TOTAL & REGION-SPECIFIC DENSITIES ------
+# ##---- Calculate total and regional densities
+# WA_regions <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = regions.rgmx)
+# 
+# ##---- Calculate sex and status-specific densities
+# WA_status <- list()
+# for(s in 0:1){
+#   WA_status[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res$sims.list$z[iter, ] == 1) &
+#       (res$sims.list$sex[iter, ] == s) &
+#       (res$sims.list$status[iter, ] == ss) 
+#     
+#     WA_status[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter, ,1],
+#       sy = s.rescaled[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = regions.rgmx)
+#   }#ss
+# }#s
+# 
+# ##---- Name the object to fill up rapidly the tables 
+# names(WA_status) <- c("F","M")
+# names(WA_status[["F"]]) <- c("Alpha", "Pups", "Others")
+# names(WA_status[["M"]]) <- c("Alpha", "Pups", "Others")
+# 
+# 
+# ##---- Calculate sex and status-specific densities
+# augmented <- (sum(nimData$y[ ,1] > 0)+1):nimConstants$n.individuals
+# 
+# WA_undetected <- list()
+# for(s in 0:1){
+#   WA_undetected[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res$sims.list$z[iter,augmented] == 1) &
+#       (res$sims.list$sex[iter,augmented] == s) &
+#       (res$sims.list$status[iter,augmented] == ss) 
+#     
+#       WA_undetected[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter,augmented,1],
+#       sy = s.rescaled[iter,augmented,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = regions.rgmx)
+#   }#ss
+# }#s
+# 
+# ##---- Name the object to fill up rapidly the tables 
+# names(WA_undetected) <- c("F","M")
+# names(WA_undetected[["F"]]) <- c("Alpha", "Pups", "Others")
+# names(WA_undetected[["M"]]) <- c("Alpha", "Pups", "Others")
+# 
+# 
+# 
+# ## ------   1.3. EXTRACT ALPINE REGION DENSITY ------
+# WA_alps <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = alps.rgmx)
+# 
+# 
+# ## ------   1.4. EXTRACT PREDICTED DENSITY ------
+# predDensities <- sapply(iter,
+#                         function(x){
+#                           intens <- c(exp(res$sims.list$betaHab[x, ] %*% t(nimData$hab.covs)))
+#                           pred <- res$sims.list$N[x]*(intens/sum(intens))
+#                           return(pred)
+#                         })
+# 
+# meanPred.r <- habitat$raster
+# meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
+# meanPred.r[is.na(habitat$Italia[])] <- NA
+# 
+# 
+# 
+# ## ------   1.5. EXTRACT TOTAL DENSITY (for plots) ------
+# ##---- Create a density map for plotting at a a 1x1km resolution
+# habitat.r <- disaggregate(x = habitat$raster, fact = 5)
+# italia.r <- disaggregate(x = habitat$Italia, fact = 5)
+# s.original <- scaleCoordsToHabitatGrid(
+#   coordsData = res$sims.list$s,
+#   coordsHabitatGridCenter = coordinates(habitat$raster),
+#   scaleToGrid = F)$coordsDataScaled
+# s.rescaled <- scaleCoordsToHabitatGrid(
+#   coordsData = s.original,
+#   coordsHabitatGridCenter = coordinates(habitat.r),
+#   scaleToGrid = T)$coordsDataScaled
+# regions.r <- fasterize( sf = st_as_sf(regions),
+#                         raster = habitat.r,
+#                         background = NA)
+# regions.r[regions.r[]==0] <- NA
+# regions.r <- regions.r + italia.r - 1
+# regions.rgmx <- matrix(regions.r[] == 1, nrow = 1)
+# regions.rgmx[is.na(regions.rgmx)] <- 0
+# row.names(regions.rgmx) <- "Italian Alps"
+# habitat.id <- matrix( data = 1:ncell(habitat.r),
+#                       nrow = nrow(habitat.r),
+#                       ncol = ncol(habitat.r),
+#                       byrow = TRUE)
+# iter <- seq(1,dim(res$sims.list$z)[1],length.out = 10000)
+# WA_plot <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = regions.rgmx)
+# 
+# 
+# 
+# ## ------   1.6. SAVE DENSITIES -----
+# save(WA_regions, WA_status, WA_alps, meanPred.r,  WA_undetected,
 #      file = file.path(thisDir, paste0(modelName, "_densities.RData")))
 
 load(file = file.path(thisDir, paste0(modelName, "_densities.RData")))
@@ -307,7 +335,7 @@ meanDensity.R[is.na(italia.r[])] <- NA
 bground <- st_buffer(countries[countries$CNTR_CODE == "IT", ], 50000)
 bground <- st_difference(st_union(bground), st_union(countries))
 plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-                 col = "black", border = "black")
+     col = "black", border = "black")
 #plot( st_geometry(countries), col="black", border = "white", add = T, lwd = 1)
 plot( meanDensity.R, add = T,
       breaks = cuts, col = col,
@@ -660,12 +688,72 @@ par(mfrow = c(1,1))
 plot.new()
 grid.table(abundanceTable)
 mtext( text = "Alpine wolf abundance estimates", 
-        side = 3, outer = T, line = -10, font = 2)
+       side = 3, outer = T, line = -10, font = 2)
 
 ##----- Export as .csv
 write.csv( abundanceTable,
-          file = file.path(thisDir, paste0(modelName, "_TableAbundance.csv")))
+           file = file.path(thisDir, paste0(modelName, "_TableAbundance.csv")))
 
 
 dev.off()
 ## -----------------------------------------------------------------------------
+## ------ 3. % of detected individuals ------
+percentUndetected <- list()
+for(s in 0:1){
+  percentUndetected[[s+1]] <- list()
+  for(ss in 1:3){
+    percentUndetected[[s+1]][[ss]] <- WA_undetected[[s+1]][[ss]]$PosteriorAllRegions/WA_status[[s+1]][[ss]]$PosteriorAllRegions
+  }#ss
+  percentUndetected[[s+1]][[4]] <- (WA_undetected[[s+1]][[1]]$PosteriorAllRegions + 
+                                    WA_undetected[[s+1]][[2]]$PosteriorAllRegions +
+                                    WA_undetected[[s+1]][[3]]$PosteriorAllRegions)/ (WA_status[[s+1]][[1]]$PosteriorAllRegions +
+                                                                                       WA_status[[s+1]][[2]]$PosteriorAllRegions +
+                                                                                       WA_status[[s+1]][[3]]$PosteriorAllRegions)
+}#s
+
+percentUndetected[[3]] <- list()
+for(ss in 1:3){
+  percentUndetected[[3]][[ss]] <- (WA_undetected[[1]][[ss]]$PosteriorAllRegions + 
+                                   WA_undetected[[2]][[ss]]$PosteriorAllRegions) / (WA_status[[1]][[ss]]$PosteriorAllRegions +
+                                                                                      WA_status[[2]][[ss]]$PosteriorAllRegions)
+}#ss
+percentUndetected[[3]][[4]] <-  (WA_undetected[[1]][[1]]$PosteriorAllRegions + 
+                                 WA_undetected[[1]][[2]]$PosteriorAllRegions +
+                                 WA_undetected[[1]][[3]]$PosteriorAllRegions + 
+                                 WA_undetected[[2]][[1]]$PosteriorAllRegions + 
+                                 WA_undetected[[2]][[2]]$PosteriorAllRegions +
+                                 WA_undetected[[2]][[3]]$PosteriorAllRegions) / (WA_status[[1]][[1]]$PosteriorAllRegions +
+                                                                                    WA_status[[1]][[2]]$PosteriorAllRegions +
+                                                                                    WA_status[[1]][[3]]$PosteriorAllRegions +
+                                                                                    WA_status[[2]][[1]]$PosteriorAllRegions +
+                                                                                    WA_status[[2]][[2]]$PosteriorAllRegions +
+                                                                                    WA_status[[2]][[3]]$PosteriorAllRegions)
+
+##---- Name the object to fill up rapidly the tables
+names(percentUndetected) <- c("F","M","Total")
+names(percentUndetected[["F"]]) <- c("Alpha", "Pups", "Others", "Total")
+names(percentUndetected[["M"]]) <- c("Alpha", "Pups", "Others", "Total")
+names(percentUndetected[["Total"]]) <- c("Alpha", "Pups", "Others", "Total")
+
+
+mean(percentUndetected$F$Alpha)
+mean(percentUndetected$F$Pups)
+mean(percentUndetected$F$Others)
+mean(percentUndetected$F$Total)
+
+mean(percentUndetected$M$Alpha)
+mean(percentUndetected$M$Pups)
+mean(percentUndetected$M$Others)
+mean(percentUndetected$M$Total)
+
+mean(percentUndetected$Total$Alpha)
+mean(percentUndetected$Total$Pups)
+mean(percentUndetected$Total$Others)
+mean(percentUndetected$Total$Total)
+
+quantile(percentUndetected$Total$Alpha, probs = c(0.025,0.975))
+quantile(percentUndetected$Total$Pups, probs = c(0.025,0.975))
+quantile(percentUndetected$Total$Others, probs = c(0.025,0.975))
+quantile(percentUndetected$Total$Total, probs = c(0.025,0.975))
+
+

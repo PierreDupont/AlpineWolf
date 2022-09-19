@@ -47,18 +47,18 @@ modelName = "AlpineWolf.5.4"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
-habitat = list( resolution = 5000, 
+habitat = list( resolution = 10000, 
                 buffer = 20000)
 
 ## DETECTORS SPECIFICATIONS
-detectors = list( resolution = 5000,
+detectors = list( resolution = 10000,
                   detSubResolution = 1000,
                   samplingMonths = c(10:12,1:4))
 
 ## NGS DATA SPECIFICATIONS
 data = list( sex = c("F","M"),
              status = c("alpha","pup","other"),
-             aug.factor = 6) 
+             aug.factor = 5) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -119,7 +119,6 @@ plot(st_geometry(countries), col = "gray80", border = F)
 plot(st_geometry(temp), col = "gray80",add=T,border = F)
 plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="red",border = F)
 
-# plot(studyAreaGrid["SCR"], add = T)
 
 count <- read_sf(file.path(dataDir,
                            "GISData/Countries/Countries_WGS84.shp"))
@@ -1516,6 +1515,15 @@ modelCode <- nimbleCode({
   }#i
   
   
+  ACdensity[1:n.habWindows] <- getDensity(
+    s = s[1:n.individuals,1:2],
+    habitatGrid = habitatGrid2[1:y.max,1:x.max],
+    indicator = z[1:n.individuals],
+    numWindows = n.habWindows,
+    n.individuals = n.individuals)
+  
+  ACdensity1[1:n.habWindows] <- log(ACdensity[1:n.habWindows]+1) - dens.offset
+  
   ##---- DEMOGRAPHIC PROCESS  
   psi ~ dunif(0,1)
   rho ~ dunif(0,1)
@@ -1536,22 +1544,7 @@ modelCode <- nimbleCode({
   
   ##---- DETECTION PROCESS 
   betaDens  ~ dnorm(0.0,0.01)
-  
-  dens[1:n.habWindows.reduced] <- calculateDensity(
-    s = s[1:n.individuals,1:2],
-    habitatGrid = habitatGrid2[1:y.max,1:x.max], 
-    indicator = z[1:n.individuals], 
-    numWindows = n.habWindows.reduced)
-  
-  # ## CALCULATE DENSITY
-  # dens[1:n.cells1] <- calculateDensityAlive(
-  #   sxy = sxy[1:n.individuals,1:2],
-  #   habitatGrid = habitatGrid1[1:y.max,1:x.max], 
-  #   isAlive=isAlive[1:n.individuals,t], 
-  #   nCells = n.cells1, 
-  #   centeredValue = 0)
-  
-  
+
   for(c in 1:n.detCovs){
     betaDet[c] ~ dnorm(0.0,0.01)
   }
@@ -1559,21 +1552,20 @@ modelCode <- nimbleCode({
   for(s in 1:n.states){
     for(ss in 1:2){
       p0[s,ss] ~ dunif(0,0.5)
-      log.sigma0[s,ss] ~ dnorm(0,0.01)
+      sigma0[s,ss] ~ dunif(0,2)
       logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
     }#ss
   }#s
   
   for(i in 1:n.individuals){
-    sID[i] <- habitatGrid[trunc(s[i,2])+1,trunc(s[i,1])+1]
-    
-    sigma[i] <- exp(log.sigma0[status[i],sex[i]+1] + betaDens * dens[sID[i]])
-    
-    y[i,1:n.maxDets] ~ dbinomLocal_normal(
+    y[i,1:n.maxDets] ~ dbinomLocal_normal_habitatCov(
+      resizeFactor = 1,
       size = size[1:n.detectors],
       p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
-      sigma = sigma[i],
+      sigma0 = sigma0[status[i],sex[i]+1],
+      habitatCov = ACdensity1[1:n.habWindows],
+      betaHabitat = betaDens,
       s = s[i,1:2],
       trapCoords = detCoords[1:n.detectors,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -1595,6 +1587,7 @@ nimData <- list( y = yCombined.aug,
                  sex = sex.aug,
                  status = status.aug,
                  alpha = matrix(1,3,2),
+                 dens.offset = 0.2,
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords, 
                  hab.covs = cbind.data.frame(
@@ -1628,10 +1621,10 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2])
 
-nimParams <- c("N", "p0", "log.sigma0", "psi",
+nimParams <- c("N", "p0", "sigma0", "psi",
                "betaDens","betaDet", "betaHab", "theta", "rho")
 
-nimParams2 <-  c("z", "s", "status", "sex", "dens")
+nimParams2 <-  c("z", "s", "status", "sex", "ACdensity")
 
 # for(c in 1:4){
 #   load(file.path(thisDir, "input",
@@ -1692,8 +1685,8 @@ for(c in 1:4){
                     "z" = z.init,
                     "sex" = sex.init,
                     "status" = status.init,
-                    "N.alpha.female" = 110,
-                    "N.alpha.male" = 110,
+                    #"N.alpha.female" = 110,
+                    #"N.alpha.male" = 110,
                     "psi" = 0.5,
                     "rho" = 0.5,
                     "theta" = cbind(c(0.5,0.45,0.05),
@@ -1703,8 +1696,8 @@ for(c in 1:4){
                     "betaDens" = 0,
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),
-                    "log.sigma0" = cbind(c(0,0,2),
-                                    c(0,0,2)))
+                    "sigma0" = cbind(c(0.5,0.5,1),
+                                    c(0.5,0.5,1)))
   
   save( modelCode,
         nimData,
@@ -1726,6 +1719,7 @@ nimModel <- nimbleModel( code = modelCode,
                          data = nimData,
                          check = FALSE,
                          calculate = FALSE) 
+
 nimModel$calculate()
 
 ##---- Compile the nimble model object to C++
@@ -1752,20 +1746,17 @@ for(c in 1:1){
 }
 
 ##---- Collect multiple MCMC bites and chains
-nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
-                                   burnin = 2,
-                                   param.omit = c("s","z","sex","status"))
+nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                                   burnin = 2)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput_noZ)
+plot(nimOutput$samples)
 graphics.off()
 
 
 ##---- Process and save MCMC samples
-nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 10)
-res <- ProcessCodaOutput(nimOutput)
+res <- ProcessCodaOutput(nimOutput$samples2)
 
 ##---- Save processed MCMC samples
 save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
