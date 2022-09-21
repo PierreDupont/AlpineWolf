@@ -4,11 +4,11 @@
 ##### ---------------- z[psi,rho,theta] ---------------------------------- #####
 ##### ---------------- y[p0(transects + zone + ),sigma] ------------------ #####
 ################################################################################
-## ------ CLEAN THE WORK ENVIRONMENT ------
+## ------1. CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
 
-## ------ IMPORT REQUIRED LIBRARIES ------
+## ------2. IMPORT REQUIRED LIBRARIES ------
 library(rgdal)
 library(raster)
 library(coda)
@@ -29,29 +29,176 @@ library(RcppProgress)
 library(gridExtra)
 library(MetBrewer)
 library(fs)
+library(purrr)
+library(ggplot2)
 
 
-## ------ SET REQUIRED WORKING DIRECTORIES ------
+## ------ 3. SET REQUIRED WORKING DIRECTORIES ------
 source("workingDirectories.R")
 
 
-## ------ SOURCE CUSTOM FUNCTIONS ------
+## ------ 4.  SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
 #sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 #sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
+##function to extract means ecc..
+col_mean <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- mean(x[[i]])
+  }
+  output
+}
+col_sd <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- sd(x[[i]])
+  }
+  output
+}
+col_cv <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- sd(x[[i]]/mean(x[[i]]))
+  }
+  output
+}
+col_lci <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- qs(x[[i]],0.025)
+  }
+  output
+}
+col_uci <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- qs(x[[i]],0.975)
+  }
+  output
+}
+qs <- function(x,y){as.numeric(quantile(x,y))}
 
 
 ## -----------------------------------------------------------------------------
-## ------ 0. SET ANALYSIS CHARACTERISTICS -----
+## ------ 5. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
 modelName = "AlpineWolf.SubSample.rep_100"
 thisDir <- file.path(analysisDir, modelName)
 
 
-sex <- c("female","male")
-status <- c("alpha","pup","other")
-HabCov <- c("Bare Rocks","Herbaceous", "Forest","Pop","Wolf presence")
-DetCov <- c("Transects_L", "Transect_Exp", "Snow", "East/West", "Log Pop")
+
+## -----------------------------------------------------------------------------
+## ------   6. PROCESS OUTPUTS -----
+
+OutDir <- file.path(thisDir, "output")
+
+
+
+
+resLista <-list()  #create a list which will contain all your results
+
+
+rpp <- 10
+sim_names <- c("25","50")  #Here the names of your simulation  (i.e. 25,50,75,100)
+
+  for(sc in 1:length(sim_names)){
+    
+    tempLista <-list() #temporary list for each scenario
+    
+    for(rp in 6:rpp){  #This will be from 1:50
+
+  # for(rp in 6:rpp){  #This will be from 1:50
+    # tryCatch({ 
+    ## List output files for scenario "sc" and repetition "rp" only
+    outputs <- list.files(OutDir, paste0("AlpineWolf.SubSample.rep_100_",sim_names[sc],"_",rp,"_"))
+    print(outputs)
+    # if (file.size(outputs) < 0) stop("file is 0 KB!")
+    # }, error= function(e){cat("ERROR:", conditionMessage(e), "\n")})
+    ## Maybe add a check to make sure all files listed in "outputs" are bigger than 0 KB (but I don't know how to do this?)
+    
+    ## Collect bites from the different chains for this percentage and this repetition only
+    nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
+                                   burnin = 0,
+                                   param.omit = c("s","z","sex","status"))
+    
+   
+    ## Continue processing for this output inside the loop (e.g. extract mean values and CI for N, sigma etc...)
+    # attach chains
+    nimOutput <- do.call(rbind,nimOutput)
+    # obtain columns names
+    params <- colnames(nimOutput)
+    # params.simple <- unique(sapply(strsplit(params, "\\["), "[", 1))
+    # turn nimOutput as df 
+    nimOutput <- as.data.frame(nimOutput)
+    
+    # run functions to get stats
+    means<-col_mean(nimOutput, params)
+    sd<-col_sd(nimOutput,params)
+    CV<-col_cv(nimOutput,params)
+    uci<-col_uci(nimOutput,params)
+    lci<-col_lci(nimOutput,params)
+
+
+    ## Store only the minimum in an object to summarize your results (e.g. N[sc,rp] <- mean(nimOutput[ ,"N"])
+    # merge all stats in one df
+    res <- as.data.frame(rbind(means,sd,CV,lci,uci))
+    # creat columns for stats
+    res2 <- tibble::rownames_to_column(res, "stat")
+    params2 <- append(params, "stat", 0)
+    colnames(res2) <- params2
+    # store df per each repetition in a temporary list
+    tempLista[[rp]] <- res2
+     
+    }#rp
+    
+    # store all scenarios in one final list
+    resLista[[sc]] <- tempLista
+    
+           }#sc
+
+
+res25 <- do.call("rbind", resLista[[1]])
+res25["scenario"] <- "25"
+res50 <- do.call("rbind", resLista[[2]])
+res50["scenario"] <- "50"
+
+# res75 <- do.call("rbind", resList[[3]])
+
+all_res <- rbind(res25, res50)
+
+    
+
+
+## -----------------------------------------------------------------------------
+## ------   7. PLOT RESULTS -----
+
+means <- filter(all_res, stat == "means")
+a <- ggplot(data = means, aes(x=scenario, y=N)) 
+a + geom_jitter(position = position_jitter(width = 0.1, height = 0.1))
+
+sd <- filter(all_res, stat == "sd")
+b <- ggplot(data = sd, aes(x=scenario, y=N)) 
+b + geom_jitter(position = position_jitter(width = 0.1, height = 0.1))
+
+CV <- filter(all_res, stat == "CV")
+c <- ggplot(data = CV, aes(x=scenario, y=N)) 
+c + geom_jitter(position = position_jitter(width = 0.1, height = 0.1))
+
+lci <- filter(all_res, stat == "lci")
+d <- ggplot(data = lci, aes(x=scenario, y=N)) 
+d + geom_jitter(position = position_jitter(width = 0.1, height = 0.1))
+
+uci <- filter(all_res, stat == "uci")
+e <- ggplot(data = uci, aes(x=scenario, y=N)) 
+e + geom_jitter(position = position_jitter(width = 0.1, height = 0.1))
+
+
+
+# sex <- c("female","male")
+# status <- c("alpha","pup","other")
+# HabCov <- c("Bare Rocks","Herbaceous", "Forest","Pop","Wolf presence")
+# DetCov <- c("Transects_L", "Transect_Exp", "Snow", "East/West", "Log Pop")
 
 # myCols <- matrix(met.brewer(name = "Isfahan1", n = 8, type = "discrete")[c(2:4,7:5)],
 #                  nrow = 3, ncol = 2, byrow = F)
@@ -59,9 +206,24 @@ DetCov <- c("Transects_L", "Transect_Exp", "Snow", "East/West", "Log Pop")
 #                   nrow = 5, ncol = 1, byrow = F)
 
 
-## -----------------------------------------------------------------------------
-## ------   1. PROCESS OUTPUTS -----
- 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## ------   8. FAILED ATTEMPTES-------------------------------------------------------------------
+
 # load(file.path(thisDir, "parm.df.RData"))
 # 
 # inFiles <- list.files(path.IN)
@@ -73,105 +235,62 @@ DetCov <- c("Transects_L", "Transect_Exp", "Snow", "East/West", "Log Pop")
 #                                  ref$A == parm.df$Adaptive[s])
 # }#s
 
-OutDir <- file.path(thisDir, "output")
+
+# for (p in colnames(nimOutput)) {
+
+# means[p] <- apply(nimOutput[,p],2, mean)
+# sd[p] <- apply(nimOutput[,p],2, sd)
+# lci[p] <- apply(nimOutput[,p],2, quantile, probs = 0.05,  na.rm = TRUE)
+# uci[p] <- apply(nimOutput[,p],2, quantile, probs = 0.95,  na.rm = TRUE)
+# CV[p] <- apply(nimOutput[,p],2,FUN = mean()/sd())
+
+# results[[p]][sc,rp] <- mean(nimOutput[, p])
+# results[[p]][sc,rp] <- sd(nimOutput[, p])
+# results[[p]][sc,rp] <- lci(nimOutput[, p])
+# results[[p]][sc,rp] <- uci(nimOutput[, p])
+
+N[st][rp,sc] <- mean(nimOutput[, "N"])
+N[st][rp,sc] <- qs(nimOutput[, "N"],0.025)
+N[st][rp,sc] <- qs(nimOutput[, "N"],0.975)
+N[st][rp,sc] <- sd(nimOutput[, "N"])/mean(nimOutput[,"N"])
+# p0RI_m[rp,sc] <- mean(nimOutput[, "p0[1, 2]"])
+# p0RI_m[rp,sc] <- sd(nimOutput[, "p0[1, 2]"])
+# p0RI_m[rp,sc] <- qs(nimOutput[, "p0[1, 2]"],0.025)
+# p0RI_m[rp,sc] <- qs(nimOutput[, "p0[1, 2]"],0.975)
+# p0RI_m[rp,sc] <- sd(nimOutput[, "p0[1, 2]"])/mean(nimOutput[,"N"])
+# p0RI_f[rp,sc] <- mean(nimOutput[, "p0[1, 2]"])
+# p0RI_f[rp,sc] <- sd(nimOutput[, "p0[1, 2]"])
+# p0RI_f[rp,sc] <- qs(nimOutput[, "p0[1, 2]"],0.025)
+# p0RI_f[rp,sc] <- qs(nimOutput[, "p0[1, 2]"],0.975)
+# p0RI_f[rp,sc] <- sd(nimOutput[, "p0[1, 2]"])/mean(nimOutput[,"N"])
+
+# }#p
 
 
+# results <- list()
+# for(k in 1:length(colnames.sims)){
+#   results[[k]] <- length(rpp)
+#   results[[k]]$mean <- rep_len(NA, length.out = rpp)
+#   results[[k]]$lci <- rep_len(NA, length.out = rpp)
+#   results[[k]]$uci <- rep_len(NA, length.out = rpp)
+#   results[[k]]$sd <- rep_len(NA, length.out = rpp)
+#   results[[k]]$CV <- rep_len(NA, length.out = rpp)
+# }#k
 
-sc <-25
-rp <- 2:3
-params.omit <- c("s","z","sex","status")
-for(sc in c(25,50,75)){
-  for(rp in 1:50){
-    # tryCatch({ 
-    ## List output files for scenario "sc" and repetition "rp" only
-    outputs <- list.files(OutDir, paste0("AlpineWolf.SubSample.rep_100_",sc,"_",rp,"_"))
-    print(outputs)
-    # if (file.size(outputs) < 0) stop("file is 0 KB!")
-    # }, error= function(e){cat("ERROR:", conditionMessage(e), "\n")})
-     # I dont know how to it either - V
-    ## Maybe add a check to make sure all files listed in "outputs" are bigger than 0 KB (but I don't know how to do this?)
-
-    ## Collect bites from the different chains for this percentage and this repetition only
-    nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
-                                   burnin = 0,
-                                   param.omit = c("s","z","sex","status"))
-
-    ## Continue processing for this output inside the loop 
-    # (e.g. extract mean values and CI for N, sigma etc...)
-    params <- colnames(nimOutput[[1]])
-    m <- length(nimOutput)
-    expand <- sapply(strsplit(params, "\\["), "[", 1)
-    params.simple <- unique(sapply(strsplit(params, "\\["), "[", 1))
-    sims.list <- means <- rhat <- sd <- as.list(rep(NA,length(params.simple)))
-    q25 <- q75 <- as.list(rep(NA,length(params.simple)))
-    names(sims.list) <- names(means) <- names(rhat) <- params.simple
-    names(sd) <- names(q25)<- names(q75) <- params.simple
-
-    for(p in 1:length(params)){
-      if(!is.na(dim[params][1])){
-      mat = do.call(rbind,nimOutput)
-      sims.list[[p]] <<- mat[,expand==p]
-      sd[[p]] <<- populate(apply(sims.list[[p]],c(2:ld),sd),dim=dim[[p]])
-      q25[[p]] <<- populate(apply(sims.list[[p]],c(2:ld),qs,0.25),dim=dim[[p]])
-      q75[[p]] <<- populate(apply(sims.list[[p]],c(2:ld),qs,0.75),dim=dim[[p]])
-    }#p
-     else {
-      
-      if(m > 1 && (!params%in%params.omit))
-      
-      sims.list[[p]] <<- mat[,p]
-      
-      means[[i]] <<- mean(sims.list[[p]])
-      if(!i%in%params.omit){
-        sd[[p]] <<- sd(sims.list[[p]])
-        q25[[i]] <<- qs(sims.list[[p]],0.25)
-        q75[[i]] <<- qs(sims.list[[p]],0.75)}
-    }
-    
-    # n <- as.data.frame(nimOutput[[1]])
-    # 
-    # output_Nmean <-mean(n$N)
-    # output_Nmean <-mean(n$N)
-    # output_Nmean <-mean(n$N)
-    # output_Nmean <-mean(n$N)
-    # 
-    
-    N <- list()
-    # for(p in 1:length(myParams)){
-    res[] <- mean(nimOutput[ ,"N"])
-    BetaDet[sc,rp] <- nimOutput$mean[[myParams[p]]]
-    BetaDet[sc,rp] <- mean(nimOutput[ ,"BetaHab"])
-    p0[sc,rp] <- mean(nimOutput[ ,"p0"])
-    psi[sc,rp] <- mean(nimOutput[ ,"psi"])
-    rho[sc,rp] <- mean(nimOutput[ ,"rho"])
-    sigma[sc,rp] <- mean(nimOutput[ ,"sigma"])
-    theta[sc,rp] <- mean(nimOutput[ ,"theta"])
-    # }#p 
-    
-    ## Store only the minimum in an object to summarize your results 
-    # (e.g. N[sc,rp] <- mean(nimOutput[ ,"N"])
-    
-
-
-
-    
-  }#rp
-}#sc    
-    
 
 # ## PROCESS OUTPUTS
-# myParams <- c("N","psi","rho", "theta", "sigma", "BetaHab", "BetaDet" )
+myParams <- c("N","psi","rho", "p0", "theta", "sigma", "BetaHab", "BetaDet" )
 # 
-# myResults <- list()
-# for(p in 1:length(myParams)){
-#   myResults[[p]] <- parm.df
-#   myResults[[p]]$mean <- rep(NA, nrow(parm.df))
-#   myResults[[p]]$lci <- rep(NA, nrow(parm.df))
-#   myResults[[p]]$uci <- rep(NA, nrow(parm.df))
-#   myResults[[p]]$sd <- rep(NA, nrow(parm.df))
-#   myResults[[p]]$CV <- rep(NA, nrow(parm.df))
-#   myResults[[p]]$Rhat <- rep(NA, nrow(parm.df))
-# }#p
+myResults <- list()
+for(p in 1:length(myParams)){
+  myResults[[p]] <- parm.df
+  myResults[[p]]$mean <- rep(NA, nrow(parm.df))
+  myResults[[p]]$lci <- rep(NA, nrow(parm.df))
+  myResults[[p]]$uci <- rep(NA, nrow(parm.df))
+  myResults[[p]]$sd <- rep(NA, nrow(parm.df))
+  myResults[[p]]$CV <- rep(NA, nrow(parm.df))
+  myResults[[p]]$Rhat <- rep(NA, nrow(parm.df))
+}#p
 
 n.rep <- max(parm.df$rep_ID)
 n.set <- max(parm.df$set_ID)
@@ -207,8 +326,10 @@ save(myResults, file = file.path(thisDir, "results.RData"))
 
 
 
-## -----------------------------------------------------------------------------
-## ------   8. PLOT RESULTS -----
+## ------   9. PIERRE'S HINTS -----
+
+
+
 load(file.path(thisDir, "parm.df.RData"))
 load(file.path(thisDir, "results.RData"))
 
