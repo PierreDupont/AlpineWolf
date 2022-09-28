@@ -27,6 +27,7 @@ library(Rcpp)
 library(RcppArmadillo)
 library(RcppProgress)
 library(gridExtra)
+library(MetBrewer)
 
 
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
@@ -43,7 +44,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.4"
+modelName = "Piemonte.0.2"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -61,10 +62,9 @@ data = list( sex = c("F","M"),
              aug.factor = 5) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
-if(!dir.exists(thisDir)){dir.create(thisDir)}
-if(!dir.exists(file.path(thisDir, "input"))){dir.create(file.path(thisDir, "input"))}
-if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "output"))}
-
+dir.create(file.path(thisDir, "input"),recursive = T)
+dir.create(file.path(thisDir, "output"), recursive = T)
+dir.create(file.path(thisDir, "figures"), recursive = T)
 
 
 ## -----------------------------------------------------------------------------
@@ -73,28 +73,31 @@ if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "out
 ##---- Polygon of Italy and neighbouring countries
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
 
+##--- Regions 
+regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
+regions <- st_transform(x = regions, crs = st_crs(countries))
+regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
+plot(regions)
+regions <- regions[regions$DEN_REG %in% c("Piemonte", "Valle d'Aosta", "Liguria"), ]
+
+
+##--- Alps
+alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
+alps <- st_transform(x = alps, crs = st_crs(countries))
+plot(alps)
+
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
 studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
 studyArea <- studyAreaGrid %>%
   st_snap(x = ., y = ., tolerance = 0.0001) %>%
+  st_intersection(.,regions) %>%
   st_union() 
 
 ##--- SCR grid
 SCRGrid <- read_sf(file.path(dataDir,"GISData/SECR_presence_layer_2020_2021/SECR_presence_layer_2021.shp"))
 SCRGrid <- st_transform(x = SCRGrid, crs = st_crs(countries))
 SCRGrid <- SCRGrid[SCRGrid$Pres_20.21 == 1, ]
-
-##--- Regions 
-regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
-regions <- st_transform(x = regions, crs = st_crs(countries))
-regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
-plot(regions)
-
-##--- Alps
-alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
-alps <- st_transform(x = alps, crs = st_crs(countries))
-plot(alps)
 
 ##---- Plot check
 pdf(file = file.path(thisDir, "figures", paste0(modelName, "_ngs_map.pdf" )),
@@ -354,11 +357,6 @@ iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
 plot(studyArea)
 plot(PA, add = T)
-
-## ------   5. PRE-PROCESSED STUFF ------
-load(file.path(thisDir,"Habitat.RData"))
-load(file.path(thisDir,"Detectors.RData"))
-
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
@@ -1014,7 +1012,7 @@ localObjects <- getLocalObjects(
 #                 k = 1,
 #                 searchtype = "radius",
 #                 radius = 10000)
-
+ngs <- st_intersection(ngs,studyArea)
 closest <- nn2( coordinates(detectors$sub.sp),
                 st_coordinates(ngs),
                 k = 1,
@@ -1539,11 +1537,11 @@ modelCode <- nimbleCode({
   
   ##-- POPULATION SIZE
   N <- sum(z[1:n.individuals])
-
+  
   
   ##---- DETECTION PROCESS 
   betaDens  ~ dnorm(0.0,0.01)
-
+  
   for(c in 1:n.detCovs){
     betaDet[c] ~ dnorm(0.0,0.01)
   }
@@ -1696,7 +1694,7 @@ for(c in 1:4){
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),
                     "sigma0" = cbind(c(0.5,0.5,1),
-                                    c(0.5,0.5,1)))
+                                     c(0.5,0.5,1)))
   
   save( modelCode,
         nimData,
@@ -1739,7 +1737,7 @@ for(c in 1:1){
   print(system.time(
     runMCMCbites( mcmc = Cmcmc,
                   bite.size = 500,
-                  bite.number = 12,
+                  bite.number = 2,
                   path = file.path(thisDir, paste0("output/chain",c)))
   ))
 }
@@ -1753,7 +1751,7 @@ nimOutput <- collectMCMCbites(
   pattern = "mcmcSamples"
   ,
   param.omit = NULL,progress.bar = F
-  )
+)
 
 
 
