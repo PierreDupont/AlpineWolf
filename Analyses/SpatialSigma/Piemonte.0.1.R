@@ -44,7 +44,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.4.Piemonte"
+modelName = "Piemonte.0.1"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -357,11 +357,6 @@ iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
 plot(studyArea)
 plot(PA, add = T)
-
-# ## ------   5. PRE-PROCESSED STUFF ------
-# load(file.path(thisDir,"Habitat.RData"))
-# load(file.path(thisDir,"Detectors.RData"))
-
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------

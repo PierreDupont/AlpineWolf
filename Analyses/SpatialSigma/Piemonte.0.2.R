@@ -1492,7 +1492,7 @@ status.aug <- MakeAugmentation( y = status,
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
   for(c in 1:n.habCovs){
-    betaHab[c] ~ dnorm(0.0,0.01)
+    betaHabDens[c] ~ dnorm(0.0,0.01)
   }#c
   
   habIntensity[1:n.habWindows] <- exp(
@@ -1546,6 +1546,10 @@ modelCode <- nimbleCode({
     betaDet[c] ~ dnorm(0.0,0.01)
   }
   
+  for(c in 1:n.habCovs){
+    betaHabDet[c] ~ dnorm(0.0,0.01)
+  }#c
+  
   for(s in 1:n.states){
     for(ss in 1:2){
       p0[s,ss] ~ dunif(0,0.5)
@@ -1556,13 +1560,15 @@ modelCode <- nimbleCode({
   }#s
   
   for(i in 1:n.individuals){
-    y[i,1:n.maxDets] ~ dbinomLocal_normal_habitatCov(
+    y[i,1:n.maxDets] ~ dbinomLocal_normal_SEM(
       resizeFactor = 1,
       size = size[1:n.detectors],
       p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
       sigma0 = sigma0[status[i],sex[i]+1],
-      habitatCov = ACdensity1[1:n.habWindows],
-      betaHabitat = betaDens,
+      densCov = double(1),
+      betaDens = 0,
+      habCovs =  hab.covs[1:n.habWindows,1:n.habCovs],
+      betaHab = betaHabDet[1:n.habCovs],
       s = s[i,1:2],
       trapCoords = detCoords[1:n.detectors,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -2368,7 +2374,7 @@ WA_Italy$summary
 
 
 ##------------------------------------------------------------------------------
-# ## EE
+##-- EE
 # pdf(file = file.path(thisDir, paste0(modelName,"_ridge.pdf")),
 #     width = 30, height = 22)
 # ridgeMap( ital.R,
