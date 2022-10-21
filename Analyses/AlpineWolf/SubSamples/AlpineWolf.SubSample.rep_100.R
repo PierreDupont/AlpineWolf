@@ -273,7 +273,7 @@ ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]
 ## ------ III. SUB-SAMPLE DATA ------
 ngs <- as.data.frame(ngs)
 
-for (rep in 1:100) {
+for (rep in 1:10) {
   
   ngs25 <- ngs %>% sample_frac(0.25)
   ngs50 <- ngs %>% sample_frac(0.50)
@@ -737,9 +737,8 @@ for (rep in 1:100) {
                           y.max = dim(habitat$matrix)[1],
                           x.max = dim(habitat$matrix)[2])
   
-  nimParams <- c("N", "p0", "sigma", "psi",
-                 "betaDet", "betaHab", "theta", "rho",
-                 "z", "s", "status", "sex")
+  nimParams <- c("N","p0","sigma","psi","betaDet","betaHab","theta","rho")   ## Params with thin rate 1
+  nimParams2 <- c("z","s","status","sex")                                    ## Params with thin rate 2
   
   
   
@@ -798,6 +797,7 @@ for (rep in 1:100) {
           nimConstants,
           nimInits,
           nimParams,
+          nimParams2,
           file = file.path(thisDir, "input25",
                            paste0(modelName, "_25_", rep, "_", c,  "rep.RData")))
     
@@ -859,6 +859,7 @@ for (rep in 1:100) {
            nimConstants,
            nimInits,
            nimParams,
+           nimParams2,
           file = file.path(thisDir, "input50",
                            paste0(modelName, "_50_", rep, "_", c,  "rep.RData")))
     
@@ -923,6 +924,7 @@ for (rep in 1:100) {
           nimConstants,
           nimInits,
           nimParams,
+          nimParams2,
           file = file.path(thisDir, "input75", 
                            paste0(modelName, "_75_", rep, "_", c,  "rep.RData")))
     

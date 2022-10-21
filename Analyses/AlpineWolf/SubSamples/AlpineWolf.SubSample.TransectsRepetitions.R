@@ -238,7 +238,7 @@ ngs_opp$detector <- detectors$sub.sp$main.cell.new.id[closest_opp$nn.idx]
 #   mutate(rank = row_number()) %>%
 #   filter(rank = 3) %>% 
 
-for (rep in 1:10) {
+for (rep in 1:100) {
 
 trans3 <- transects %>% 
   group_by(transect_i) %>%
@@ -827,53 +827,53 @@ print(rep)
 
 
 ## ------   4. FIT MODEL -----
-##---- Create the nimble model object
-nimModel <- nimbleModel( code = modelCode,
-                         constants = nimConstants,
-                         inits = nimInits,
-                         data = nimData,
-                         check = FALSE,
-                         calculate = FALSE) 
-nimModel$calculate()
-
-##---- Compile the nimble model object to C++
-CsimModel <- compileNimble(nimModel)
-CsimModel$calculate()
-
-##---- Configure and compile the MCMC object 
-conf <- configureMCMC( model = nimModel,
-                       monitors = nimParams,
-                       thin = 1)
-Rmcmc <- buildMCMC(conf)
-compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
-Cmodel <- compiledList$model
-Cmcmc <- compiledList$mcmc
-
-##---- Run nimble MCMC in multiple bites
-for(c in 1:1){
-  print(system.time(
-    runMCMCbites( mcmc = Cmcmc,
-                  bite.size = 500,
-                  bite.number = 2,
-                  path = file.path(thisDir, paste0("output/chain",c)))
-  ))
-}
-
-##---- Collect multiple MCMC bites and chains
-nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
-                                   burnin = 0,
-                                   param.omit = c("s","z","sex","status"))
-
-##---- Traceplots
-pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput_noZ)
-graphics.off()
-
-
-##---- Process and save MCMC samples
-nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
-res <- ProcessCodaOutput(nimOutput)
-
-##---- Save processed MCMC samples
-save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
+# ##---- Create the nimble model object
+# nimModel <- nimbleModel( code = modelCode,
+#                          constants = nimConstants,
+#                          inits = nimInits,
+#                          data = nimData,
+#                          check = FALSE,
+#                          calculate = FALSE) 
+# nimModel$calculate()
+# 
+# ##---- Compile the nimble model object to C++
+# CsimModel <- compileNimble(nimModel)
+# CsimModel$calculate()
+# 
+# ##---- Configure and compile the MCMC object 
+# conf <- configureMCMC( model = nimModel,
+#                        monitors = nimParams,
+#                        thin = 1)
+# Rmcmc <- buildMCMC(conf)
+# compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
+# Cmodel <- compiledList$model
+# Cmcmc <- compiledList$mcmc
+# 
+# ##---- Run nimble MCMC in multiple bites
+# for(c in 1:1){
+#   print(system.time(
+#     runMCMCbites( mcmc = Cmcmc,
+#                   bite.size = 500,
+#                   bite.number = 2,
+#                   path = file.path(thisDir, paste0("output/chain",c)))
+#   ))
+# }
+# 
+# ##---- Collect multiple MCMC bites and chains
+# nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
+#                                    burnin = 0,
+#                                    param.omit = c("s","z","sex","status"))
+# 
+# ##---- Traceplots
+# pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
+# plot(nimOutput_noZ)
+# graphics.off()
+# 
+# 
+# ##---- Process and save MCMC samples
+# nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+#                                burnin = 0)
+# res <- ProcessCodaOutput(nimOutput)
+# 
+# ##---- Save processed MCMC samples
+# save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))

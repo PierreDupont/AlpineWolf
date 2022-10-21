@@ -527,9 +527,9 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2])
 
-nimParams <- c("N", "p0", "sigma", "psi",
-               "betaDet", "betaHab", "theta", "rho",
-               "z", "s", "status", "sex")
+ nimParams <- c("N", "p0", "sigma", "psi",
+                "betaDet", "betaHab", "theta", "rho",
+                "z", "s", "status", "sex")
 
 
 
@@ -579,7 +579,9 @@ for(c in 1:4){
                     "sigma" = cbind(c(1,1,2),
                                     c(1,1,2)))
   
-  save( modelCode,
+
+  
+    save( modelCode,
         nimData,
         nimConstants,
         nimInits,

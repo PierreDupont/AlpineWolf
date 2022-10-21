@@ -59,7 +59,7 @@ myCols2 <- matrix(met.brewer(name = "Pissaro", n = 7, type = "discrete")[c(1:2,4
 ## -----------------------------------------------------------------------------
 ## ------  SUB-SAMPLING FIGURES -----
 scenarios <- c(25,50,75,100)
-pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
+pdf(file = file.path(thisDir, "figure_parameters_subsample2s.pdf"),
      width = 10, height = 3.5)
 
 ##----- PLOTS N -----
@@ -88,8 +88,8 @@ for(sc in 1:length(scenarios)){
 }#sc
 
 
-  pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
-        width = 10, height = 3.5)
+  # pdf(file = file.path(thisDir, "figure_parameters_subsamples.pdf"),
+        # width = 10, height = 3.5)
   
   
   par(mfrow=c(1,2))
@@ -187,10 +187,10 @@ for(sc in 1:length(scenarios)){
 }#scenarios
 legend(title = "Females",
        legend = c("Alpha","Pup","Other"),
-       x = 0, y = 8, fill = myCols[1:3], cex = 0.6)
+       x = 0.5, y = 18, fill = myCols[1:3], cex = 0.6)
 legend(title = "Males",
        legend = c("Alpha","Pup","Other"),
-       x = 1, y = 8, fill = myCols[4:6], cex = 0.6)
+       x = 1.3, y = 18, fill = myCols[4:6], cex = 0.6)
 
 
 ## CV
@@ -606,3 +606,5 @@ for(b in 1:length(HabCov)){
 
 
 ## -----------------------------------------------------------------------------
+   
+   
