@@ -21,11 +21,5 @@ if(Sys.info()['user'] == 'pidu') { ## Pierre
   meetDir <- 'C:/Users/richbi/Dropbox (AQEG)/AQEG Team Folder/AlpineWolf/04_Meetings'
   reportDir <- 'C:/Users/richbi/Dropbox (AQEG)/AQEG Team Folder/AlpineWolf/06_Report'
   
-} else if(Sys.info()['user'] == 'cymi') {## Cyril
-  gitDir <- ''
-  dataDir <- ''
-  analysisDir <- ''
-  simDir <- ''
-  meetDir <- ''
 } else stop('unknown user')
 
