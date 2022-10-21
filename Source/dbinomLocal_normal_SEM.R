@@ -293,8 +293,7 @@ rbinomLocal_normal_SEM <- nimbleFunction(
   ){
     ## Specify return type
     returnType(double(1))
-    if(detNums >= 0) stop("Random generation for the rbinomLocal_normal_SEM distribution is not currently supported without combining all individual detections information in one vector. See 'getSparseY()'")
-    
+  
     ## RETURN TYPE DECLARATION
     if(n!=1){print("rbinomLocal_normal only allows n = 1; using n = 1")}
     nMAxDetections <- (lengthYCombined-1)/2
@@ -350,24 +349,20 @@ rbinomLocal_normal_SEM <- nimbleFunction(
   })
 
 
-# dbinomLocal_normal_SEM
+## dbinomLocal_normal_SEM
 registerDistributions(
   list(
     dbinomLocal_normal_SEM = list(
       BUGSdist ='dbinomLocal_normal_SEM(size, p0Traps, sigma0, densCov, betaDens, habCovs, betaHab, s, trapCoords, localTrapsIndices, localTrapsNum, resizeFactor, habitatGrid, indicator, lengthYCombined)',
-      Rdist = c('dbinomLocal_normal_SEM(size, p0Traps, sigma0, densCov, betaDens, habCovs, betaHab, s, trapCoords, localTrapsIndices, localTrapsNum, resizeFactor     , habitatGrid, indicator, lengthYCombined)',
-                'dbinomLocal_normal_SEM(size, p0Traps, sigma0, densCov, betaDens, habCovs, betaHab, s, trapCoords, localTrapsIndices, localTrapsNum, resizeFactor     , habitatGrid, indicator, lengthYCombined = 0)',
-                'dbinomLocal_normal_SEM(size, p0Traps, sigma0, densCov, betaDens, habCovs, betaHab, s, trapCoords, localTrapsIndices, localTrapsNum, resizeFactor = 1 , habitatGrid, indicator, lengthYCombined)',
-                'dbinomLocal_normal_SEM(size, p0Traps, sigma0, densCov, betaDens, habCovs, betaHab, s, trapCoords, localTrapsIndices, localTrapsNum, resizeFactor = 1 , habitatGrid, indicator, lengthYCombined = 0)'),
+      Rdist = c('dbinomLocal_normal_SEM(size, p0Traps, sigma0, densCov, betaDens, habCovs, betaHab, s, trapCoords, localTrapsIndices, localTrapsNum, resizeFactor, habitatGrid, indicator, lengthYCombined)'),
       types = c('value = double(1)',
                 'size = double(1)', 'p0Traps = double(1)', 'sigma0 = double(0)',
                 'densCov = double(1)', 'betaDens = double(0)',
                 'habCovs = double(2)', 'betaHab = double(1)',
                 's = double(1)', 'trapCoords = double(2)', 
-                'localTrapsIndices = double(2)', 'localTrapsNum = double(1)',
-                'habitatGrid = double(2)', 'indicator = double(0)'),
+                'localTrapsIndices = double(2)', 'localTrapsNum = double(1)', 'resizeFactor = double(0)',
+                'habitatGrid = double(2)', 'indicator = double(0)', 'lengthYCombined = double(0)'),
       discrete = TRUE,
       mixedSizes = TRUE,
       pqAvail = FALSE)
-  ),
-  verbose = F)
+    ), verbose = F)
