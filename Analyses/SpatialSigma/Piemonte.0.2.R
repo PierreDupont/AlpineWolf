@@ -27,6 +27,7 @@ library(Rcpp)
 library(RcppArmadillo)
 library(RcppProgress)
 library(gridExtra)
+library(MetBrewer)
 
 
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
@@ -43,7 +44,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.4"
+modelName = "Piemonte.0.2"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -51,7 +52,7 @@ habitat = list( resolution = 10000,
                 buffer = 20000)
 
 ## DETECTORS SPECIFICATIONS
-detectors = list( resolution = 10000,
+detectors = list( resolution = 5000,
                   detSubResolution = 1000,
                   samplingMonths = c(10:12,1:4))
 
@@ -61,10 +62,9 @@ data = list( sex = c("F","M"),
              aug.factor = 5) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
-if(!dir.exists(thisDir)){dir.create(thisDir)}
-if(!dir.exists(file.path(thisDir, "input"))){dir.create(file.path(thisDir, "input"))}
-if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "output"))}
-
+dir.create(file.path(thisDir, "input"),recursive = T)
+dir.create(file.path(thisDir, "output"), recursive = T)
+dir.create(file.path(thisDir, "figures"), recursive = T)
 
 
 ## -----------------------------------------------------------------------------
@@ -73,28 +73,31 @@ if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "out
 ##---- Polygon of Italy and neighbouring countries
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
 
+##--- Regions 
+regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
+regions <- st_transform(x = regions, crs = st_crs(countries))
+regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
+plot(regions)
+regions <- regions[regions$DEN_REG %in% c("Piemonte", "Valle d'Aosta", "Liguria"), ]
+
+
+##--- Alps
+alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
+alps <- st_transform(x = alps, crs = st_crs(countries))
+plot(alps)
+
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
 studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
 studyArea <- studyAreaGrid %>%
   st_snap(x = ., y = ., tolerance = 0.0001) %>%
+  st_intersection(.,regions) %>%
   st_union() 
 
 ##--- SCR grid
 SCRGrid <- read_sf(file.path(dataDir,"GISData/SECR_presence_layer_2020_2021/SECR_presence_layer_2021.shp"))
 SCRGrid <- st_transform(x = SCRGrid, crs = st_crs(countries))
 SCRGrid <- SCRGrid[SCRGrid$Pres_20.21 == 1, ]
-
-##--- Regions 
-regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
-regions <- st_transform(x = regions, crs = st_crs(countries))
-regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
-plot(regions)
-
-##--- Alps
-alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
-alps <- st_transform(x = alps, crs = st_crs(countries))
-plot(alps)
 
 ##---- Plot check
 pdf(file = file.path(thisDir, "figures", paste0(modelName, "_ngs_map.pdf" )),
@@ -354,11 +357,6 @@ iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
 plot(studyArea)
 plot(PA, add = T)
-
-## ------   5. PRE-PROCESSED STUFF ------
-load(file.path(thisDir,"Habitat.RData"))
-load(file.path(thisDir,"Detectors.RData"))
-
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
@@ -1001,7 +999,7 @@ habitat$upScaledCoords <- habitat$scaledCoords + 0.5
 localObjects <- getLocalObjects(
   habitatMask = habitat$binary,
   coords = scaledCoords$coordsDataScaled[ ,1:2],
-  dmax = 25)
+  dmax = 8)
 
 
 
@@ -1014,7 +1012,7 @@ localObjects <- getLocalObjects(
 #                 k = 1,
 #                 searchtype = "radius",
 #                 radius = 10000)
-
+ngs <- st_intersection(ngs,studyArea)
 closest <- nn2( coordinates(detectors$sub.sp),
                 st_coordinates(ngs),
                 k = 1,
@@ -1494,11 +1492,11 @@ status.aug <- MakeAugmentation( y = status,
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
   for(c in 1:n.habCovs){
-    betaHab[c] ~ dnorm(0.0,0.01)
+    betaHabDens[c] ~ dnorm(0.0,0.01)
   }#c
   
   habIntensity[1:n.habWindows] <- exp(
-    hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
+    hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHabDens[1:n.habCovs])
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -1514,14 +1512,6 @@ modelCode <- nimbleCode({
       numGridCols = x.max)
   }#i
   
-  ACdensity[1:n.habWindows] <- getDensity(
-    s = s[1:n.individuals,1:2],
-    habitatGrid = habitatGrid2[1:y.max,1:x.max],
-    indicator = z[1:n.individuals],
-    numWindows = n.habWindows,
-    n.individuals = n.individuals)
-  
-  ACdensity1[1:n.habWindows] <- log(ACdensity[1:n.habWindows]+1) - dens.offset
   
   ##---- DEMOGRAPHIC PROCESS  
   psi ~ dunif(0,1)
@@ -1539,14 +1529,16 @@ modelCode <- nimbleCode({
   
   ##-- POPULATION SIZE
   N <- sum(z[1:n.individuals])
-
+  
   
   ##---- DETECTION PROCESS 
-  betaDens  ~ dnorm(0.0,0.01)
-
   for(c in 1:n.detCovs){
     betaDet[c] ~ dnorm(0.0,0.01)
-  }
+  }#c
+  
+  for(c in 1:n.habCovs){
+    betaHabDet[c] ~ dnorm(0.0,0.01)
+  }#c
   
   for(s in 1:n.states){
     for(ss in 1:2){
@@ -1558,13 +1550,15 @@ modelCode <- nimbleCode({
   }#s
   
   for(i in 1:n.individuals){
-    y[i,1:n.maxDets] ~ dbinomLocal_normal_habitatCov(
+    y[i,1:n.maxDets] ~ dbinomLocal_normal_SEM(
       resizeFactor = 1,
       size = size[1:n.detectors],
       p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
       sigma0 = sigma0[status[i],sex[i]+1],
-      habitatCov = ACdensity1[1:n.habWindows],
-      betaHabitat = betaDens,
+      densCov = dens.cov[1:n.habWindows],
+      betaDens = 0,
+      habCovs = hab.covs[1:n.habWindows,1:n.habCovs],
+      betaHab = betaHabDet[1:n.habCovs],
       s = s[i,1:2],
       trapCoords = detCoords[1:n.detectors,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -1586,7 +1580,6 @@ nimData <- list( y = yCombined.aug,
                  sex = sex.aug,
                  status = status.aug,
                  alpha = matrix(1,3,2),
-                 dens.offset = 0.2,
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords, 
                  hab.covs = cbind.data.frame(
@@ -1601,6 +1594,7 @@ nimData <- list( y = yCombined.aug,
                    "snow_fall" = detectors$grid$`snow_fall`,
                    "zone" = detectors$grid$`zone`,
                    "log_pop" = detectors$grid$`log_pop`),
+                 dens.cov = rep(1,habitat$n.HabWindows),
                  size = detectors$size,
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,
@@ -1621,29 +1615,9 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       x.max = dim(habitat$matrix)[2])
 
 nimParams <- c("N", "p0", "sigma0", "psi",
-               "betaDens","betaDet", "betaHab", "theta", "rho")
+               "betaHabDens","betaDet", "betaHabDet", "theta", "rho")
 
-nimParams2 <-  c("z", "s", "status", "sex", "ACdensity")
-
-# for(c in 1:4){
-#   load(file.path(thisDir, "input",
-#                  paste0(modelName, "_", c, ".RData")))
-# 
-#   nimParams <- c("N", "p0", "log.sigma0", "psi",
-#                  "betaDens","betaDet", "betaHab",
-#                  "theta", "rho")
-# 
-#   nimParams2 <-  c("z", "s", "status", "sex", "dens")
-# 
-#   save( modelCode,
-#         nimData,
-#         nimConstants,
-#         nimInits,
-#         nimParams,
-#         nimParams2,
-#         file = file.path(thisDir, "input",
-#                          paste0(modelName, "_", c, ".RData")))
-# }
+nimParams2 <-  c("z", "s", "status", "sex")
 
 
 
@@ -1684,19 +1658,17 @@ for(c in 1:4){
                     "z" = z.init,
                     "sex" = sex.init,
                     "status" = status.init,
-                    #"N.alpha.female" = 110,
-                    #"N.alpha.male" = 110,
                     "psi" = 0.5,
                     "rho" = 0.5,
                     "theta" = cbind(c(0.5,0.45,0.05),
                                     c(0.5,0.3,0.2)),
                     "betaDet" = rep(0,nimConstants$n.detCovs),
-                    "betaHab" = rep(0,nimConstants$n.habCovs),
-                    "betaDens" = 0,
+                    "betaHabDens" = rep(0,nimConstants$n.habCovs),
+                    "betaHabDet" = rep(0,nimConstants$n.habCovs),
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),
                     "sigma0" = cbind(c(0.5,0.5,1),
-                                    c(0.5,0.5,1)))
+                                     c(0.5,0.5,1)))
   
   save( modelCode,
         nimData,
@@ -1739,43 +1711,39 @@ for(c in 1:1){
   print(system.time(
     runMCMCbites( mcmc = Cmcmc,
                   bite.size = 500,
-                  bite.number = 12,
+                  bite.number = 2,
                   path = file.path(thisDir, paste0("output/chain",c)))
   ))
 }
-
-##---- Collect multiple MCMC bites and chains
-nimOutput <- collectMCMCbites(
-  path = file.path(thisDir, "output")
-  ,
-  burnin = 0
-  ,
-  pattern = "mcmcSamples"
-  ,
-  param.omit = NULL,progress.bar = F
-  )
-
-
-
-
-##---- Traceplots
-pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput$samples)
-graphics.off()
-
-
-##---- Process and save MCMC samples
-res <- ProcessCodaOutput(nimOutput$samples2)
-
-##---- Save processed MCMC samples
-save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 
 
 
 ## -----------------------------------------------------------------------------
 ## ------ V. PROCESS NIMBLE OUTPUT ------
-## ------   1. CALCULATE AC-BASED DENSITY ------
+## ------   1. PROCESS MCMC ------
+##---- Collect multiple MCMC bites and chains
+nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               burnin = 20,
+                               pattern = "mcmcSamples",
+                               param.omit = NULL,
+                               progress.bar = F)
+
+##---- Traceplots
+pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
+plot(nimOutput$samples)
+graphics.off()
+
+##---- Process and save MCMC samples
+res <- ProcessCodaOutput(nimOutput$samples)
+res2 <- ProcessCodaOutput(nimOutput$samples2)
+
+##---- Save processed MCMC samples
+save(res, res2, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
+
+
+
+## ------   2. CALCULATE AC-BASED DENSITY ------
 ##---- Load processed MCMC samples
 load(file.path(thisDir, paste0(modelName, "_mcmc.RData")))
 load(file.path(thisDir, "input", paste0(modelName, "_1.RData")))
@@ -1800,9 +1768,9 @@ row.names(hab.rgmx) <- "habitat"
 
 ##---- Calculate density
 WA_Density <- GetDensity(
-  sx = res$sims.list$s[ , ,1],
-  sy = res$sims.list$s[ , ,2],
-  z = res$sims.list$z,
+  sx = res2$sims.list$s[ , ,1],
+  sy = res2$sims.list$s[ , ,2],
+  z = res2$sims.list$z,
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = T,
@@ -1822,24 +1790,24 @@ table(regions.r[], useNA = "always")
 regions.unique <- na.omit(unique(regions.r[]))
 regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
 regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
+row.names(regions.rgmx) <- c("Piemonte","Valle d'Aosta","Liguria")   
 
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$Italia - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
+# alps.r <- fasterize(sf = st_as_sf(alps),
+#                     raster = habitat.r,
+#                     background = 0)
+# alps.r <- alps.r + habitat$Italia - 1
+# plot(alps.r)
+# table(alps.r[], useNA = "always")
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
 
 
 ##---- Calculate overall density
 WA_Italy <- GetDensity(
-  sx = res$sims.list$s[ , ,1],
-  sy = res$sims.list$s[ , ,2],
-  z = res$sims.list$z,
+  sx = res2$sims.list$s[ , ,1],
+  sy = res2$sims.list$s[ , ,2],
+  z = res2$sims.list$z,
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = T,
@@ -1849,13 +1817,13 @@ WA_status <- list()
 for(s in 0:1){
   WA_status[[s+1]] <- list()
   for(ss in 1:3){
-    status <- (res$sims.list$z == 1) &
-      (res$sims.list$sex == s) &
-      (res$sims.list$status == ss)
+    status <- (res2$sims.list$z == 1) &
+      (res2$sims.list$sex == s) &
+      (res2$sims.list$status == ss)
     
     WA_status[[s+1]][[ss]] <- GetDensity(
-      sx = res$sims.list$s[ , ,1],
-      sy = res$sims.list$s[ , ,2],
+      sx = res2$sims.list$s[ , ,1],
+      sy = res2$sims.list$s[ , ,2],
       z = status,
       IDmx = habitat.id,
       aliveStates = 1,
@@ -1864,72 +1832,36 @@ for(s in 0:1){
   }
 }
 
-##---- Create a matrix of admin units binary indicators
-##---- (rows == regions ; columns == habitat raster cells)
-comp.rgmx <- rbind(habitat$comparison[] == 1)
-comp.rgmx[is.na(comp.rgmx)] <- 0
-row.names(comp.rgmx) <- "comparison"
-
-##---- Calculate density
-WA_Comp <- GetDensity(
-  sx = res$sims.list$s[ , ,1],
-  sy = res$sims.list$s[ , ,2],
-  z = res$sims.list$z,
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = T,
-  regionID = comp.rgmx)
-
-
-##---- Create a matrix of Wolf Presence grid 
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = 0)
-regions.r <- regions.r + habitat$extraction - 1
-plot(regions.r)
-table(regions.r[], useNA = "always")
-
-regions.unique <- na.omit(unique(regions.r[]))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$extraction - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
-
-##---- Calculate density
-WA_Extract <- GetDensity(
-  sx = res$sims.list$s[ , ,1],
-  sy = res$sims.list$s[ , ,2],
-  z = res$sims.list$z,
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = T,
-  regionID = regions.rgmx)
+# ##---- Create a matrix of admin units binary indicators
+# ##---- (rows == regions ; columns == habitat raster cells)
+# comp.rgmx <- rbind(habitat$comparison[] == 1)
+# comp.rgmx[is.na(comp.rgmx)] <- 0
+# row.names(comp.rgmx) <- "comparison"
+# 
+# ##---- Calculate density
+# WA_Comp <- GetDensity(
+#   sx = res2$sims.list$s[ , ,1],
+#   sy = res2$sims.list$s[ , ,2],
+#   z = res2$sims.list$z,
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = T,
+#   regionID = comp.rgmx)
+# 
 
 
 
-
-## ------   2. DENSITY ------
+## ------   3. DENSITY ------
 pdf(file = file.path(thisDir, paste0(modelName,"_Density.pdf")),
     width = 20, height = 15)
 
-## ------     2.1. DENSITY MAP ------
+## ------     3.1. DENSITY MAP ------
 ##---- Set color scale
 maxDens <- max(WA_Density$MeanCell)
 cuts <- seq(0, maxDens, length.out = 100)   
 colFunc <- colorRampPalette(c("white","slateblue","yellow","orange","red","red"))
 col <- colFunc(100)
-par(mfrow = c(2,2), mar = c(4,4,0,0))
+par(mfrow = c(1,2), mar = c(4,4,0,0))
 
 ##---- Plot overall density raster
 meanDensity.R <- habitat.r
@@ -1967,41 +1899,6 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
        side = 1, font = 2, cex = 1.5)
 
 
-##---- Plot density raster for comparison between models
-comp.R <- habitat.r
-comp.R[ ] <- WA_Comp$MeanCell
-comp.R[is.na(habitat$comparison[])] <- NA
-
-plot( habitat$polygon, col = "gray80", border = grey(0.3))
-plot( comp.R, add = T,
-      breaks = cuts, col = col,
-      axes = F, box = F, bty = "n", legend = F)
-plot( habitat$polygon, add = T, border = grey(0.3))
-plot(st_geometry(countries), add = T, lwd = 2)
-
-mtext( text = paste( "N = ", round(WA_Comp$summary["Total",1],1),
-                     " [", round(WA_Comp$summary["Total",4],1), " ; ",
-                     round(WA_Comp$summary["Total",5],1), "]", sep = ""),
-       side = 1, font = 2, cex = 1.5)
-
-
-##---- Plot density raster for extraction
-extract.R <- habitat.r
-extract.R[ ] <- WA_Extract$MeanCell
-extract.R[is.na(habitat$extraction[])] <- NA
-
-plot( habitat$polygon, col = "gray80", border = grey(0.3))
-plot( extract.R, add = T,
-      breaks = cuts, col = col,
-      axes = F, box = F, bty = "n", legend = F)
-plot( habitat$polygon, add = T, border = grey(0.3))
-plot(st_geometry(countries), add = T, lwd = 2)
-
-mtext( text = paste( "N = ", round(WA_Extract$summary["Total",1],1),
-                     " [", round(WA_Extract$summary["Total",4],1), " ; ",
-                     round(WA_Extract$summary["Total",5],1), "]", sep = ""),
-       side = 1, font = 2, cex = 1.5)
-
 
 ## ------  REALIZED vs. PREDICTED DENSITY  
 ##-- Calculate relative density
@@ -2010,7 +1907,7 @@ relativeDens.r[] <- meanDensity.R[]/sum(meanDensity.R[], na.rm = T)
 
 ##-- Calculate relative point-process intensity
 intensity.r <- habitat.r
-intensity.r[intensity.r[] > 0] <- c(exp(res$mean$betaHab %*% t(nimData$hab.covs)))
+intensity.r[intensity.r[] > 0] <- c(exp(res$mean$betaHabDens %*% t(nimData$hab.covs)))
 relativeInt.r <- intensity.r
 relativeInt.r[] <- relativeInt.r[]/sum(relativeInt.r[],na.rm=T)
 
@@ -2102,8 +1999,8 @@ for(s in 1:length(sex)){
 }
 
 
-## ------     2.2. DENSITY EFFECT PLOT ------
-par(mfrow = c(2,2), mar = c(6,6,0,0))
+## ------     3.2. DENSITY EFFECT PLOT ------
+par(mfrow = c(2,3), mar = c(6,6,0,0))
 covNames <- names(nimData$hab.covs)# c("alpine", "forest", "IUCN")
 pred.hab.covs <- apply(nimData$hab.covs,
                        2,
@@ -2114,12 +2011,12 @@ pred.hab.covs <- apply(nimData$hab.covs,
 mean.hab.covs <- apply(nimData$hab.covs, 2, mean)
 cols <- hcl.colors(length(mean.hab.covs))
 
-for(b in 1:ncol(res$sims.list$betaHab)){
+for(b in 1:ncol(res$sims.list$betaHabDens)){
   intensity <- do.call( rbind,
-                        lapply(1:length(res$sims.list$betaHab[ ,b]),
+                        lapply(1:length(res$sims.list$betaHabDens[ ,b]),
                                function(x){
-                                 exp(res$sims.list$betaHab[x,b] * pred.hab.covs[ ,b] + 
-                                       sum(res$sims.list$betaHab[x,-b] * mean.hab.covs[-b]))
+                                 exp(res$sims.list$betaHabDens[x,b] * pred.hab.covs[ ,b] + 
+                                       sum(res$sims.list$betaHabDens[x,-b] * mean.hab.covs[-b]))
                                }))
   
   
@@ -2155,41 +2052,104 @@ graphics.off()
 
 
 
-## ------   3. DETECTION ------
-pdf(file = file.path(thisDir, paste0(modelName,"_Detection.pdf")),
-    width = 15, height = 15)
+## ------   4. SIGMA ------
+pdf(file = file.path(thisDir, paste0(modelName,"_Sigma.pdf")),
+    width = 20, height = 15)
 
-## ------     3.1. DETECTION MAP ------
+## ------     4.1. SIGMA MAP ------
 sex <- c("female","male")
 status <- c("alpha","pup","other")
 for(ss in 1:2){
   for(s in 1:3){
-    detectors$grid[ ,paste0("p0_",sex[ss],"_",status[s])] <- c(ilogit(logit(res$mean$p0[s,ss]) +
-                                                                        res$mean$betaDet %*% t(nimData$det.covs)))
-    # plot(st_geometry(detectors$grid[ ,paste0("p0.",ss,".",s)]),
-    #      main = paste0("p0_",sex[ss],"_",status[s]))
-    # plot(detectors$grid[ ,paste0("p0.",ss,".",s)],
-    #      add = T,
-    #      breaks = seq(0,1,0.05))    
-  }
+    habitat$grid[ ,paste0("sigma_",sex[ss],"_",status[s])] <- 
+      c(exp(log(res$mean$sigma0[s,ss]) + res$mean$betaHabDet %*% t(nimData$hab.covs)))*10
+  }#s
+}#ss
+plot(habitat$grid[ ,c("sigma_female_alpha","sigma_female_pup","sigma_female_other",
+                      "sigma_male_alpha","sigma_male_pup","sigma_male_other")],
+     key.pos = 4,
+     breaks = exp(seq(1.1,2.8,0.15)))
+
+
+
+
+## ------     4.2. SIGMA EFFECT PLOT ------
+par(mfrow = c(2,3), mar = c(6,5,2,0))
+covNames <- names(nimData$hab.covs)
+pred.hab.covs <- apply(nimData$hab.covs,
+                       2,
+                       function(c){
+                         seq(min(c),
+                             max(c),
+                             length.out = 100)})
+mean.hab.covs <- apply(nimData$hab.covs, 2, mean)
+cols <- hcl.colors(length(mean.hab.covs))
+
+for(b in 1:ncol(res$sims.list$betaHabDet)){
+  sigma <- do.call( rbind,
+                        lapply(1:length(res$sims.list$betaHabDet[ ,b]),
+                               function(x){
+                                 exp(log(res$sims.list$sigma0[x,1,1]) +
+                                       res$sims.list$betaHabDet[x,b] * pred.hab.covs[ ,b] + 
+                                       sum(res$sims.list$betaHabDet[x,-b] * mean.hab.covs[-b]))*10
+                               }))
+  
+  mean.int <- colMeans(sigma)
+  quant.int <- apply(sigma, 2, function(x)quantile(x,c(0.025,0.5,0.975)))
+  maxD <- round(max(quant.int),3)
+  plot( x = pred.hab.covs[ ,b],
+        y = quant.int[2, ],
+        type = "n", ylim = c(0, maxD), xlim = range(pred.hab.covs[ ,b]),
+        ylab = expression(paste(sigma, " (km)")),
+        xlab = covNames[b], axes = FALSE)
+  minCov <- min(st_drop_geometry(habitat$grid[ ,covNames[b]]))
+  maxCov <- max(st_drop_geometry(habitat$grid[ ,covNames[b]]))
+  xLabels <- round(seq(minCov, maxCov, length.out = 10),2)
+  axis(1,
+       at = round(seq(min(pred.hab.covs[ ,b]), max(pred.hab.covs[ ,b]), length.out = 10),3),
+       labels = xLabels, cex = 2,
+       tck = 0.01, las = 1, hadj = 0.5)
+  axis(2, at = seq(0,maxD,length.out = 6),
+       labels = seq(0,maxD,length.out = 6),
+       tck = 0.01, las = 1, cex = 2)
+  
+  polygon(x = c(pred.hab.covs[ ,b],rev(pred.hab.covs[ ,b])),
+          y = c(quant.int[1, ],rev(quant.int[3, ])), border = F,
+          col = adjustcolor(cols[b], alpha.f = 0.5))
+  
+  points( x = pred.hab.covs[ ,b],
+          y = quant.int[2,],
+          lwd = 2, type = "l", col = cols[b])
+  
 }
-plot(detectors$grid[ ,c("p0_female_alpha", 
-                        "p0_male_alpha",
-                        "p0_female_pup",
-                        "p0_male_pup",
-                        "p0_female_other",
-                        "p0_male_other")],
-     key.pos = 4, breaks = seq(0,1,0.05)) 
+graphics.off()
 
 
-## ------     3.2. DETECTION EFFECT PLOT ------
-par(mfrow = c(3,2), mar = c(8,8,0,4))
-covNames <- c("transect_L",
-              "transect_qi",
-              "snow_fall",
-              "zone",
-              "log_pop")
 
+## ------   5. p0 ------
+pdf(file = file.path(thisDir, paste0(modelName,"_p0.pdf")),
+    width = 20, height = 15)
+
+## ------     5.1. p0 MAP ------
+sex <- c("female","male")
+status <- c("alpha","pup","other")
+for(ss in 1:2){
+  for(s in 1:3){
+    detectors$grid[ ,paste0("p0_",sex[ss],"_",status[s])] <- 
+      c(ilogit(logit(res$mean$p0[s,ss]) +
+                 res$mean$betaDet %*% t(nimData$det.covs)))
+  }#s
+}#ss
+plot(detectors$grid[ ,c("p0_female_alpha","p0_female_pup","p0_female_other", 
+                        "p0_male_alpha","p0_male_pup","p0_male_other")],
+     key.pos = 4, breaks = exp(seq(-8,0,1))) 
+
+
+
+
+## ------     5.2. p0 EFFECT PLOT ------
+par(mfrow = c(2,3), mar = c(8,8,0,4))
+covNames <- names(nimData$det.covs)
 pred.det.covs <- apply(nimData$det.covs,
                        2,
                        function(c){
@@ -2238,8 +2198,8 @@ graphics.off()
 
 
 
-## ------   4. PARAMETER TABLES ------
-## ------     4.1. SCR PARAMETERS ------
+## ------   6. PARAMETER TABLES ------
+## ------     6.1. SCR PARAMETERS ------
 #paramSimple <- sapply(strsplit(colnames(res$sims.list), split = '\\['), '[', 1)
 params.simple <- names(res$mean)[!names(res$mean) %in% c("s","z")]
 
@@ -2270,12 +2230,12 @@ names(params.summary) <- c("mean", "sd", "2.5%CI", "97.5%CI", "Rhat", "n.eff")
 
 
 
-## ------     4.2. ABUNDANCES ------
+## ------     6.2. ABUNDANCES ------
 WA_Italy$summary
 
 
 
-## ------   5. SPACE-USE ------
+## ------   7. SPACE-USE ------
 # ## Save input files for a few iterations
 # iter <- seq(2001, dim(res$sims.list$s)[1], by = 100)
 # 
@@ -2370,7 +2330,7 @@ WA_Italy$summary
 
 
 ##------------------------------------------------------------------------------
-# ## EE
+##-- EE
 # pdf(file = file.path(thisDir, paste0(modelName,"_ridge.pdf")),
 #     width = 30, height = 22)
 # ridgeMap( ital.R,

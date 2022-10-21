@@ -29,35 +29,46 @@ runMCMCbites <- function( mcmc,
                           bite.size,
                           bite.number,
                           path){
-  if(!dir.exists(path))dir.create(path, recursive = T)
+  if(!dir.exists(path))dir.create(path)
   ptm <- proc.time()
   ## Loop over number of bites
   for(nb in 1:bite.number){
     print(nb)
     if(nb == 1){
       ## run initial MCMC
-      MCMCRuntime <- system.time(Cmcmc$run(bite.size))
+      MCMCRuntime <- system.time(mcmc$run(bite.size))
     } else {      
       ## run subsequent MCMCs
-      MCMCRuntime <- system.time(Cmcmc$run(bite.size,
+      MCMCRuntime <- system.time(mcmc$run(bite.size,
                                            reset = FALSE))
     }
     
     ## STORE BITE OUTPUT IN A MATRIX
-    mcmcSamples <- as.matrix(Cmcmc$mvSamples)
+    mcmcSamples <- as.matrix(mcmc$mvSamples)
+    mcmcSamples2 <- as.matrix(Cmcmc$mvSamples2)
     CumulRuntime <- proc.time() - ptm
     
     ## EXPORT NIMBLE OUTPUT 
     outname <- file.path( path,
-                          paste0("MCMC_bite_",nb, ".RData"))
-    save( CumulRuntime,
-          MCMCRuntime,
-          mcmcSamples,
-          file = outname)
+                          paste0("MCMC_bite_", nb, ".RData"))
+    if(is.null(dim(mcmcSamples2))){
+      save( CumulRuntime,
+            MCMCRuntime,
+            mcmcSamples,
+            file = outname)
+    }else{
+      save( CumulRuntime,
+            MCMCRuntime,
+            mcmcSamples,
+            mcmcSamples2,
+            file = outname)
+    }
+
     
     ## FREE UP MEMORY SPACE 
     rm("mcmcSamples") 
-    Cmcmc$mvSamples$resize(0) ## reduce the internal mvSamples object to 0 rows,
+    mcmc$mvSamples$resize(0) ## reduce the internal mvSamples object to 0 rows
+    mcmc$mvSamples2$resize(0) ## reduce the internal mvSamples object to 0 rows,
     gc() ## run R's garbage collector
   }#nb
 }
@@ -95,7 +106,7 @@ collectMCMCbites <- function( path,
   }
   
   ## Loop over the different MCMC chains
-  res <- list()
+  res <- res2 <- list()
   for(p in 1:length(path.list)){
     print(paste("Processing MCMC chain", p, "of", length(path.list)))
     
@@ -107,7 +118,7 @@ collectMCMCbites <- function( path,
     out.files <- out.files[newOrder]
     
     ## Loop over MCMC bites
-    out.list <- list()
+    out.list <- out.list2 <- list()
     for(b in (burnin+1):num.bites){
       ## Load bite number "x"
       load(file.path(path.list[p],out.files[b]))
@@ -125,13 +136,37 @@ collectMCMCbites <- function( path,
       paramInd <- which(! paramSimple %in% param.omit)
       out.list[[b]] <- out[ ,paramInd] 
       
+      ## Get the mcmc samples 2 object (only if thin2 used)
+      objInd2 <- which(ls() == paste0(pattern,"2"))
+      sp2yes <- length(objInd2 > 0)
+      if(sp2yes){
+        out2 <- get(ls()[objInd2])
+        paramSimple2 <- sapply(strsplit(colnames(out2), split = '\\['), '[', 1)
+        paramInd2 <- which(! paramSimple2 %in% param.omit)
+        out.list2[[b]] <- out2[ ,paramInd2]   
+      }
       ## Print progress bar
       if(progress.bar){ setTxtProgressBar(pb,b) }
     }#b
     if(progress.bar)close(pb)
+    
+    ## Combine into matrices
     out.mx <- do.call(rbind, out.list)
     res[[p]] <- as.mcmc(out.mx)
+    if(sp2yes){
+      out.mx2 <- do.call(rbind, out.list2)
+      res2[[p]] <- as.mcmc(out.mx2)
+    }
   }#p
-  res <- as.mcmc.list(res)
-  return(res)
+  
+  if(sp2yes){
+    res <- as.mcmc.list(res)
+    res2 <- as.mcmc.list(res2)
+    return(list(samples = res,
+                samples2 = res2))
+  }else{
+    res <- as.mcmc.list(res)
+    return(res)
+  }
+
 }
