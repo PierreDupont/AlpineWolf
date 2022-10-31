@@ -103,7 +103,7 @@ OutDir <- file.path(thisDir, "output")
 resLista <-list()  #create a list which will contain all your results
 
 
-rpp <- 10
+rpp <- 100
 sim_names <- c("3","6")  #Here the names of your simulation  (i.e. 25,50,75,100)
 
   for(sc in 1:length(sim_names)){
@@ -123,7 +123,7 @@ sim_names <- c("3","6")  #Here the names of your simulation  (i.e. 25,50,75,100)
     
     ## Collect bites from the different chains for this percentage and this repetition only
     nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
-                                   burnin = 0,
+                                   burnin = 2,
                                    param.omit = c("s","z","sex","status"))
     
    

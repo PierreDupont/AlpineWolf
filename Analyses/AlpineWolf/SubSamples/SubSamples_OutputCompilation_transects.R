@@ -103,8 +103,8 @@ OutDir <- file.path(thisDir, "output")
 resLista <-list()  #create a list which will contain all your results
 
 
-rpp <- 10
-sim_names <- c("3","6")  #Here the names of your simulation  (i.e. 25,50,75,100)
+rpp <- 100
+sim_names <- c("25","50","75")  #Here the names of your simulation  (i.e. 25,50,75,100)
 
 for(sc in 1:length(sim_names)){
   
@@ -115,7 +115,7 @@ for(sc in 1:length(sim_names)){
     # for(rp in 6:rpp){  #This will be from 1:50
     # tryCatch({ 
     ## List output files for scenario "sc" and repetition "rp" only
-    outputs <- list.files(OutDir, paste0("AlpineWolf.SubSample.TransectsRepetitions_",sim_names[sc],"_",rp,"_"))
+    outputs <- list.files(OutDir, paste0("AlpineWolf.SubSample.Transects_",sim_names[sc],"_",rp,"_"))
     print(outputs)
     # if (file.size(outputs) < 0) stop("file is 0 KB!")
     # }, error= function(e){cat("ERROR:", conditionMessage(e), "\n")})
@@ -123,7 +123,7 @@ for(sc in 1:length(sim_names)){
     
     ## Collect bites from the different chains for this percentage and this repetition only
     nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
-                                   burnin = 0,
+                                   burnin = 2,
                                    param.omit = c("s","z","sex","status"))
     
     
@@ -162,21 +162,21 @@ for(sc in 1:length(sim_names)){
 }#sc
 
 
-res3 <- do.call("rbind", resLista[[1]])
-res3["scenario"] <- "3"
-res6 <- do.call("rbind", resLista[[2]])
-res6["scenario"] <- "6"
+res25 <- do.call("rbind", resLista[[1]])
+res25["scenario"] <- "25"
+res50 <- do.call("rbind", resLista[[2]])
+res50["scenario"] <- "50"
+res75 <- do.call("rbind", resList[[3]])
+res75["scenario"] <- "75"
 
-# res75 <- do.call("rbind", resList[[3]])
-
-all_res <- rbind(res3, res6)
-write.csv(all_res, "transect_rep.csv")
+all_res <- rbind(res25, res50,res75)
+write.csv(all_res, "transect_sub.csv")
 
 
 ## -----------------------------------------------------------------------------
 ## ------   7. PLOT RESULTS -----
 
-all_res <- read.csv(file.path(thisDir, "results_transectsubsample.csv"))
+all_res <- read.csv(file.path(thisDir, "results_transectsub.csv"))
 def_res <- read.csv(file.path(thisDir, "res5_2.csv"))
 def_res["scenario"] <- "default"
 
