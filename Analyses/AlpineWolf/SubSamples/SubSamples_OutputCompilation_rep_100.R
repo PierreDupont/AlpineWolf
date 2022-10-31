@@ -100,7 +100,7 @@ resLista <-list()  #create a list which will contain all your results
 
 
 rpp <- 100
-sim_names <- c("3","6")  #Here the names of your simulation  (i.e. 25,50,75,100)
+sim_names <- c("25","50","75" )  #Here the names of your simulation  (i.e. 25,50,75)
 
   for(sc in 1:length(sim_names)){
     
@@ -119,7 +119,7 @@ sim_names <- c("3","6")  #Here the names of your simulation  (i.e. 25,50,75,100)
     
     ## Collect bites from the different chains for this percentage and this repetition only
     nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
-                                   burnin = 0,
+                                   burnin = 2,
                                    param.omit = c("s","z","sex","status"))
     
    
@@ -158,14 +158,14 @@ sim_names <- c("3","6")  #Here the names of your simulation  (i.e. 25,50,75,100)
            }#sc
 
 
-res3 <- do.call("rbind", resLista[[1]])
-res3["scenario"] <- "3"
-res6 <- do.call("rbind", resLista[[2]])
-res6["scenario"] <- "6"
+res25 <- do.call("rbind", resLista[[1]])
+res25["scenario"] <- "25"
+res50 <- do.call("rbind", resLista[[2]])
+res50["scenario"] <- "50"
+res75 <- do.call("rbind", resLista[[3]])
+res75["scenario"] <- "75"
 
-# res75 <- do.call("rbind", resList[[3]])
-
-all_res <- rbind(res3, res6)
+all_res <- rbind(res25, res50, res75)
 
     
 
