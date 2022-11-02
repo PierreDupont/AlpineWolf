@@ -60,10 +60,16 @@ data = list( sex = c("F","M"),
              status = c("alpha","pup","other"),
              aug.factor = 6) 
 
+## SUBSAMPLING SPECIFICATION
+max.rep = 100       ## Here the nmax number of repetitions(i.e. 100)
+sim_names = c(3,6)  ## Here the names of your simulation  (i.e. 25,50,75,100)
+
+## SET DIRECTORIES
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
 if(!dir.exists(file.path(thisDir, "input"))){dir.create(file.path(thisDir, "input"))}
 if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "output"))}
+if(!dir.exists(file.path(thisDir, "results"))){dir.create(file.path(thisDir, "results"))}
 
 
 
@@ -168,8 +174,8 @@ ngs_opp <- ngs[!ngs$Sample.ID %in% ngs_sys$Sample.ID, ]
 
 
 ##---- Loop over the different subsampling fractions 
-for (num in c(3,6)){
-  for (rep in 1:100) {
+for (num in sim_names){
+  for (rep in 1:max.rep) {
     ## ------   1. SUBSAMPLE TRANSECT REPETITIONS & NGS DATA -----   
     ##---- Subset repetitions  
     trans3 <- transects %>% 
@@ -490,3 +496,128 @@ for (num in c(3,6)){
 
 
 
+
+## ------ IV. FIT MODEL -----
+##---- Create the nimble model object
+nimModel <- nimbleModel( code = modelCode,
+                         constants = nimConstants,
+                         inits = nimInits,
+                         data = nimData,
+                         check = FALSE,
+                         calculate = FALSE) 
+nimModel$calculate()
+
+##---- Compile the nimble model object to C++
+CsimModel <- compileNimble(nimModel)
+CsimModel$calculate()
+
+##---- Configure and compile the MCMC object 
+conf <- configureMCMC( model = nimModel,
+                       monitors = nimParams,
+                       thin = 1)
+Rmcmc <- buildMCMC(conf)
+compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
+Cmodel <- compiledList$model
+Cmcmc <- compiledList$mcmc
+
+##---- Run nimble MCMC in multiple bites
+system.time(
+  runMCMCbites( mcmc = Cmcmc,
+                bite.size = 500,
+                bite.number = 2,
+                path = file.path(thisDir, paste0("output/chain",c)))
+)
+
+
+##---- Collect multiple MCMC bites and chains
+nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
+                                   burnin = 0,
+                                   param.omit = c("s","z","sex","status"))
+
+##---- Traceplots
+pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
+plot(nimOutput_noZ)
+graphics.off()
+
+
+##---- Process and save MCMC samples
+nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               burnin = 0)
+res <- ProcessCodaOutput(nimOutput)
+
+##---- Save processed MCMC samples
+save(res, file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
+
+
+
+## -----------------------------------------------------------------------------
+## ------ V. PROCESS OUTPUTS -----
+##-- create a list which will contain all your results
+resLista <- list()  
+for(num in 1:length(sim_names)){
+  
+  tempLista <- list() ## Temporary list for each scenario
+  
+  for(rep in 1:max.rep){  
+    
+    ## List output files for scenario "num" and repetition "rep" only
+    outPattern <- paste0(modelName, "_",  sim_names[num], "_", rep, "_") 
+    outputs <- list.files(outDir,  pattern = outPattern)
+    
+    ## continue only if there are some outputs matching the pattern
+    if(length(outputs) > 0){
+      
+      print(outputs)
+      
+      ## Check to make sure all files listed in "outputs" are bigger than 0 KB 
+      if (any( file.size(file.path(outDir, outputs)) <= 0)) stop(paste0("One of ",outPattern," files is 0 KB!"))
+      
+      ## Collect bites from the different chains 
+      nimOutput <- collectMCMCbites( path = file.path(outDir, outputs),
+                                     burnin = 0,
+                                     param.omit = c("s","z","sex","status"))
+      
+      ## Continue processing for this output inside the loop (e.g. extract mean values and CI for N, sigma etc...)
+      ## Attach chains
+      nimOutput <- do.call(rbind, nimOutput$samples)
+      ## Obtain columns names
+      params <- colnames(nimOutput)
+      ## turn nimOutput as df 
+      nimOutput <- as.data.frame(nimOutput)
+      
+      ## run functions to get stats
+      means <- col_mean(nimOutput, params)
+      sd <- col_sd(nimOutput,params)
+      CV <- col_cv(nimOutput,params)
+      uci <- col_uci(nimOutput,params)
+      lci <- col_lci(nimOutput,params)
+      
+      ## Store only the minimum in an object to summarize your results (e.g. N[num,rep] <- mean(nimOutput[ ,"N"])
+      ## merge all stats in one df
+      res <- as.data.frame(rbind(means,sd,CV,lci,uci))
+      ## create columns for stats
+      res2 <- tibble::rownames_to_column(res, "stat")
+      params2 <- append(params, "stat", 0)
+      colnames(res2) <- params2
+      
+      ## Add scenario name
+      res2$scenario <- sim_names[num]
+      
+      ## store df per each repetition in a temporary list
+      tempLista[[rep]] <- res2
+    }
+  }#rep
+  ## Store all scenarios in one final list
+  resLista[[num]] <- do.call(rbind,tempLista)
+}#sc
+
+##-- Give names to the list
+names(resLista) <- sim_names
+
+##-- Combine results into a dataframe and save as .csv
+res <- do.call(rbind, resLista)
+write.csv(res,
+          file = file.path(thisDir, "results", paste0(modelName,".csv")))
+
+
+## -----------------------------------------------------------------------------
