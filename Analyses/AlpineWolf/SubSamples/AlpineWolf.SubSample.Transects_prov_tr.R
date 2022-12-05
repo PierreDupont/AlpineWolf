@@ -164,7 +164,7 @@ ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx]
 ## -----------------------------------------------------------------------------
 ## ------ III. SUBSAMPLE TRANSECTS ------
 ##---- Buffer all transects with 500m radius
-trans_buf <- st_buffer(trans, dist = 500)
+trans_buf <- st_buffer(transects, dist = 500)
 
 ##---- Split NGS data into systematic and opportunistic samples
 ngs_sys <- st_filter(ngs,trans_buf)
@@ -178,7 +178,6 @@ ngs_opp$transect_ID <- NA
 ##---- Loop over the different subsampling fractions 
 for (frac in sim_names){
   for (rep in 1:max.rep) {
-    
     
     ## ------   1. SUBSAMPLE TRANSECTS  -----   
     ##---- Sub-sample transects
@@ -197,7 +196,9 @@ for (frac in sim_names){
       group_by(transect_i) %>%
       slice(sample(1:n(), pmin(num, n()))) 
     
-    trans3_b <- st_buffer(trans3, dist = 500)
+      
+    trans3_b <- filter(trans_buf, path_id %in% trans3$path_id)
+    # trans3_b <- st_buffer(trans3, dist = 500)
     
     ##---- Extract ngs falling inside trans subsampled buffers
     ngs3 <- st_filter(ngs_sys, trans3_b) 
