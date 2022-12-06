@@ -68,7 +68,7 @@ iter <- 1
            
       
        for (rp in 1:rep) {
-           for ( it in iter)
+           for ( it in iter) {
 
     ##---- Load input file
     inputs <- load(file.path(inDir, paste0("AlpineWolf.SubSample.rep_100_", sc, "_", rp,"_", it,"rep.RData")))
@@ -132,7 +132,8 @@ iter <- 1
     # store df per each repetition in a temporary list
     tempLista[[rp]] <- input_data
     
-    }#rp
+    }#it
+     }#rp
     
     # store all scenarios in one final list
     resLista[[sc]] <- tempLista

@@ -99,22 +99,23 @@ my_colors <- wes_palette("GrandBudapest2")[1:3]
 facet_lab <- as_labeller(c('means' = "Means", 
                            'sd' = "Standard Deviation"))
 
+x_labs <- c("3", " 6", "full dataset")
 
-vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
+# vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
 
-vl + geom_violin(alpha = 1.2) +
-  facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  geom_point(data = def_res, size =3, alpha = 1.2, color = def_colors) +
-  # scale_x_discrete(labels= x_labs) +
-  scale_fill_manual(values=my_colors) +
-  labs(title="N - Wolves abundance", fill ="Search Events", y = "N", x = "Number of Search Events") +
-  theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
-        axis.text.x = element_text(size = 11, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="none", legend.box = "horizontal") 
-  
-ggsave("transectsrepetitionsvl_N_3-6.jpeg", dpi = 300)
+# vl + geom_violin(alpha = 1.2) +
+#   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
+#   geom_point(data = def_res, size =3, alpha = 1.2, color = def_colors) +
+#   # scale_x_discrete(labels= x_labs) +
+#   scale_fill_manual(values=my_colors) +
+#   labs(title="N - Wolves abundance", fill ="Search Events", y = "N", x = "Number of Search Events") +
+#   theme_ipsum() + 
+#   theme(plot.title = element_text(size = 11),
+#         axis.text.x = element_text(size = 11, hjust = 1),
+#         axis.text.y = element_text(size = 11),
+#         legend.position="none", legend.box = "horizontal") 
+#   
+# ggsave("transectsrepetitionsvl_N_3-6.jpeg", dpi = 300)
 
 
 bx <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
@@ -122,14 +123,16 @@ bx <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.charac
 bx + geom_boxplot(width = 0.6, alpha = 1.5) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
   geom_point(data = def_res, size =3, alpha = 1.2, color = def_colors) +
-  # scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs) +
   scale_fill_manual(values=my_colors) +
-  labs(title="N - Wolves abundance", fill ="Search Events", y = "N", x = "Number of Search Events") +
+  labs(title="N - Wolves abundance", fill ="Maximum number 
+  of Search Events", y = "N", x = "Maximum number of 
+       Search Events") +
   theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
+  theme(plot.title = element_text(size = 10),
         axis.text.x = element_text(size = 11, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="none", legend.box = "horizontal") 
+        axis.text.y = element_text(size = 10),
+        legend.position="none", legend.box = "vertical") 
 
 ggsave("transectsrepetitionsbx_N_3-6.jpeg", dpi = 300)
 
@@ -153,8 +156,8 @@ p0_52["scenario"] <- def_res$scenario
 p0_52 <- melt(p0_52,id.vars=c("scenario","stat"))
 
 
-x_labs <- c("female RI","female offspring","female other",
-  "male RI","male offspring","male other")
+x_labs_t <- c("F RI","F offspring","F other",
+              "M RI","M offspring","M other")
 
 
 ## ------   plots
@@ -165,38 +168,40 @@ x_labs <- c("female RI","female offspring","female other",
 # 
 
 ### VIOLIN
-vl <- ggplot(data = p0, aes(x=variable, y=value, fill = as.character(scenario))) 
-
-vl + geom_violin(alpha = 1.2, scale = "width") +
-  # geom_boxplot(width = 0.2, color="grey", alpha = 0.2) +
-  geom_point(data = p0_52, size=3,alpha = 1.2,color = def_colors) +
-  facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
-  scale_fill_manual(values=my_colors) +
-  labs(title="p0 - baseline detectability", fill ="Search events", y = "p0", x = "Number of Search Events") +
-  theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
-        axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="none", legend.box = "horizontal")
-
-ggsave("transectsrepetitionsvl_p0_3-6.jpeg", dpi = 300)
+# vl <- ggplot(data = p0, aes(x=variable, y=value, fill = as.character(scenario))) 
+# 
+# vl + geom_violin(alpha = 1.2, scale = "width") +
+#   # geom_boxplot(width = 0.2, color="grey", alpha = 0.2) +
+#   geom_point(data = p0_52, size=3,alpha = 1.2,color = def_colors) +
+#   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
+#   scale_x_discrete(labels= x_labs_t) +
+#   scale_fill_manual(values=my_colors) +
+#   labs(title="p0 - baseline detectability", fill ="Search events", y = "p0", x = "Number of Search Events") +
+#   theme_ipsum() + 
+#   theme(plot.title = element_text(size = 11),
+#         axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
+#         axis.text.y = element_text(size = 11),
+#         legend.position="none", legend.box = "horizontal")
+# 
+# ggsave("transectsrepetitionsvl_p0_3-6.jpeg", dpi = 300)
 
 ### BOXPLOT
 
 bx <- ggplot(data = p0, aes(x=variable, y=value, fill = as.character(scenario))) 
 
 bx + geom_boxplot(width = 0.6, alpha = 1) +
-  geom_point(data = p0_52, size=3, alpha = 1.2,color = def_colors) +
+  geom_boxplot(data = p0_52, alpha = 1.2,color = def_colors) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
-  labs(title="p0 - baseline detectability", fill ="Search events", y = "p0", x = "Number of Search Events") +
+  labs(title="p0 - baseline detectability", fill ="Maximum number 
+  of Search Events", y = "N", x = "Maximum number of 
+       Search Events") + 
   theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
+  theme(plot.title = element_text(size = 10),
         axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="bottom", legend.box = "horizontal")
+        axis.text.y = element_text(size = 10),
+        legend.position="none", legend.box = "vertical")
 
 ggsave("transectsrepetitionsbx_p0_3-6.jpeg", dpi = 300)
 
@@ -225,37 +230,39 @@ sigma_52 <- melt(sigma_52,id.vars=c("scenario","stat"))
 #   scale_x_discrete(labels= x_labs) +labs(title="Means", x ="sex-status", y = "sigma", fill = "Simulation")
 
 
-vl <- ggplot(data = sigma, aes(x=variable, y=value, fill = as.character(scenario))) 
-
-vl + geom_violin(alpha = 1.2, scale = "width") +
-  geom_point(data = sigma_52, size = 3, alpha = 1.2,color = def_colors) +
-  facet_wrap(vars(stat), scales = "free_y",labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
-  scale_fill_manual(values=my_colors) +
-  labs(title="σ - scale parameter", fill ="Search events", y = "sigma", x = "Number of Search Events") +
-  theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
-        axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="none", legend.box = "horizontal")
-
-ggsave("transectsrepetitionsvl_sigma_3-6.jpeg", dpi = 300)
+# vl <- ggplot(data = sigma, aes(x=variable, y=value, fill = as.character(scenario))) 
+# 
+# vl + geom_violin(alpha = 1.2, scale = "width") +
+#   geom_point(data = sigma_52, size = 3, alpha = 1.2,color = def_colors) +
+#   facet_wrap(vars(stat), scales = "free_y",labeller = facet_lab) + 
+#   scale_x_discrete(labels= x_labs) +
+#   scale_fill_manual(values=my_colors) +
+#   labs(title="σ - scale parameter", fill ="Search events", y = "sigma", x = "Number of Search Events") +
+#   theme_ipsum() + 
+#   theme(plot.title = element_text(size = 11),
+#         axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
+#         axis.text.y = element_text(size = 11),
+#         legend.position="none", legend.box = "horizontal")
+# 
+# ggsave("transectsrepetitionsvl_sigma_3-6.jpeg", dpi = 300)
 
 
 
 bx <- ggplot(data = sigma, aes(x=variable, y=value, fill = as.character(scenario))) 
 
 bx + geom_boxplot(width = 0.6, alpha = 1.5) +
-  geom_point(data = sigma_52, size = 3, alpha = 1.2,color = def_colors) +
+  geom_boxplot(data = sigma_52, alpha = 1.2,color = def_colors) +
   facet_wrap(vars(stat), scales = "free_y",labeller=facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
-  labs(title="σ - scale parameter", fill ="Search events", y = "sigma", x = "Number of Search Events") +
+  labs(title="σ - scale parameter", fill ="Maximum number 
+  of Search Events", y = "N", x = "Maximum number of 
+       Search Events") + 
   theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
+  theme(plot.title = element_text(size = 10),
         axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="none", legend.box = "horizontal")
+        axis.text.y = element_text(size = 10),
+        legend.position="bottom", legend.box = "horizontal")
 
 ggsave("transectsrepetitionsbx_sigma_3-6.jpeg", dpi = 300)
 

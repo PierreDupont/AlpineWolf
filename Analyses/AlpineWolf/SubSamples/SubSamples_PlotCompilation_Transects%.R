@@ -9,23 +9,14 @@ rm(list=ls())
 
 
 ## ------2. IMPORT REQUIRED LIBRARIES ------
-library(rgdal)
-library(raster)
-library(coda)
-library(nimble)
-library(nimbleSCR)
+
 library(stringr)
 library(abind)
 library(R.utils)
-library(sf)
-library(fasterize)
 library(dplyr)
 library(lubridate)
 library(stars)
 library(RANN)
-library(Rcpp)
-library(RcppArmadillo)
-library(RcppProgress)
 library(gridExtra)
 library(MetBrewer)
 library(fs)
@@ -62,7 +53,7 @@ ResDir <- file.path(thisDir, "results")
 
 all_res <- read.csv(file.path(thisDir, "results/results_transectsubsample_25-50-75.csv"))
 def_res <- read.csv(file.path(thisDir, "results/res5_2.csv"))
-def_res["scenario"] <- "default"
+def_res["scenario"] <- "total dataset"
 
 all_res <- all_res[,-1]
 def_res <- def_res[,-1]
@@ -85,6 +76,8 @@ my_colors <- c(my_colors, wesanderson::wes_palette("GrandBudapest2")[4:3])
 facet_lab <- as_labeller(c('means' = "Means", 
                            'sd' = "Standard Deviation"))
 
+
+x_labs <- c("25%", "50%", "75%", "100%")
 # VL violin plots
 
 vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
@@ -92,7 +85,7 @@ vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.charac
 vl + geom_violin(alpha = 1.2) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
   geom_point(data = def_res, size =4, alpha = 1.2, color = def_colors) +
-  # scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs) +
   scale_fill_manual(values=my_colors) +
   labs(title="N - Wolves abundance", fill ="Transects %", y = "N", x = "Transects %") +
   theme_ipsum() + 
@@ -102,7 +95,7 @@ vl + geom_violin(alpha = 1.2) +
         legend.position="none", legend.box = "horizontal") 
 
 # uncomment to save
-ggsave("transvl_N_25-50-75.jpeg", dpi = 300)
+# ggsave("transvl_N_25-50-75.jpeg", dpi = 300)
 
 # BX box plots
 
@@ -111,7 +104,7 @@ bx <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.charac
 bx + geom_boxplot(width = 0.6, alpha = 1.5) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
   geom_point(data = def_res, size =4, alpha = 1.2, color = def_colors) +
-  # scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs) +
   scale_fill_manual(values=my_colors) +
   labs(title="N - Wolves abundance", fill ="Transectss %", y = "N", x = "Transects %") +
   theme_ipsum() + 
@@ -120,7 +113,7 @@ bx + geom_boxplot(width = 0.6, alpha = 1.5) +
         axis.text.y = element_text(size=11),
         legend.position="none", legend.box = "horizontal") 
 
-ggsave("transbx_N_25-50-75.jpeg", dpi = 300)
+# ggsave("transbx_N_25-50-75.jpeg", dpi = 300)
 
 ## -----------------------------------------------------------------------------
 ## ------   p0   -----
@@ -142,8 +135,8 @@ p0_52["scenario"] <- def_res$scenario
 p0_52 <- melt(p0_52,id.vars=c("scenario","stat"))
 
 # Labs for sexes and statuses
-x_labs <- c("female RI","female offspring","female other",
-            "male RI","male offspring","male other")
+x_labs_t <- c("F RI","F offspring","F other",
+            "M RI","M offspring","M other")
 
 
 ## ------   Plots
@@ -154,9 +147,9 @@ vl <- ggplot(data = p0, aes(x=variable, y=value, fill = as.character(scenario)))
 
 vl + geom_violin(alpha = 1.2) +
   # geom_boxplot(width = 0.2, color="grey", alpha = 0.2) +
-  geom_point(data = p0_52, size =3,alpha = 1.2,color = def_colors) +
+  geom_point(data = p0_52, size =3,alpha = 1,color = def_colors) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
   labs(title="p0 - baseline detectability", fill ="Transects %", y = "p0", x = "Transects %") +
   theme_ipsum() + 
@@ -165,26 +158,26 @@ vl + geom_violin(alpha = 1.2) +
         axis.text.y = element_text(size=11),
         legend.position="none", legend.box = "horizontal")
 
-ggsave("transvl_p0_25-50-75.jpeg", dpi = 300)
+# ggsave("transvl_p0_25-50-75.jpeg", dpi = 300)
 
 
 ### BOXPLOT
 
 bx <- ggplot(data = p0, aes(x=variable, y=value, fill = as.character(scenario))) 
 
-bx + geom_boxplot(width = 0.6, alpha = 1) +
-  geom_point(data = p0_52,size =3, alpha = 1.2,color = def_colors) +
+bx + geom_boxplot(width = 0.6, alpha = 1.5) +
+  geom_boxplot(data = p0_52, width = 0.6, color = def_colors) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
   labs(title="p0 - baseline detectability", fill ="Transects %", y = "p0", x = "Transects %") +
   theme_ipsum() + 
   theme(plot.title = element_text(size=11),
-        axis.text.x = element_text(size=11,angle=45,hjust=1),
-        axis.text.y = element_text(size=11),
-        legend.position="none", legend.box = "horizontal")
+        axis.text.x = element_text(size=10,angle=45,hjust=1),
+        axis.text.y = element_text(size=10),
+        legend.position="right", legend.box = "vertical")
 
-ggsave("transbx_p0_25-50-75.jpeg", dpi = 300)
+# ggsave("transbx_p0_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
@@ -213,38 +206,38 @@ sigma_52 <- melt(sigma_52,id.vars=c("scenario","stat"))
 
 vl <- ggplot(data = sigma, aes(x=variable, y=value, fill = as.character(scenario))) 
 
-vl + geom_violin(alpha = 1.2) +
-  #  add scale = "width" in geom_violin
-  geom_point(data = sigma_52,size =3, size =0.8, alpha = 1.2,color = def_colors) +
+vl + geom_violin(alpha = 1.2,scale = "width") +
+  #  add scale = "width" in geom_violin +
   facet_wrap(vars(stat), scales = "free_y",labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
-  labs(title="σ - scale parameter", fill ="Search events", y = "sigma", x = "Transects %") +
+  geom_boxplot(data = sigma_52, color = def_colors) +
+  labs(title="σ - scale parameter", fill ="Transects %", y = "sigma", x = "Transects %") +
   theme_ipsum() + 
   theme(plot.title = element_text(size=11),
         axis.text.x = element_text(size=11,angle=45,hjust=1),
         axis.text.y = element_text(size=11),
         legend.position="none", legend.box = "horizontal")
 
-ggsave("transvl_sigma_25-50-75.jpeg", dpi = 300)
+# ggsave("transvl_sigma_25-50-75.jpeg", dpi = 300)
 
 
 
 bx <- ggplot(data = sigma, aes(x=variable, y=value, fill = as.character(scenario))) 
 
 bx + geom_boxplot(width = 0.6, alpha = 1.5) +
-  geom_point(data = sigma_52, size =3, alpha = 1.2,color = def_colors) +
+  geom_boxplot(data = sigma_52, width = 0.6, alpha = 0.5, color = def_colors) +
   facet_wrap(vars(stat), scales = "free_y",labeller = facet_lab) + 
-  scale_x_discrete(labels= x_labs) +
+  scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
-  labs(title="σ - scale parameter", fill ="Search events", y = "sigma", x = "Transects %") +
+  labs(title="σ - scale parameter", fill ="Transects %", y = "sigma", x = "Transects %") +
   theme_ipsum() + 
-  theme(plot.title = element_text(size=11),
+  theme(plot.title = element_text(size=10),
         axis.text.x = element_text(size=11,angle=45,hjust=1),
-        axis.text.y = element_text(size=11),
-        legend.position="none", legend.box = "horizontal")
+        axis.text.y = element_text(size=10),
+        legend.position="bottom", legend.box = "horizontal")
 
-ggsave("transbx_sigma_25-50-75.jpeg", dpi = 300)
+# ggsave("transbx_sigma_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
@@ -302,7 +295,7 @@ bx + geom_boxplot(width = 0.6, alpha = 1.2) +
   theme(plot.title = element_text(size=11),
         axis.text.x = element_text(size=8,angle=45,hjust=1),
         axis.text.y = element_text(size=8),
-        legend.position="bottom", legend.box = "horizontal")
+        legend.position="none", legend.box = "horizontal")
 
 ggsave("transbx_detcov_25-50-75.jpeg", dpi = 300)
 
@@ -394,7 +387,7 @@ bx + geom_boxplot(width = 0.6,alpha = 1.2) +
         axis.text.y = element_text(size=11),
         legend.position="none", legend.box = "horizontal")
 
-ggsave("transbx_habcov_25-50-75.jpeg", dpi = 300)
+ggsave("transbx_psi_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
