@@ -61,8 +61,8 @@ data = list( sex = c("F","M"),
              aug.factor = 6) 
 
 ## SUBSAMPLING SPECIFICATION
-max.rep = 100                       ## Here the nmax number of repetitions(i.e. 100)
-sim_names = c(0.25,0.50,0.75)  ## Here the names of your simulation  (i.e. 25,50,75,100)
+max.rep = 4                      ## Here the nmax number of repetitions(i.e. 100)
+sim_names = c(0.25, 0.50, 0.75)  ## Here the names of your simulation  (i.e. 25,50,75,100)
 
 ## SET DIRECTORIES
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
@@ -174,7 +174,6 @@ ngs_opp <- ngs[!ngs$Sample.ID %in% ngs_sys$Sample.ID, ]
 ngs_sys$transect_ID <- unlist(lapply(st_intersects(ngs_sys, trans_buf), function(x)x[1]))
 ngs_opp$transect_ID <- NA
 
-
 ##---- Loop over the different subsampling fractions 
 for (frac in sim_names){
   for (rep in 1:max.rep) {
@@ -182,11 +181,13 @@ for (frac in sim_names){
     ## ------   1. SUBSAMPLE TRANSECTS  -----   
     ##---- Sub-sample transects
     transectsToKeep <- trans %>%
-      group_by(trans$PROVINCIA)%>%
-      sample_frac(frac)
+      mutate(ID = row_number()) %>%  #Applying row_number function and obtaining the indexes
+      group_by(trans$PROVINCIA)%>%  # Grouping for provinces
+      slice_sample(prop = frac)    # subsampling given proportions of dataset                       
+      # dplyr::select(ID)
     
     ##---- Remove samples associated w/ sub-sampled transects
-    ngs_sub <- filter(ngs_sys, transect_ID %in% transectsToKeep)
+    ngs_sub <- filter(ngs_sys, transect_ID %in% transectsToKeep$ID)
     
     ##---- Keep opportunistic samples
     ngs_sub <- rbind(ngs_sub,ngs_opp)
