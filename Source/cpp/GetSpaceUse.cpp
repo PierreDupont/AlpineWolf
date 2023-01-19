@@ -59,10 +59,10 @@ int fastIntMode(NumericVector x, bool narm = false) {
 
 
 // [[Rcpp::export]]
-List  GetSpaceUse(NumericMatrix sx,                   // X COORDINATES 
+List  GetSpaceUse(NumericMatrix sx,              // X COORDINATES 
                      NumericMatrix sy,           // Y COORDINATES 
                      NumericMatrix z,            // Z STATE 
-                     NumericVector sigma,        // SIGMA VALUES 
+                     NumericMatrix sigma,        // SIGMA VALUES 
                      NumericMatrix habitatxy,    // HABITAT COORDINATES
                      NumericVector aliveStates,  // ALIVE STATES 
                      NumericMatrix regionID,     // MATRIX WITH REGION ID, ONE ROW PER REGION WITH 1 AND 0 WHETHER IT BELONGS TO THE REGION OR NOT NEED TO PROVIDE ROWNAMES TO IDENTIFY REGIONS.
