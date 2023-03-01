@@ -4,11 +4,11 @@
 ##### ---------------- z[psi,rho,theta] ---------------------------------- #####
 ##### ---------------- y[p0(transects + zone + ),sigma] ------------------ #####
 ################################################################################
-## ------1. CLEAN THE WORK ENVIRONMENT ------
+## ------ 1. CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
 
-## ------2. IMPORT REQUIRED LIBRARIES ------
+## ------ 2. IMPORT REQUIRED LIBRARIES ------
 library(rgdal)
 library(raster)
 library(coda)
@@ -37,80 +37,158 @@ library(ggplot2)
 source("workingDirectories.R")
 
 
-## ------ 4.  SOURCE CUSTOM FUNCTIONS ------
+## ------ 4. SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-
-#sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 #sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
+
+col_mean <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- mean(x[[i]])
+  }
+  output
+}
+col_sd <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- sd(x[[i]])
+  }
+  output
+}
+col_cv <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- sd(x[[i]]/mean(x[[i]]))
+  }
+  output
+}
+col_lci <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- qs(x[[i]],0.025)
+  }
+  output
+}
+col_uci <- function(x,y) {
+  output <- vector("double", length(x))
+  for (i in seq_along(y)) {
+    output[[i]] <- qs(x[[i]],0.975)
+  }
+  output
+}
+qs <- function(x,y){as.numeric(quantile(x,y))}
+
+
 
 ## -----------------------------------------------------------------------------
 ## ------ 5. SET ANALYSIS CHARACTERISTICS -----
-## MODEL NAME 
-
 modelName = "AlpineWolf.SubSample.rep_100"
+
 thisDir <- file.path(analysisDir, modelName)
 
+load(file.path(thisDir, "ExtractionHabitat.RData"))
+
+load(file.path(thisDir, "Habitat.RData"))
+
+OutDir <- file.path(thisDir, "output/")
 
 
 ## -----------------------------------------------------------------------------
-## ------   6. PROCESS OUTPUTS -----
+## ------ 6. PROCESS OUTPUTS -----
 
-OutDir <- file.path(thisDir,"output/")
+## Create a list which will contain all your results
+resLista <- list()  
 
-resLista <-list()  #create a list which will contain all your results
-
-# define loop
-rpp <- 100 
+## Define loop
+rpp <- 10 
 sim_names <- c("25", "50","75")  
 # rep_t <- c("3","6")
 
-
+## Loop over simulation scenarios
 for(sc in 1:length(sim_names)) {
-  # for(num in 1:length(rep_t)) {
-    
-  tempLista <-list() #temporary list for each scenario
   
-  for(rp in 1:rpp) {  #This will be from 1:100
+  ## Create a temporary list for each scenario
+  tempLista <- list() 
+  
+  ptm <- proc.time()
+  
+  ## Loop over repetitions
+  for(rp in 1:rpp) {  
 
     ## List output files for scenario "sc" and repetition "rp" only
     outputs <- list.files(OutDir, paste0(modelName,"_", sim_names[sc], "_", rp, "_"))
     print(outputs)
  
     ## Collect bites from the different chains for this percentage and this repetition only
-    nimOutput <- collectMCMCbites( path = file.path(OutDir, outputs),
-                                   burnin = 10) # add in all simulations
+    nimOutput <- collectMCMCbites(
+      path = file.path(OutDir, outputs),
+      burnin = 20) # add in all simulations
     
-    # attach chains
-    nimOutput <- do.call(rbind,nimOutput)
-    # obtain columns names
-    params <- colnames(nimOutput)
-    # params.simple <- unique(sapply(strsplit(params, "\\["), "[", 1))
-    # turn nimOutput as df 
-    nimOutput <- as.data.frame(nimOutput)
+    ## Proces output
+    res <- ProcessCodaOutput(nimOutput$samples2)
     
-    # run functions to get stats
-    means<-col_mean(nimOutput, params)
-    sd<-col_sd(nimOutput,params)
-    CV<-col_cv(nimOutput,params)
-    uci<-col_uci(nimOutput,params)
-    lci<-col_lci(nimOutput,params)
+    ## Extract density
+    resLista <- NULL
+    for(s in 0:1){
+      for(ss in 1:3){
+        thisStatus <- (res$sims.list$z == 1) &
+          (res$sims.list$sex == s) &
+          (res$sims.list$status == ss)
+        
+        tmp <- GetDensity(
+          sx = res$sims.list$s[ , ,1],
+          sy = res$sims.list$s[ , ,2],
+          z = thisStatus,
+          IDmx = habitat.id,
+          aliveStates = 1,
+          returnPosteriorCells = F,
+          regionID = regions.rgmx)
+        
+        resLista <- cbind(
+          resLista,
+          c(mean(tmp$PosteriorAllRegions),
+            sd(tmp$PosteriorAllRegions),
+            cv(tmp$PosteriorAllRegions)/100,
+            as.numeric(quantile(tmp$PosteriorAllRegions,0.975)),
+            as.numeric(quantile(tmp$PosteriorAllRegions,0.025))))
+      }#ss
+    }#s
     
-    # merge all stats in one df
-    res <- as.data.frame(rbind(means,sd,CV,lci,uci))
-    # creat columns for stats
-    res2 <- tibble::rownames_to_column(res, "stat")
-    params2 <- append(params, "stat", 0)
-    colnames(res2) <- params2
-    # store df per each repetition in a temporary list
-    tempLista[[rp]] <- res2
+    tmp <- GetDensity(
+      sx = res$sims.list$s[ , ,1],
+      sy = res$sims.list$s[ , ,2],
+      z = res$sims.list$z,
+      IDmx = habitat.id,
+      aliveStates = 1,
+      returnPosteriorCells = F,
+      regionID = regions.rgmx)
     
+    resLista <- cbind(
+      resLista,
+      c(mean(tmp$PosteriorAllRegions),
+        sd(tmp$PosteriorAllRegions),
+        cv(tmp$PosteriorAllRegions)/100,
+        as.numeric(quantile(tmp$PosteriorAllRegions,0.975)),
+        as.numeric(quantile(tmp$PosteriorAllRegions,0.025))))
+    
+    status <- c("Alpha","Pups","Others")
+    colnames(resLista) <- c(paste("N", "F", status, sep = "_"),
+                            paste("N", "M", status, sep = "_"),
+                            "N")
+    
+    ## store df per each repetition in a temporary list
+    tempLista[[rp]] <-  cbind.data.frame(
+      "stat" = c("mean","sd","cv","uci","lci"),
+      resLista)
   }#rp
   
-  # store all scenarios in one final list
-  resLista[[sc]] <- tempLista
+  totalTime <- proc.time()-ptm
   
+  
+  ## store all scenarios in one final list
+  resLista[[sc]] <- tempLista
 }#sc
-# }#num
 
 # Extracts lists with scenarios stored
 res25 <- do.call("rbind", resLista[[1]])
@@ -131,25 +209,7 @@ all_res <- rbind(res25, res50, res75)
 
 
 
-# add this
-WA_status <- list()
-for(s in 0:1){
-  WA_status[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
-    
-    WA_status[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = regions.rgmx)
-  }#ss
-}#s
+
 
 
 
