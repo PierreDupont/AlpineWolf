@@ -107,9 +107,9 @@ plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="gray60",border
 plot(transects,add=T,col="red")
 plot(ngs[ngs$Sex == "M", ], add=T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
 plot(ngs[ngs$Sex == "F", ], add=T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
-legend( "bottomright", pch = 21, cex = 1.5, bty = "n", 
+legend( "bottomright", pch = 21, cex = 1.5, bty = "n",
         legend = c("female","male"),
-        col = cols[c(5,7)], 
+        col = cols[c(5,7)],
         pt.bg = c(adjustcolor(cols[5],0.3),
                adjustcolor(cols[7],0.3)))
 graphics.off()
