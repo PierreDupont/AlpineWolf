@@ -47,7 +47,7 @@ sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
 ## ------ 5. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
 
-modelName = "AlpineWolf.SubSample.Transects_prov_tr"
+modelName = "AlpineWolf.SubSample.rep_100"
 thisDir <- file.path(analysisDir, modelName)
 
 
@@ -60,20 +60,20 @@ OutDir <- file.path(thisDir,"output/")
 resLista <-list()  #create a list which will contain all your results
 
 # define loop
-rpp <- 1 # since in the dropbox folder theres is only 1 interation
+rpp <- 100 
 sim_names <- c("25", "50","75")  
-rep_t <- c("6")
+# rep_t <- c("3","6")
 
 
 for(sc in 1:length(sim_names)) {
-  for(num in 1:length(rep_t)) {
+  # for(num in 1:length(rep_t)) {
     
   tempLista <-list() #temporary list for each scenario
   
   for(rp in 1:rpp) {  #This will be from 1:100
 
     ## List output files for scenario "sc" and repetition "rp" only
-    outputs <- list.files(OutDir, paste0(modelName,"_", sim_names[sc], "_", rp, "_", rep_t[num], "_"))
+    outputs <- list.files(OutDir, paste0(modelName,"_", sim_names[sc], "_", rp, "_"))
     print(outputs)
  
     ## Collect bites from the different chains for this percentage and this repetition only
@@ -110,7 +110,7 @@ for(sc in 1:length(sim_names)) {
   resLista[[sc]] <- tempLista
   
 }#sc
-}#num
+# }#num
 
 # Extracts lists with scenarios stored
 res25 <- do.call("rbind", resLista[[1]])
@@ -123,12 +123,9 @@ res75["scenario"] <- "75"
 # merge
 all_res <- rbind(res25, res50, res75)
 # add extra column with number of repetitions
-all_res["rep"] <- "6"
+# all_res["rep"] <- "6"
 # save
 # write.csv(all_res, "results_transectsubsample_prov_tr6.csv")
-
-
-
 
 
 
