@@ -81,11 +81,14 @@ MakeSearchGrid <- function(data = data,
    temp.r <- raster(maindetector.r)
    temp.r[] <- 1:length(temp.r)
    maindetector.poly <- rasterToPolygons(temp.r, dissolve = TRUE)
+   proj4string(maindetector.poly) <- CRS(proj4string(temp.r))
+   
    
    ## Sub-detectors
    temp.r <- subdetector.r
    temp.r[] <- 1:length(temp.r)
    subdetector.poly <- rasterToPolygons(temp.r, dissolve = TRUE)
+   proj4string(subdetector.poly) <- CRS(proj4string(temp.r))
    
    ### ==== OBTAIN SPATIALPOINTS FROM DETECTORS ====
    ## Main detectors 

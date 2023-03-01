@@ -343,7 +343,7 @@ plot(PA, add = T)
 ## ------   5. PRE-PROCESSED STUFF ------
 load(file.path(thisDir,"Habitat.RData"))
 load(file.path(thisDir,"Detectors.RData"))
-
+ 
 
 
 ## -----------------------------------------------------------------------------
@@ -1714,7 +1714,7 @@ graphics.off()
 ##---- Process and save MCMC samples
 res <- ProcessCodaOutput(nimOutput$samples)
 res_sxy <- ProcessCodaOutput(nimOutput$samples2)
-save(res, res_sxy,
+save(res, res_sxy, 
      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 

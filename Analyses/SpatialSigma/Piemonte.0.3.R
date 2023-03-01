@@ -52,7 +52,7 @@ habitat = list( resolution = 10000,
                 buffer = 20000)
 
 ## DETECTORS SPECIFICATIONS
-detectors = list( resolution = 5000,
+detectors = list( resolution = 3000,
                   detSubResolution = 1000,
                   samplingMonths = c(10:12,1:4))
 
@@ -77,13 +77,13 @@ countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCou
 regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
 regions <- st_transform(x = regions, crs = st_crs(countries))
 regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
-plot(regions)
 regions <- regions[regions$DEN_REG %in% c("Piemonte", "Valle d'Aosta", "Liguria"), ]
+plot(regions)
 
-##--- Alps
-alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
-alps <- st_transform(x = alps, crs = st_crs(countries))
-plot(alps)
+# ##--- Alps
+# alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
+# alps <- st_transform(x = alps, crs = st_crs(countries))
+# plot(alps)
 
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
@@ -92,17 +92,14 @@ studyArea <- studyAreaGrid %>%
   st_snap(x = ., y = ., tolerance = 0.0001) %>%
   st_intersection(.,regions) %>%
   st_union() 
+plot(studyArea)
 
 ##--- SCR grid
 SCRGrid <- read_sf(file.path(dataDir,"GISData/SECR_presence_layer_2020_2021/SECR_presence_layer_2021.shp"))
 SCRGrid <- st_transform(x = SCRGrid, crs = st_crs(countries))
-SCRGrid <- SCRGrid[SCRGrid$Pres_20.21 == 1, ]
-
-
+SCRGrid <- SCRGrid[SCRGrid$`Pres_20-21` == 1, ]
 plot(st_geometry(countries), col = "gray80", border = F)
-plot(st_geometry(temp), col = "gray80",add=T,border = F)
 plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="red",border = F)
-
 
 count <- read_sf(file.path(dataDir,
                            "GISData/Countries/Countries_WGS84.shp"))
@@ -110,7 +107,6 @@ temp <- count[count$CNTRY_NAME %in% c("Albania",
                                       "Austria",
                                       "Bosnia and Herzegovina",
                                       "Bulgaria",
-                                      #"Czech Republic",
                                       "France",
                                       "Germany",
                                       "Greece",
@@ -120,12 +116,11 @@ temp <- count[count$CNTRY_NAME %in% c("Albania",
                                       "Malta",
                                       "Montenegro",
                                       "Serbia",
-                                      #"Romania",
                                       "Slovenia",
                                       "San Marino",
                                       "Switzerland"), ]
-plot(st_geometry(temp),col="gray60")
 temp <- st_transform(temp, st_crs(studyArea))
+
 
 
 ## ------   2. SEARCH EFFORT DATA ------
@@ -138,8 +133,7 @@ transects$Year <- as.numeric(format(transects$Date,"%Y"))
 transects$Month <- as.numeric(format(transects$Date,"%m"))
 
 ##---- Plot check
-plot(transects, col = "red", add = T)
-
+plot(st_geometry(transects), col = "red", add = T)
 
 
 
@@ -223,9 +217,9 @@ plot(st_geometry(st_intersection(studyArea,countries)),border = F)
 plot(st_geometry(countries), col = "gray80", add = T, border = F)
 plot(st_geometry(temp), col = "gray80",add=T,border = F)
 plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="gray60",border = F)
-plot(transects,add=T,col="red")
-plot(ngs[ngs$Sex == "M", ], add=T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
-plot(ngs[ngs$Sex == "F", ], add=T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
+plot(st_geometry(transects), add = T, col = "red")
+plot(st_geometry(ngs[ngs$Sex == "M", ]), add = T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
+plot(st_geometry(ngs[ngs$Sex == "F", ]), add = T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
 legend( "bottomright", pch = 21, cex = 1.5, bty = "n", 
         legend = c("female","male"),
         col = cols[c(5,7)], 
@@ -233,35 +227,6 @@ legend( "bottomright", pch = 21, cex = 1.5, bty = "n",
                   adjustcolor(cols[7],0.3)))
 graphics.off()
 
-
-
-# ##---- Calculate distance to the closest transect
-# ## For later: can be quite long with many points and transects
-# dist <- st_distance(ngs, transects)
-# ngs$dist_to_transect <- apply(dist,1,min)
-# range(ngs$dist_to_transect)
-
-# ##---- Fix one problematic wolf (detected in 2 distant locations at the same time)
-# ngs$Genotype.ID[ngs$Genotype.ID=="WBS-M002"][5:7] <- "WBS-M002.2"
-# ngs[ngs$Genotype.ID=="WBS-M002", ]
-
-# ##---- Identify individuals with detections more than 50km apart
-# plot(studyArea)
-# IDs <- unique(ngs$Genotype.ID)
-# resList <- list()
-# for( i in 109:length(IDs)){
-#   print(i)
-#   tmp <- ngs[ngs$Genotype.ID == IDs[i], ]
-#   D <- as.numeric(st_distance(tmp))
-#   if(any(D > 50000)){
-#     resList[[i]] <- tmp
-#     print(IDs[i])
-#     plot(tmp,pch=19,add=T,col= "red")
-#     plot(tmp,pch=19,add=T,type="l",col="red")
-#   }
-# }
-# res <- do.call(rbind,resList)
-# write.csv(res,file = "long_distance_detections.csv")
 
 
 ## ------   4. SPATIAL COVARIATES ------
@@ -307,19 +272,6 @@ mainRoads <- subset(roads, highway %in% c("motorway", "trunk", "primary"))
 rm(roads)
 
 
-##---- Create a line to delineate the "western Alps"
-cutline <- st_linestring(rbind(c(700000,4800000), c(500000,5230000)))
-cutline <- st_sfc(cutline)
-st_crs(cutline) <- st_crs(studyArea)
-cutline <- st_buffer(cutline, dist = 0.0001)
-plot(studyArea)
-plot(cutline, add = T, border = "blue", lwd = 2)
-##---- Create east and western Alps polygons
-studyArea_west <- st_sfc(st_cast(st_difference(st_buffer(studyArea,50000), cutline),"POLYGON")[[1]])
-st_crs(studyArea_west) <- st_crs(studyArea)
-studyArea_east <- st_difference(st_buffer(studyArea,50000),studyArea_west)
-
-
 ##---- Load historical presence data
 packPres_files <- list.files(path = file.path(dataDir, "/GISData/Branchi_SECR"),
                              pattern = ".shp")
@@ -330,7 +282,6 @@ packPres_raw <- lapply(packPres_files, function(x){
 })
 plot(studyArea)
 lapply(packPres_raw, function(x)plot(x, add = T))
-# pack.r <- raster(file.path(dataDir, "/GISData/Packs_history_grid/packs_history_sum.tif"))
 
 
 ##---- Load IUCN presence data
@@ -350,14 +301,12 @@ iucn_2018 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/2018_06_06_
 iucn_2018 <- st_transform(iucn_2018, st_crs(studyArea))
 plot(st_geometry(studyArea))
 plot(iucn_2018[ ,"SPOIS"], add = T)
+
 ## Code back to numeric
 iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 
 
-##---- Load protected areas
-PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
-plot(studyArea)
-plot(PA, add = T)
+
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
@@ -368,8 +317,8 @@ searchGrid <- MakeSearchGrid(
   data = as_Spatial(studyArea),
   resolution = detectors$resolution,
   div = (detectors$resolution/detectors$detSubResolution)^2,
-  center = T,
-  plot = TRUE,
+  center = TRUE,
+  plot = FALSE,
   fasterize = TRUE)
 
 ##---- Create detector raster
@@ -618,18 +567,6 @@ detectors$grid$mainRoads_L <- scale(detectors$grid$mainRoads_L)
 
 ##---- Display all detector covariates
 plot(detectors$grid[ ,3:length(detectors$grid)], max.plot = 15)
-
-
-
-
-## ------       1.2.7. EAST/WEST ------
-##---- Calculate distance of all detectors to each zone
-distWest <- st_distance(detectors$grid,studyArea_west)
-distEast <- st_distance(detectors$grid,studyArea_east)
-
-##---- Assign detectors to the closest zone
-detectors$grid$zone <- apply(cbind(distWest,distEast),1,
-                             function(x)which.min(x)-1)
 
 
 
@@ -893,16 +830,6 @@ habitat$grid$mainRoads_L <- scale(habitat$grid$mainRoads_L)
 
 
 
-## ------       2.2.6. EAST/WEST ------
-##---- Calculate distance of all detectors to each zone
-distWest <- st_distance(habitat$grid, studyArea_west)
-distEast <- st_distance(habitat$grid, studyArea_east)
-
-##---- Assign detectors to the closest zone
-habitat$grid$zone <- apply(cbind(distWest,distEast),1,
-                           function(x)which.min(x)-1)
-
-
 ## ------       2.2.7. HISTORICAL PRESENCE ------
 habitat$grid$presence <- 0
 
@@ -970,21 +897,6 @@ habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
 
 
-## ------       2.2.8. PROTECTED AREAS -----
-# intersection <- st_intersection(habitat$grid, PA) %>%
-#   mutate(pa = st_area(.))  %>%
-#   st_drop_geometry() %>%
-#   group_by(id) %>%
-#   summarise(PA = sum(pa)/2.5e+07)
-#
-# ## Store scaled road density
-# habitat$grid <- habitat$grid %>%
-#   left_join(intersection, by = "id")
-# habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
-# habitat$grid$PA[habitat$grid$PA > 1] <- 1
-
-
-
 ## ------   3. RESCALE HABITAT & DETECTORS ------
 ##---- Rescale habitat and detector coordinates
 scaledCoords <- scaleCoordsToHabitatGrid(
@@ -1025,11 +937,9 @@ closest <- nn2( coordinates(detectors$sub.sp),
 ngs$sub.detector <- c(closest$nn.idx)
 ngs$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx] 
 
-
-
 ##---- Drop duplicated detections ate the same sub-detectors
 ngs <- ngs[!duplicated(ngs[ ,c("sub.detector", "Genotype.ID")]), ] 
-ngs <- droplevels(ngs)
+#ngs <- droplevels(ngs)
 
 ##---- Count individual detections per detector
 detMat <- as.matrix(table(ngs$Genotype.ID, ngs$detector))
@@ -1492,7 +1402,11 @@ status.aug <- MakeAugmentation( y = status,
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
+  # psiRJ ~ dunif(0, 1) # inclusion prob
+  
   for(c in 1:n.habCovs){
+    # betaHab.raw[c] ~ dnorm(0.0,0.01)
+    # zRJ[c] ~ dbern(psiRJ)
     betaHabDens[c] ~ dnorm(0.0,0.01)
   }#c
   
@@ -1551,6 +1465,8 @@ modelCode <- nimbleCode({
   betaDens[3] <- 0 
 
   for(c in 1:n.habCovs){
+    # betaHabDet.raw[c] ~ dnorm(0.0,0.01)
+    # zRJ[c] ~ dbern(psiRJ)
     betaHabDet[c] ~ dnorm(0.0,0.01)
   }#c
   
@@ -1636,7 +1552,7 @@ nimParams2 <-  c("z", "s", "status", "sex", "ACdensity")
 
 
 ## ------   3. SAVE THE INPUT ------
-for(c in 1:4){
+for(c in 1:12){
   s.init <- matrix(NA, nimConstants$n.individuals, 2)
   for(i in 1:n.detected){
     if(detNums[i] > 1){
