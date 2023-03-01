@@ -54,10 +54,13 @@ ResDir <- file.path(thisDir, "results")
 
 
 # Load results
-all_res <- read.csv(file.path(ResDir, "results_transectsubsample_25-50-75.csv"))
+all_res <- read.csv(file.path(ResDir, "results_ngssubsample.csv"))
+
+
 def_res <- read.csv(file.path(ResDir, "res5_2.csv"))
 def_res["scenario"] <- "full dataset"
 
+all_res <- rbind(all_res, all_res_t, all_res_tr)
 # Leave out first column
 
 all_res <- all_res[,-1]
@@ -65,8 +68,8 @@ def_res <- def_res[,-1]
 
 # Just keep means and sd
 
-# all_res <- rbind(filter(all_res, stat == "means"),filter(all_res, stat == "sd"))
-# def_res <- rbind(filter(def_res, stat == "means"),filter(def_res, stat == "sd"))
+all_res <- rbind(filter(all_res, stat == "means"),filter(all_res, stat == "sd"))
+def_res <- rbind(filter(def_res, stat == "means"),filter(def_res, stat == "sd"))
 
 # Set colours
 
@@ -80,8 +83,8 @@ my_colors <- c(my_colors, wesanderson::wes_palette("GrandBudapest2")[4:3])
 ## ------   N   -----
 
 # Reordering stat factor levels
-def_res$stat <- factor(def_res$stat, levels = c("means", "sd","CV","lci", "uci"))
-all_res$stat <- factor(all_res$stat, levels = c("means", "sd","CV","lci", "uci"))
+# def_res$stat <- factor(def_res$stat, levels = c("means", "sd","CV","lci", "uci"))
+# all_res$stat <- factor(all_res$stat, levels = c("means", "sd","CV","lci", "uci"))
 
 
 # Create nice labels for the stats in the plots
@@ -119,7 +122,7 @@ bx <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.charac
 
 bx + geom_boxplot(width = 0.6, alpha = 1.5) +
   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  geom_jitter(alpha = 0.2, color = "grey") + 
+  # geom_jitter(alpha = 0.2, color = "grey") + 
   geom_point(data = def_res, size =4, alpha = 1.2, color = def_colors) +
   scale_x_discrete(labels= x_labs) +
   scale_fill_manual(values=my_colors) +
@@ -130,9 +133,9 @@ bx + geom_boxplot(width = 0.6, alpha = 1.5) +
   theme(plot.title = element_text(size=11),
         axis.text.x = element_text(size=11,hjust=1),
         axis.text.y = element_text(size=11),
-        legend.position="bottom", legend.box = "horizontal") 
+        legend.position="none", legend.box = "horizontal") 
 
-# ggsave("ngsbx_N_25-50-75.jpeg", dpi = 300)
+ # ggsave("ngsbx_N_25-50-75.jpeg", dpi = 300)
 
 ## -----------------------------------------------------------------------------
 ## ------   p0   -----
@@ -194,9 +197,9 @@ bx + geom_boxplot(width = 0.6, alpha = 1) +
   theme(plot.title = element_text(size=10),
         axis.text.x = element_text(size=11,angle=45,hjust=1),
         axis.text.y = element_text(size=10),
-        legend.position="right", legend.box = "vertical")
+        legend.position="none", legend.box = "horizontal")
 
-# ggsave("ngsbx_p0_25-50-75.jpeg", dpi = 300)
+ ggsave("ngsbx_p0_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
@@ -254,9 +257,9 @@ bx + geom_boxplot(width = 0.6, alpha = 1.5) +
   theme(plot.title = element_text(size=11),
         axis.text.x = element_text(size=11,angle=45,hjust=1),
         axis.text.y = element_text(size=11),
-        legend.position="right", legend.box = "vertical")
+        legend.position="bottom", legend.box = "horizontal")
 
-# ggsave("ngsbx_sigma_25-50-75.jpeg", dpi = 300)
+ ggsave("ngsbx_sigma_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
@@ -487,10 +490,21 @@ bx +   facet_grid(~scenario)  +
   geom_jitter(alpha = 0.6)  +
   stat_poly_line() +
   stat_poly_eq() +
-  labs(title="NGS Subsampling", y = "Wolf genotypes", x = "Wolves abundace estimates") +
+  labs(title="NGS Subsampling", y = "Wolves genotypes", x = "Wolves abundace estimates") +
   theme(plot.title = element_text(size=11),
         axis.text.x = element_text(size=11,hjust=1),
         axis.text.y = element_text(size=11))
+
+bx <- ggplot(data = dataplot, aes(x=inputs, y=outputs, color = as.factor(scenario))) 
+bx + geom_jitter(alpha = 0.6)  +
+  # stat_poly_line() +
+  # stat_poly_eq() +
+  labs(title="NGS Subsampling", y = "Wolves abundace estimates", x = "Wolves genotypes") +
+  theme(plot.title = element_text(size=11),
+        axis.text.x = element_text(size=11,hjust=1),
+        axis.text.y = element_text(size=11))
+
+
 ggsave("IDs_nest_NGS.jpeg", dpi = 300)
 
 ## -----------------------------------------------------------------------------
@@ -519,7 +533,7 @@ dataplot.1 <-  dcast(dataplot, ID + scenario ~ source, value.var =  "N", fun.agg
 
 # write.csv(dataplot.1, "in_det_res_TRNS.csv")
 
-dataplot <- read.csv(file.path(ResDir, "in_det_res_NGS.csv"))
+dataplot <- read.csv(file.path(ResDir, "in_det_res_TRNS.csv"))
 
 
 bx <- ggplot(data = dataplot, aes(x=outputs, y=inputs)) 
@@ -532,5 +546,91 @@ bx +   facet_grid(~scenario)  +
         axis.text.x = element_text(size=11,hjust=1),
         axis.text.y = element_text(size=11))
 
+bx <- ggplot(data = dataplot, aes(x=inputs, y=outputs, color = as.factor(scenario))) 
+bx + geom_jitter(alpha = 0.6)  +
+  # stat_poly_line() +
+  # stat_poly_eq() +
+  labs(title="NGS Subsampling", y = "Wolves abundace estimates", x = "Wolves detections") +
+  theme(plot.title = element_text(size=11),
+        axis.text.x = element_text(size=11,hjust=1),
+        axis.text.y = element_text(size=11))
+
 ggsave("det_nest_NGS.jpeg", dpi = 300)
+
+
+
+## -----------------------------------------------------------------------------
+## ------   8. PLOT RESULTS III -----
+
+res <- read.csv(file.path(ResDir, "res_stats.csv"))
+res[is.na(res)] <- 0
+
+
+neworder <- c("ngs","transects","transects_rep","transect_rep_sp")
+library(plyr)  ## or dplyr (transform -> mutate)
+
+
+
+res_per <-subset(res, stat %in% c('%_m','%_lci','%_uci'))
+
+res_per <- subset(res_per, scenario != 100) 
+
+res_m <-subset(res_per, stat =='%_m')
+res_m <-  arrange(transform(res_m,fill=factor(fill,levels=neworder)),fill)
+
+res_lci <-subset(res_per, stat =='%_lci')
+res_lci <- arrange(transform(res_lci,fill=factor(fill,levels=neworder)),fill)
+
+res_uci <-subset(res_per, stat =='%_uci')
+res_uci <- arrange(transform(res_uci,fill=factor(fill,levels=neworder)),fill)
+
+
+facet_lab2 <- c('ngs' = "NGS", 
+                'transects' = "Transects",
+                'transects_rep' = "Transects Repetitions",
+                'transect_rep_sp' = "Transects Repetitions and Space")
+
+facet_lab3 <-c('3' = "3 search events", 
+               '6' = "6 search events",
+               '0' = " ")
+
+
+
+bx <- ggplot(data = res_m, aes(x=(as.character(scenario)), y=value)) 
+
+bx +  geom_point(size = 2, alpha = 1.2) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+      facet_wrap(fill ~ rep, scales = "free_x", labeller = labeller(fill  = as_labeller(facet_lab2),
+                                                                    rep = as_labeller(facet_lab3))) +
+      geom_text(aes(label = value, hjust = -0.2, vjust = 0.5)) +
+      geom_errorbar(aes(ymin = res_lci$value, ymax = res_uci$value), width = 0.1, alpha = 0.5) +
+      labs(title="Relative Error", y = "Relative Error", x = "Subsampling scenarios") +
+      theme(plot.title = element_text(size = 10),
+        axis.text.x = element_text(size = 10, hjust = 1),
+        axis.text.y = element_text(size = 10))
+
+# ggsave("error_subsamplig.jpeg", dpi = 300)
+
+
+
+res_bias <- subset(res, stat == "bias")
+res_bias <- subset(res_bias, scenario != 100)
+
+
+
+bx <- ggplot(data = res_bias, aes(x=(as.character(scenario)), y=value)) 
+bx +  geom_point(size =2, alpha = 1.2) +
+      geom_hline(yintercept=0, linetype="dashed", color = "red") +
+      # geom_boxplot(width = 0.6,alpha = 1.2) +
+      facet_wrap(~fill, scales = "free_x", labeller = facet_lab2) +
+      geom_text(aes(label=value, hjust = -0.2, vjust=0.5)) +
+      labs(title="Bias", y = "Bias", x = "Subsampling scenarios") +
+      theme(plot.title = element_text(size=11),
+        axis.text.x = element_text(size=11,hjust=1),
+        axis.text.y = element_text(size=11))
+
+ggsave("bias_subsamplig.jpeg", dpi = 300)
+
+
+
 

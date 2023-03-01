@@ -51,7 +51,7 @@ thisDir <- file.path(analysisDir, modelName)
 # Load results csv
 ResDir <- file.path(thisDir, "results")
 
-all_res <- read.csv(file.path(thisDir, "results/results_transectsubsample_25-50-75.csv"))
+all_res <- read.csv(file.path(thisDir, "results/results_transectsubsample_prov_tr.csv"))
 def_res <- read.csv(file.path(thisDir, "results/res5_2.csv"))
 def_res["scenario"] <- "total dataset"
 
@@ -60,8 +60,11 @@ def_res <- def_res[,-1]
 
 # Just keep means and sd
 
-all_res <- rbind(filter(all_res, stat == "means"),filter(all_res, stat == "sd"))
-def_res <- rbind(filter(def_res, stat == "means"),filter(def_res, stat == "sd"))
+all_res_m <- rbind(filter(all_res, stat == "means"))
+all_res_sd <- rbind(filter(all_res, stat == "sd"))
+
+def_res_m <- rbind(filter(def_res, stat == "means"))
+def_res_sd <- rbind(filter(def_res, stat == "sd"))
 
 # Set colours
 def_colors <- ghibli::ghibli_palette("PonyoMedium")[4]
@@ -80,19 +83,19 @@ facet_lab <- as_labeller(c('means' = "Means",
 x_labs <- c("25%", "50%", "75%", "100%")
 # VL violin plots
 
-vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
-
-vl + geom_violin(alpha = 1.2) +
-  facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  geom_point(data = def_res, size =4, alpha = 1.2, color = def_colors) +
-  scale_x_discrete(labels= x_labs) +
-  scale_fill_manual(values=my_colors) +
-  labs(title="N - Wolves abundance", fill ="Transects %", y = "N", x = "Transects %") +
-  theme_ipsum() + 
-  theme(plot.title = element_text(size=11),
-        axis.text.x = element_text(size=11,hjust=1),
-        axis.text.y = element_text(size=11),
-        legend.position="none", legend.box = "horizontal") 
+# vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
+# 
+# vl + geom_violin(alpha = 1.2) +
+#   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
+#   geom_point(data = def_res, size =4, alpha = 1.2, color = def_colors) +
+#   scale_x_discrete(labels= x_labs) +
+#   scale_fill_manual(values=my_colors) +
+#   labs(title="N - Wolves abundance", fill ="Transects %", y = "N", x = "Transects %") +
+#   theme_ipsum() + 
+#   theme(plot.title = element_text(size=11),
+#         axis.text.x = element_text(size=11,hjust=1),
+#         axis.text.y = element_text(size=11),
+#         legend.position="none", legend.box = "horizontal") 
 
 # uncomment to save
 # ggsave("transvl_N_25-50-75.jpeg", dpi = 300)
@@ -113,7 +116,40 @@ bx + geom_boxplot(width = 0.6, alpha = 1.5) +
         axis.text.y = element_text(size=11),
         legend.position="none", legend.box = "horizontal") 
 
+
+# ----- 3 % 6 repetitions transects MEANS
+
+bx <- ggplot(data = all_res_m, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
+
+bx + geom_boxplot(width = 0.6, alpha = 1.5) +
+  facet_grid(~ rep)  +
+  geom_point(data = def_res_m, size = 4, alpha = 1.2, color = def_colors) +
+  scale_x_discrete(labels= x_labs) +
+  scale_fill_manual(values=my_colors) +
+  labs(title="N - Wolves abundance", fill ="Transectss %", y = "N", x = "Transects %") +
+  theme_ipsum() + 
+  theme(plot.title = element_text(size=11),
+        axis.text.x = element_text(size=11,hjust=1),
+        axis.text.y = element_text(size=11),
+        legend.position="none", legend.box = "horizontal") 
 # ggsave("transbx_N_25-50-75.jpeg", dpi = 300)
+
+# ----- 3 % 6 repetitions transects SD
+
+
+bx <- ggplot(data = all_res_m, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
+
+bx + geom_boxplot(width = 0.6, alpha = 1.5) +
+  facet_grid(~ rep)  +
+  geom_point(data = def_res_m, size = 4, alpha = 1.2, color = def_colors) +
+  scale_x_discrete(labels= x_labs) +
+  scale_fill_manual(values=my_colors) +
+  labs(title="N - Wolves abundance", fill ="Transectss %", y = "N", x = "Transects %") +
+  theme_ipsum() + 
+  theme(plot.title = element_text(size=11),
+        axis.text.x = element_text(size=11,hjust=1),
+        axis.text.y = element_text(size=11),
+        legend.position="none", legend.box = "horizontal") 
 
 ## -----------------------------------------------------------------------------
 ## ------   p0   -----
@@ -175,9 +211,9 @@ bx + geom_boxplot(width = 0.6, alpha = 1.5) +
   theme(plot.title = element_text(size=11),
         axis.text.x = element_text(size=10,angle=45,hjust=1),
         axis.text.y = element_text(size=10),
-        legend.position="right", legend.box = "vertical")
+        legend.position="none", legend.box = "vertical")
 
-# ggsave("transbx_p0_25-50-75.jpeg", dpi = 300)
+ggsave("transbx_prov_p0_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
@@ -237,7 +273,7 @@ bx + geom_boxplot(width = 0.6, alpha = 1.5) +
         axis.text.y = element_text(size=10),
         legend.position="bottom", legend.box = "horizontal")
 
-# ggsave("transbx_sigma_25-50-75.jpeg", dpi = 300)
+ggsave("transbx_prov_sigma_25-50-75.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------

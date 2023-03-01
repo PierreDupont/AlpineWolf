@@ -61,9 +61,9 @@ data = list( sex = c("F","M"),
              aug.factor = 6) 
 
 ## SUBSAMPLING SPECIFICATION
-max.rep = 100                       ## Here the nmax number of repetitions(i.e. 100)
+max.rep = 4                    ## Here the nmax number of repetitions(i.e. 100)
 sim_names = c(0.25,0.50,0.75)  ## Here the names of your simulation  (i.e. 25,50,75,100)
-rep_r =c(3,6)
+rep_t =c(3,6)
 ## SET DIRECTORIES
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -182,9 +182,9 @@ for (frac in sim_names){
     ## ------   1. SUBSAMPLE TRANSECTS  -----   
     ##---- Sub-sample transects
     transectsToKeep <- trans %>%
-      group_by(trans$PROVINCIA)%>%
-      sample_frac(frac)
-    
+      mutate(ID = row_number()) %>%  #Applying row_number function and obtaining the indexes
+      group_by(trans$PROVINCIA)%>%  # Grouping for provinces
+      slice_sample(prop = frac)    # subsampling given proportions of dataset                       
    
     pathsToKeep <- filter(transects, transect_i %in% transectsToKeep$ID_APP)
     
@@ -195,7 +195,6 @@ for (frac in sim_names){
       trans3 <- pathsToKeep %>% 
       group_by(transect_i) %>%
       slice(sample(1:n(), pmin(num, n()))) 
-    
       
     trans3_b <- filter(trans_buf, path_id %in% trans3$path_id)
     # trans3_b <- st_buffer(trans3, dist = 500)

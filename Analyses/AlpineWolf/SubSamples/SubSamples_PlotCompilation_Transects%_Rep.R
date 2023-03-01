@@ -9,23 +9,23 @@ rm(list=ls())
 
 
 ## ------2. IMPORT REQUIRED LIBRARIES ------
-library(rgdal)
-library(raster)
-library(coda)
-library(nimble)
-library(nimbleSCR)
+# library(rgdal)
+# library(raster)
+# library(coda)
+# library(nimble)
+# library(nimbleSCR)
 library(stringr)
 library(abind)
 library(R.utils)
 library(sf)
 library(fasterize)
 library(dplyr)
-library(lubridate)
-library(stars)
-library(RANN)
-library(Rcpp)
-library(RcppArmadillo)
-library(RcppProgress)
+# library(lubridate)
+# library(stars)
+# library(RANN)
+# library(Rcpp)
+# library(RcppArmadillo)
+# library(RcppProgress)
 library(gridExtra)
 library(MetBrewer)
 library(fs)
@@ -35,6 +35,9 @@ library(reshape2)
 library(ghibli)
 library(wesanderson)
 library(hrbrthemes)
+library(RColorBrewer)
+library(cowplot)
+library(forcats)
 
 
 ## ------ 3. SET REQUIRED WORKING DIRECTORIES ------
@@ -60,32 +63,59 @@ thisDir <- file.path(analysisDir, modelName)
 ## ------   6. PLOT RESULTS -----
 ResDir <- file.path(thisDir, "results")
 
+all_res_t <- read.csv(file.path(ResDir, "results_transectsubsample_prov.csv"))
+all_res_t["subsampling"] <- "Transects Spatial"
+all_res_t["rep"] <- "All Transects repetitions"
+
+all_res_tr <- read.csv(file.path(ResDir, "results_transectsrepetitions.csv"))
+all_res_tr["subsampling"] <- "Transects Spatial and Intensity"
+colnames(all_res_tr)[34] <- "rep"
+all_res_tr["scenario"] <- "100"
+all_res_tr$rep[all_res_tr$rep=="3"]<-"3 repetitions"
+all_res_tr$rep[all_res_tr$rep=="6"]<-"6 repetitions"
 
 
-all_res <- read.csv(file.path(ResDir, "results_transectsubsample_prov_tr3.csv"))
+all_res_t_tr <- read.csv(file.path(ResDir, "results_transectsubsample_prov_tr.csv"))
+all_res_t_tr["subsampling"] <- "Transects Spatial and Intensity"
+all_res_t_tr$rep[all_res_t_tr$rep=="3"]<-"3 repetitions"
+all_res_t_tr$rep[all_res_t_tr$rep=="6"]<-"6 repetitions"
+
+
 def_res <- read.csv(file.path(ResDir, "res5_2.csv"))
 def_res["scenario"] <- "full dataset"
 def_res["rep"] <- "full dataset"
+
+all_res <- rbind(all_res_t, all_res_tr,all_res_t_tr)
 
 
 all_res <- all_res[,-1]
 def_res <- def_res[,-1]
 
-all_res <- rbind(filter(all_res, stat == "means"),filter(all_res, stat == "sd"))
-def_res <- rbind(filter(def_res, stat == "means"),filter(def_res, stat == "sd"))
+# all_res <- rbind(filter(all_res, stat == "means"),filter(all_res, stat == "sd"))
+# def_res <- rbind(filter(def_res, stat == "means"),filter(def_res, stat == "sd"))
 
-
+# Set colors
 def_colors <- ghibli::ghibli_palette("PonyoMedium")[4]
-my_colors <- wes_palette("GrandBudapest2")[1:3]
-# my_colors <- c(my_colors, wesanderson::wes_palette("GrandBudapest2")[4:3])
+my_colors <- wes_palette("GrandBudapest2")[1:2]
+my_colors1 <- wes_palette("GrandBudapest2")[4]
+
+my_colors2 <- ghibli::ghibli_palette("PonyoMedium")[3:4]
+
+my_colors <- c(my_colors, my_colors1, my_colors2)
 
 ## ------   data wrangling
 
-# means <- filter(all_res, stat == "means")
-# sd <- filter(all_res, stat == "sd")
-# CV <- filter(all_res, stat == "CV")
-# lci <- filter(all_res, stat == "lci")
-# uci <- filter(all_res, stat == "uci")
+means <- filter(all_res, stat == "means")
+sd <- filter(all_res, stat == "sd")
+CV <- filter(all_res, stat == "CV")
+lci <- filter(all_res, stat == "lci")
+uci <- filter(all_res, stat == "uci")
+
+def_res_m <- filter(def_res, stat == "means")
+def_res_sd <- filter(def_res, stat == "sd")
+def_res_cv <- filter(def_res, stat == "CV")
+def_res_lci <- filter(def_res, stat == "lci")
+def_res_uci <- filter(def_res, stat == "uci")
 
 
 ## -----------------------------------------------------------------------------
@@ -96,47 +126,165 @@ my_colors <- wes_palette("GrandBudapest2")[1:3]
 #   geom_jitter(position = position_jitter(width = 0.1, height = 0.1)) + 
 #   labs(title="means", fill ="Repetitions simulation", y = "N", x = "Simulation") 
 # 
+# means$scenario <- replace(means$scenario, means$scenario == 25, '25 %')
+# means$scenario <- replace(means$scenario, means$scenario == 50, '50 %')
+# means$scenario <- replace(means$scenario, means$scenario == 75, '75 %')
+# means$scenario <- replace(means$scenario, means$scenario == 100, '100 %')
 
 
-facet_lab <- as_labeller(c('means' = "Means", 
-                           'sd' = "Standard Deviation"))
+# means$rep <- replace(means$rep, means$rep == 3, '3 search events')
+# means$rep <- replace(means$rep, means$rep == 6, '6 search events')
 
-x_labs <- c("3", " 6", "full dataset")
-
-# vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
-
-# vl + geom_violin(alpha = 1.2) +
-#   facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-#   geom_point(data = def_res, size =3, alpha = 1.2, color = def_colors) +
-#   # scale_x_discrete(labels= x_labs) +
-#   scale_fill_manual(values=my_colors) +
-#   labs(title="N - Wolves abundance", fill ="Search Events", y = "N", x = "Number of Search Events") +
-#   theme_ipsum() + 
-#   theme(plot.title = element_text(size = 11),
+# 
+#  vl <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario)))
+# 
+#  vl + geom_violin(alpha = 1.2) +
+#    facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) +
+#    geom_point(data = def_res, size =3, alpha = 1.2, color = def_colors) +
+#    # scale_x_discrete(labels= x_labs) +
+#    scale_fill_manual(values=my_colors) +
+#    labs(title="N - Wolves abundance", fill ="Search Events", y = "N", x = "Number of Search Events") +
+#    theme_ipsum() +
+#    theme(plot.title = element_text(size = 11),
 #         axis.text.x = element_text(size = 11, hjust = 1),
 #         axis.text.y = element_text(size = 11),
-#         legend.position="none", legend.box = "horizontal") 
-#   
+#         legend.position="none", legend.box = "horizontal")
+# 
+#  vl 
 # ggsave("transectsrepetitionsvl_N_3-6.jpeg", dpi = 300)
 
 
-bx <- ggplot(data = all_res, aes(x=as.character(scenario), y=N, fill = as.character(scenario))) 
+# data_hline <- data.frame(group = unique(def_res_m$scenario),  # Create data for lines
+#                          hline = def_res_m)
+# data_hline_lci <- data.frame(group = unique(def_res_lci$scenario),  # Create data for lines
+#                          hline = def_res_lci)
+# data_hline_uci <- data.frame(group = unique(def_res_lci$scenario),  # Create data for lines
+#                          hline = def_res_uci)
+# 
 
-bx + geom_boxplot(width = 0.6, alpha = 1.5) +
-  facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
-  geom_point(data = def_res, size =4, alpha = 1.2, color = def_colors) +
-  scale_x_discrete(labels= x_labs) +
-  scale_fill_manual(values=my_colors) +
-  labs(title="N - Wolves abundance", fill ="Maximum number 
-  of Search Events", y = "N", x = "Maximum number of 
-       Search Events") +
-  theme_ipsum() + 
-  theme(plot.title = element_text(size = 11),
-        axis.text.x = element_text(size = 11, hjust = 1),
-        axis.text.y = element_text(size = 11),
-        legend.position="none", legend.box = "vertical") 
+# ------ AV$SD -----
 
-ggsave("transectsrepetitionsbx_N_3-6.jpeg", dpi = 300)
+bx <- means %>%
+  mutate(scenario = fct_relevel(scenario,"25", "50", "75", "100")) %>%
+  ggplot(aes(x=scenario, y=N, fill = scenario)) +
+  geom_violin(width = 0.6, alpha = 1.5) +
+  geom_hline(yintercept=def_res_m$N, linetype="dashed", color = "red") +
+  facet_grid(vars(rep)) + 
+  # geom_hline(data = data_hline,
+  #            aes(yintercept = hline.N),
+  #                size = 0.2) +
+  # geom_hline(data = data_hline_lci,
+  #            aes(yintercept = hline.N), 
+  #                linetype = "dashed", 
+  #                size=0.2) + 
+  # geom_hline(data = data_hline_uci,
+  #            aes(yintercept = hline.N),
+  #            linetype = "dashed", 
+  #            size=0.2) +
+  # geom_point(data = def_res_m, size =4, alpha = 1.2, color = def_colors) +
+  # scale_x_discrete(labels= x_labs) +
+  stat_summary(fun = median, geom = "point", color = "white",
+             position = position_dodge(0.9)) +
+  scale_fill_manual(values=my_colors, name = "Transects Spatial Subsampling",labels=c('25%', '50%', '75%', "100%")) +
+  labs(y = "N", x = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(size=0),
+        axis.text.y = element_text(size=10))
+
+
+
+bx_sd <- sd %>%
+  mutate(scenario = fct_relevel(scenario,"25", "50", "75", "100")) %>%
+  ggplot(aes(x=scenario, y=N, fill = scenario)) +
+  geom_violin(width = 0.6, alpha = 1.5) +
+  geom_hline(yintercept=def_res_sd$N, linetype="dashed", color = "red") +
+  facet_grid(vars(rep)) + 
+  # geom_hline(data = data_hline,
+  #            aes(yintercept = hline.N),
+  #                size = 0.2) +
+  # geom_hline(data = data_hline_lci,
+  #            aes(yintercept = hline.N), 
+  #                linetype = "dashed", 
+  #                size=0.2) + 
+  # geom_hline(data = data_hline_uci,
+  #            aes(yintercept = hline.N),
+  #            linetype = "dashed", 
+  #            size=0.2) +
+# geom_point(data = def_res_m, size =4, alpha = 1.2, color = def_colors) +
+# scale_x_discrete(labels= x_labs) +
+stat_summary(fun = median, geom = "point", color = "white",
+             position = position_dodge(0.9)) +
+  scale_fill_manual(values=my_colors, name = "Transects Spatial Subsampling",labels=c('25%', '50%', '75%', "100%")) +
+  labs(y = "Standard Deviation", x = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(size=0),
+        axis.text.y = element_text(size=9))
+
+
+plot_grid(bx, bx_sd, labels = "AUTO")
+
+# ------ AV$CV -----
+
+bx <- means %>%
+  mutate(scenario = fct_relevel(scenario,"25", "50", "75", "100")) %>%
+  ggplot(aes(x=scenario, y=N, fill = scenario)) +
+  geom_violin(width = 0.6, alpha = 1.5) +
+  geom_hline(yintercept=def_res_m$N, linetype="dashed", color = "red") +
+  facet_grid(vars(rep)) + 
+  # geom_hline(data = data_hline,
+  #            aes(yintercept = hline.N),
+  #                size = 0.2) +
+  # geom_hline(data = data_hline_lci,
+  #            aes(yintercept = hline.N), 
+  #                linetype = "dashed", 
+  #                size=0.2) + 
+  # geom_hline(data = data_hline_uci,
+  #            aes(yintercept = hline.N),
+  #            linetype = "dashed", 
+  #            size=0.2) +
+# geom_point(data = def_res_m, size =4, alpha = 1.2, color = def_colors) +
+# scale_x_discrete(labels= x_labs) +
+stat_summary(fun = median, geom = "point", color = "white",
+             position = position_dodge(0.9)) +
+  scale_fill_manual(values=my_colors, name = "Transects Spatial Subsampling",labels=c('25%', '50%', '75%', "100%")) +
+  labs(y = "N", x = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(size=0),
+        axis.text.y = element_text(size=10))
+
+
+
+bx_CV <- CV %>%
+  mutate(scenario = fct_relevel(scenario,"25", "50", "75", "100")) %>%
+  ggplot(aes(x=scenario, y=N, fill = scenario)) +
+  geom_violin(width = 0.6, alpha = 1.5) +
+  geom_hline(yintercept=def_res_cv$N, linetype="dashed", color = "red") +
+  facet_grid(vars(rep)) + 
+  # geom_hline(data = data_hline,
+  #            aes(yintercept = hline.N),
+  #                size = 0.2) +
+  # geom_hline(data = data_hline_lci,
+  #            aes(yintercept = hline.N), 
+  #                linetype = "dashed", 
+  #                size=0.2) + 
+  # geom_hline(data = data_hline_uci,
+  #            aes(yintercept = hline.N),
+  #            linetype = "dashed", 
+  #            size=0.2) +
+# geom_point(data = def_res_m, size =4, alpha = 1.2, color = def_colors) +
+# scale_x_discrete(labels= x_labs) +
+stat_summary(fun = median, geom = "point", color = "white",
+             position = position_dodge(0.9)) +
+  scale_fill_manual(values=my_colors, name = "Transects Spatial Subsampling",labels=c('25%', '50%', '75%', "100%")) +
+  labs(y = "CV", x = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(size=0),
+        axis.text.y = element_text(size=9))
+
+
+plot_grid(bx, bx_CV, labels = "AUTO")
+
+# ggsave("transects-and-repetitionsbx.jpeg", dpi = 300)
 
 ## -----------------------------------------------------------------------------
 ## ------   p0   -----
@@ -147,7 +295,10 @@ ggsave("transectsrepetitionsbx_N_3-6.jpeg", dpi = 300)
 p0 <- all_res[, grep("p0", colnames(all_res))]
 p0["stat"] <- all_res$stat
 p0["scenario"] <- all_res$scenario
-p0 <- melt(p0,id.vars=c("scenario","stat"))
+p0["rep"] <- all_res$rep
+p0["subsampling"] <- all_res$subsampling
+
+p0 <- reshape2::melt(p0,id.vars=c("scenario","stat","rep","subsampling"))
 # p01 <- p0 %>% 
 #   filter(stat != "lci"| stat != "uci")
 
@@ -155,12 +306,28 @@ p0 <- melt(p0,id.vars=c("scenario","stat"))
 p0_52 <- def_res[, grep("p0", colnames(def_res))]
 p0_52["stat"] <- def_res$stat
 p0_52["scenario"] <- def_res$scenario
-p0_52 <- melt(p0_52,id.vars=c("scenario","stat"))
+p0_52["rep"] <- def_res$rep
+p0_52["subsampling"] <- def_res$subsampling
+pp0_52 <- reshape2::melt(p0_52,id.vars=c("scenario","stat"))
 
 
 x_labs_t <- c("F RI","F offspring","F other",
               "M RI","M offspring","M other")
 
+
+## ------   filter
+
+p0means <- filter(p0, stat == "means")
+p0sd <- filter(p0, stat == "sd")
+p0CV <- filter(p0, stat == "CV")
+p0lci <- filter(p0, stat == "lci")
+p0uci <- filter(p0, stat == "uci")
+
+p0_52_m <- filter(pp0_52, stat == "means")
+p0_52_sd <- filter(pp0_52, stat == "sd")
+p0_52_cv <- filter(pp0_52, stat == "CV")
+p0_52_lci <- filter(pp0_52, stat == "lci")
+p0_52_uci <- filter(pp0_52, stat == "uci")
 
 ## ------   plots
 
@@ -189,11 +356,51 @@ x_labs_t <- c("F RI","F offspring","F other",
 
 ### BOXPLOT
 
-bx <- ggplot(data = p0, aes(x=variable, y=value, fill = as.character(scenario))) 
+# ------ AV$CV -----
+
+p0m <- p0means %>%
+  mutate(scenario = fct_relevel(scenario,"25", "50", "75", "100")) %>%
+  ggplot(aes(x=variable, y=value, fill = scenario)) +
+  geom_violin(width = 0.6, alpha = 1.5) +
+  geom_hline(yintercept=pp0_52$value, linetype="dashed", color = "red") +
+  facet_grid(vars(rep)) + 
+  stat_summary(fun = median, geom = "point", color = "white",
+             position = position_dodge(0.9)) +
+  scale_fill_manual(values=my_colors, name = "Transects Spatial Subsampling",labels=c('25%', '50%', '75%', "100%")) +
+  labs(y = "N", x = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(size=0),
+        axis.text.y = element_text(size=10))
+
+
+p0_CV <- p0CV %>%
+  mutate(scenario = fct_relevel(scenario,"25", "50", "75", "100")) %>%
+  ggplot(aes(x=variable, y=value, fill = scenario)) +
+  geom_violin(width = 0.6, alpha = 1.5) +
+  geom_hline(yintercept=pp0_52_cv$value, linetype="dashed", color = "red") +
+  facet_grid(vars(rep)) + 
+  stat_summary(fun = median, geom = "point", color = "white",
+             position = position_dodge(0.9)) +
+  scale_fill_manual(values=my_colors, name = "Transects Spatial Subsampling",labels=c('25%', '50%', '75%', "100%")) +
+  labs(y = "CV", x = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(size=0),
+        axis.text.y = element_text(size=9))
+
+
+plot_grid(p0m, p0_CV, labels = "AUTO")
+
+
+
+
+
+
+
+bx <- ggplot(data = p0$stat, aes(x=variable, y=value, fill = as.character(scenario)))
 
 bx + geom_boxplot(width = 0.6, alpha = 1) +
   geom_boxplot(data = p0_52, alpha = 1.2,color = def_colors) +
-  facet_wrap(vars(stat), scales = "free_y", labeller = facet_lab) + 
+  facet_wrap(vars(stat), scales = "free_y") + 
   scale_x_discrete(labels= x_labs_t) +
   scale_fill_manual(values=my_colors) +
   labs(title="p0 - baseline detectability", fill ="Maximum number 
@@ -205,7 +412,7 @@ bx + geom_boxplot(width = 0.6, alpha = 1) +
         axis.text.y = element_text(size = 10),
         legend.position="none", legend.box = "vertical")
 
-ggsave("transectsrepetitionsbx_p0_3-6.jpeg", dpi = 300)
+bc# ggsave("transectsrepetitionsbx_p0_3-6.jpeg", dpi = 300)
 
 
 ## -----------------------------------------------------------------------------
@@ -338,7 +545,7 @@ habcov <- all_res[,grep("betaDet", colnames(all_res))]
 habcov["stat"] <- all_res$stat
 habcov["scenario"] <- all_res$scenario
 habcov <- melt(habcov,id.vars=c("scenario","stat"))
-  
+
 habcov_52 <- def_res[,grep("betaDet", colnames(def_res))]
 habcov_52["stat"] <- def_res$stat
 habcov_52["scenario"] <- def_res$scenario
@@ -450,4 +657,3 @@ bx + geom_boxplot(width = 0.6,alpha = 1.2) +
         legend.position="none", legend.box = "horizontal")
 
 ggsave("transectsrepetitionsbx_rho_3-6.jpeg", dpi = 300)
-
