@@ -83,7 +83,7 @@ qs <- function(x,y){as.numeric(quantile(x,y))}
 
 ## -----------------------------------------------------------------------------
 ## ------ 5. SET ANALYSIS CHARACTERISTICS -----
-modelName = "AlpineWolf.SubSample.rep_100"
+modelName = "AlpineWolf.SubSample.Transects_prov_tr"
 
 thisDir <- file.path(analysisDir, modelName)
 
