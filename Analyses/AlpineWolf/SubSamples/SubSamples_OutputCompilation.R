@@ -83,7 +83,7 @@ qs <- function(x,y){as.numeric(quantile(x,y))}
 
 ## -----------------------------------------------------------------------------
 ## ------ 5. SET ANALYSIS CHARACTERISTICS -----
-modelName = "AlpineWolf.SubSample.Transects_prov_tr"
+modelName = "AlpineWolf.SubSample.Transects_prov"
 
 thisDir <- file.path(analysisDir, modelName)
 
@@ -101,9 +101,9 @@ OutDir <- file.path(thisDir, "output/")
 resLista <- list()  
 
 ## Define loop
-rpp <- 10 
-sim_names <- c("25", "50","75")  
-# rep_t <- c("3","6")
+rpp <- 1
+sim_names <- c("25")  
+# rep_t <- c("3")
 
 ## Loop over simulation scenarios
 for(sc in 1:length(sim_names)) {
@@ -115,6 +115,7 @@ for(sc in 1:length(sim_names)) {
   
   ## Loop over repetitions
   for(rp in 1:rpp) {  
+    # for (num in 1:length(rep_t)) {
 
     ## List output files for scenario "sc" and repetition "rp" only
     outputs <- list.files(OutDir, paste0(modelName,"_", sim_names[sc], "_", rp, "_"))
@@ -124,9 +125,8 @@ for(sc in 1:length(sim_names)) {
     nimOutput <- collectMCMCbites(
       path = file.path(OutDir, outputs),
       burnin = 20) # add in all simulations
-    
     ## Proces output
-    res <- ProcessCodaOutput(nimOutput$samples2)
+    res <- ProcessCodaOutput(nimOutput)
     
     ## Extract density
     resLista <- NULL
@@ -188,7 +188,9 @@ for(sc in 1:length(sim_names)) {
   
   ## store all scenarios in one final list
   resLista[[sc]] <- tempLista
-}#sc
+# }#num
+ }#sc
+
 
 # Extracts lists with scenarios stored
 res25 <- do.call("rbind", resLista[[1]])
@@ -205,7 +207,7 @@ all_res <- rbind(res25, res50, res75)
 # save
 # write.csv(all_res, "results_transectsubsample_prov_tr6.csv")
 
-
+# Error in mcmc.list(x) : Different start, end or thin values in each chain
 
 
 
