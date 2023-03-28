@@ -101,6 +101,8 @@ plot(st_geometry(studyArea))
 plot(st_geometry(countries), col = "gray80",add=T)
 plot(studyAreaGrid["SCR"], add = T)
 
+
+
 ## ------   2. SEARCH EFFORT DATA ------
 ##---- Load GPS search transects
 transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
