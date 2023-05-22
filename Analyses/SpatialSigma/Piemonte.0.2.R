@@ -97,25 +97,25 @@ studyArea <- studyAreaGrid %>%
 ##--- SCR grid
 SCRGrid <- read_sf(file.path(dataDir,"GISData/SECR_presence_layer_2020_2021/SECR_presence_layer_2021.shp"))
 SCRGrid <- st_transform(x = SCRGrid, crs = st_crs(countries))
-SCRGrid <- SCRGrid[SCRGrid$Pres_20.21 == 1, ]
+SCRGrid <- SCRGrid[SCRGrid$`Pres_20-21` == 1, ]
 
-##---- Plot check
-pdf(file = file.path(thisDir, "figures", paste0(modelName, "_ngs_map.pdf" )),
-    width = 15, height = 12)
-cols <- met.brewer(name="Isfahan1",n=10,type="continuous")
-plot(st_geometry(st_intersection(studyArea,countries)),border = F)
-plot(st_geometry(countries), col = "gray80", add = T, border = F)
-plot(st_geometry(temp), col = "gray80",add=T,border = F)
-plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="gray60",border = F)
-plot(transects,add=T,col="red")
-plot(ngs[ngs$Sex == "M", ], add=T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
-plot(ngs[ngs$Sex == "F", ], add=T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
-legend( "bottomright", pch = 21, cex = 1.5, bty = "n", 
-        legend = c("female","male"),
-        col = cols[c(5,7)], 
-        pt.bg = c(adjustcolor(cols[5],0.3),
-                  adjustcolor(cols[7],0.3)))
-graphics.off()
+# ##---- Plot check
+# pdf(file = file.path(thisDir, "figures", paste0(modelName, "_ngs_map.pdf" )),
+#     width = 15, height = 12)
+# cols <- met.brewer(name="Isfahan1",n=10,type="continuous")
+# plot(st_geometry(st_intersection(studyArea,countries)),border = F)
+# plot(st_geometry(countries), col = "gray80", add = T, border = F)
+# plot(st_geometry(temp), col = "gray80",add=T,border = F)
+# plot(st_geometry(st_intersection(studyArea,countries)),add=T,col="gray60",border = F)
+# plot(transects,add=T,col="red")
+# plot(ngs[ngs$Sex == "M", ], add=T, cex = 1, col = cols[5], bg = adjustcolor(cols[5],0.3),pch=21)
+# plot(ngs[ngs$Sex == "F", ], add=T, cex = 1, col = cols[7], bg = adjustcolor(cols[7],0.3),pch=21)
+# legend( "bottomright", pch = 21, cex = 1.5, bty = "n", 
+#         legend = c("female","male"),
+#         col = cols[c(5,7)], 
+#         pt.bg = c(adjustcolor(cols[5],0.3),
+#                   adjustcolor(cols[7],0.3)))
+# graphics.off()
 
 
 plot(st_geometry(countries), col = "gray80", border = F)

@@ -1635,7 +1635,7 @@ for(c in 1:4){
                                     c(0.5,0.3,0.2)),
                     "betaDet" = rep(0,nimConstants$n.detCovs),
                     "psiRJ" = 1,
-                    "zRJ" = rep(1,nimConstants$n.detCovs),
+                    "zRJ" = rep(1,nimConstants$n.habCovs),
                     "betaHab.raw" = rep(0,nimConstants$n.habCovs),
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),

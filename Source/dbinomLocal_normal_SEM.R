@@ -258,10 +258,13 @@ dbinomLocal_normal_SEM <- nimbleFunction(
         p <- p0Traps[theseLocalTraps[r]] * exp(alpha * d2)
         logProb <-  logProb + dbinom(x1[count], prob = p, size = size[theseLocalTraps[r]], log = TRUE)
         count <- count + 1
+        #print(logProb)
+        
       }else{
         d2 <- pow(trapCoords[theseLocalTraps[r],1] - s[1], 2) + pow(trapCoords[theseLocalTraps[r],2] - s[2], 2)
         p <- p0Traps[theseLocalTraps[r]] * exp(alpha * d2)
         logProb <- logProb + dbinom(0, prob = p, size = size[theseLocalTraps[r]], log = TRUE)
+        #print(logProb)
       }
     }#r
     

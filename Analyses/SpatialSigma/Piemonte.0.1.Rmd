@@ -1,0 +1,726 @@
+---
+title: |
+  <center> Spatial determinants of home-range size in the Alpine wolf population </center>
+subtitle: | 
+  <center> an SCR analysis </center>
+date: |
+  <center> 19 April 2023 </center>
+output:
+  html_document: 
+    fontsize: 11pt
+    theme: "cerulean" 
+    toc_depth: 2
+    toc: yes
+    toc_float: yes
+    highlight: zenburn
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include = FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{=html}
+<style>
+div.assignment { background-color:#ffccff; border-radius:5px; padding:10px; }
+</style>
+
+<style>
+div.exercise { background-color:#CCFFCC; border-radius:5px; padding:10px; }
+</style>
+
+<style>
+div.question { background-color:#ffe5cc; border-radius:5px; padding:10px; }
+</style>
+
+<style>
+div.time { background-color:#ffccff; border-radius:5px; padding:10px; }
+</style>
+
+<style>
+div.background{ background-color:#e0e0e0; border-radius:5px; padding:10px; }
+</style>
+
+<style>
+div.everyone{ background-color:#99FFFF; border-radius:5px; padding:10px; }
+</style>
+
+<style>
+div.note { background-color:#FFFFCC; border-radius:5px; padding:10px; }
+</style>
+```
+
+
+
+
+Pierre Dupont^1^ ([pierre.dupont\@nmbu.no](mailto:pierre.dupont@nmbu.no))
+^1^ Faculty of Environmental Sciences and Natural Resource Management, PB 5003, NO-1432 Ås, Norway
+
+
+
+
+## Introduction
+
+The goal of this study is to quantify the variation in home range size in the wolf population of the Italian Alps and to identify the main drivers of this variation. To do so, we will perform a Spatial Capture-Recapture analysis of the data collected during the 2020/21 winter using **`nimbleSCR`**.
+
+In a first attempt to estimate the spatial variation in home-range size of wolves using SCR, we will fit a model where $/sigma$, the scale parameter of the half-normal detection function varies as a function of a set of spatial covariates. In this instance, we will use the same set of spatial covariates in the density of Alpine wolves and $/sigma$.
+
+::: note
+**Note:** Because of the complexity of the model, we will first perform the analysis on a    subset of the dataset, namely wolf DNA samples that were collected in the regions of **Piemonte**, **Valle d'Aosta** and **Liguria**. 
+:::
+<br>
+
+
+
+
+## Libraries and data
+
+Again, we start by loading the R packages, custom functions and simulated data.
+```{r, libraries, warning = FALSE, message = FALSE}
+library(nimble)
+library(nimbleSCR)
+library(basicMCMCplots)
+library(raster)
+library(rgeos)
+library(sf)
+library(ggplot2)
+library(ggplotify)
+library(plotly)
+library(data.table)
+library(coda)
+library(abind)
+library(R.utils)
+library(patchwork)
+library(rnaturalearth)
+library(rnaturalearthdata)
+```
+
+```{r, functions, warning = FALSE, message = FALSE}
+source("workingDirectories.R")
+##-- Source custom functions
+sourceDirectory( "C:/My_documents/RovQuant/Temp/PD/nimbleSCR_workshop/functions",
+                 modifiedOnly = F)
+##-- Source custom functions
+source( "C:/My_documents/AlpineWolf/Source/dbinomLocal_normal_SEM.R")
+```
+
+```{r, set-up specifications, warning = FALSE, message = FALSE}
+##-- Model name and directories
+modelName = "Piemonte.0.1"
+thisDir <- file.path(analysisDir, "SpatialSigma/Piemonte")
+dir.create(file.path(thisDir, modelName, "input"), recursive = T)
+dir.create(file.path(thisDir, modelName, "output"), recursive = T)
+dir.create(file.path(thisDir, modelName, "figures"), recursive = T)
+
+```
+
+```{r, load pre-processed data, warning = FALSE, message = FALSE}
+##-- Load Alpine wolf dataset
+load(file = file.path(thisDir, "data/Piemonte_data.RData"))
+
+habitat.df <- habitat$ssdf
+head(habitat.df)
+
+detectors.df <- detectors$tdf
+head(detectors.df)
+detectors.df$detector <- detectors.df$id
+
+data.df <- edf
+head(data.df)
+
+ind <- id.covs
+head(ind)
+```
+<br>
+
+
+
+
+## Visualizing the data
+
+We use the **`plotNimbleSCR_input`** function to visualize the data.
+```{r, plotNimbleSCR_input, warning = FALSE, message = FALSE, fig.align = 'center'}
+input.plots <- plotNimbleSCR_input(
+  data = data.df,
+  habitat = habitat.df,
+  detectors = detectors.df,
+  detection.fun = c("dbinomLocal_normal"))
+```
+
+```{r, idDetections, out.width = "100%", fig.align = 'center'}
+ggplotly(input.plots$detector.1.detections.by.individual)
+```
+
+We can also look at the spatial covariates contained in the **`habitat.df`** and **`detectors.df`** dataframes:
+```{r, spatialCovs, out.width = "100%", warning = FALSE, fig.align = 'center'}
+input.plots$habitat.cov.developed + 
+  input.plots$habitat.cov.forest + 
+  input.plots$habitat.cov.herbaceous + 
+  input.plots$habitat.cov.bare.rock + 
+  input.plots$habitat.cov.perpetual.snow + 
+  input.plots$habitat.cov.alpine + 
+  input.plots$habitat.cov.log_pop + 
+  input.plots$habitat.cov.IUCN +
+  input.plots$habitat.cov.mainRoads_L
+
+
+input.plots$detector.1.cov.transect_L +
+  input.plots$detector.1.cov.snow_fall +
+  input.plots$detector.1.cov.pop +
+  input.plots$detector.1.cov.transect_qi
+```
+<br>
+
+
+
+
+## Write a **`nimbleSCR`** model w/ spatial covariates
+
+We can now update the **`nimbleSCR`** model to account for the effects of spatial covariates on density and detectability.
+
+First, we modify the **spatial process** section, which models the distribution of individual activity centers throughout the habitat, i.e. density.
+In the basic SCR model, density was assumed to be constant. Here, we model density as a function of **forest cover**:
+
+-   $D \sim bare rock + herbaceous + forest + pop + IUCN$
+
+The **demographic process** section, which deals with the augmentation process is unchanged.
+
+To account for spatial variation in the **detection process**, we model the baseline detection probability ($p_0$) at each detector location as a function of the **search effort**:
+
+-   $p_0 \sim transect_L + transect_{qi} + snowfall + log(pop)$
+
+-   $\sigma \sim \sim bare rock + herbaceous + forest + pop + IUCN$
+
+-   $p_{ij} = p_{0} \, \exp\Big{(}-\frac{d_{ij}^2}{2\sigma^2}\Big{)}$
+
+```{r, model}
+## ------   1. MODEL ------
+modelCode <- nimbleCode({
+  ##---- SPATIAL PROCESS  
+  for(c in 1:numHabCovs){
+    betaHab[c] ~ dnorm(0.0,0.01)
+  }#c
+  
+  habIntensity[1:numHabWindows] <- exp(
+    habCovs[1:numHabWindows,1:numHabCovs] %*% betaHab[1:numHabCovs])
+  sumHabIntensity <- sum(habIntensity[1:numHabWindows])
+  logHabIntensity[1:numHabWindows] <- log(habIntensity[1:numHabWindows])
+  logSumHabIntensity <- log(sumHabIntensity)
+  
+  for(i in 1:M){
+    s[i,1:2] ~ dbernppAC(
+      lowerCoords = lowerHabCoords[1:numHabWindows,1:2],
+      upperCoords = upperHabCoords[1:numHabWindows,1:2],
+      logIntensities = logHabIntensity[1:numHabWindows],
+      logSumIntensity = logSumHabIntensity,
+      habitatGrid = habitatGrid[1:numHabGridRows,1:numHabGridCols],
+      numGridRows = numHabGridRows,
+      numGridCols = numHabGridCols)
+  }#i
+  
+  
+  ##---- DEMOGRAPHIC PROCESS  
+  psi ~ dunif(0,1)
+  rho ~ dunif(0,1)
+  
+  for(ss in 1:2){
+    theta[1:numStates,ss] ~ ddirch(alpha[1:numStates,ss])
+  }#ss
+  
+  for(i in 1:M){ 
+    z[i] ~ dbern(psi) 
+    indCovs[i,1] ~ dbern(rho)                              # sex[i] ~ dbern(rho)
+    indCovs[i,2] ~ dcat(theta[1:numStates,indCovs[i,1]+1]) # status[i] ~ dcat(theta[1:n.states,sex[i]+1])
+  }#i 	
+  
+
+  
+  ##---- DETECTION PROCESS 
+  ##-- Priors for p0 and sigma intercepts
+  for(s in 1:numStates){
+    for(ss in 1:2){
+      p0[s,ss] ~ dunif(0,0.5)
+      sigma0[s,ss] ~ dunif(0,2)
+      logit(p0Traps[s,ss,1:numTraps]) <- logit(p0[s,ss]) + 
+        trapCovs[1:numTraps,1:numTrapCovs] %*% betaTraps[1:numTrapCovs]
+    }#ss
+  }#s
+  
+  ##-- Priors for regression coefficients on p0
+  for(c in 1:numTrapCovs){
+    betaTraps[c] ~ dnorm(0.0,0.01)
+  }#c
+  
+  ##-- Priors for regression coefficients on sigma
+  for(c in 1:numHabCovs){
+    betaSigma[c] ~ dnorm(0.0,0.01)
+  }#c
+  
+  ##-- 
+  for(i in 1:M){
+    y[i,1:lengthYCombined] ~ dbinomLocal_normal_SEM(
+      resizeFactor = 1,
+      size = size[1:numTraps],
+      p0Traps = p0Traps[indCovs[i,2],indCovs[i,1]+1,1:numTraps],
+      sigma0 = sigma0[indCovs[i,2],indCovs[i,1]+1],
+      densCov = densCov[1:numHabWindows],
+      betaDens = 0,
+      habCovs = habCovs[1:numHabWindows,1:numHabCovs],
+      betaHab = betaSigma[1:numHabCovs],
+      s = s[i,1:2],
+      trapCoords = trapCoords[1:numTraps,1:2],
+      localTrapsIndices = localTrapsIndices[1:numHabWindows,1:localTrapsNumMax],
+      localTrapsNum = localTrapsNum[1:numHabWindows],
+      habitatGrid = habitatGrid[1:numHabGridRows,1:numHabGridCols],
+      indicator = z[i],
+      lengthYCombined = lengthYCombined)
+  }#i
+  
+  
+  
+  ##---- POPULATION SIZE & DENSITY
+  ## ABUNDANCE
+  N <- sum(z[1:M])
+  
+  ## Number of individuals in each habitat cell
+  density[1:numHabWindows] <- calculateDensity(
+    s = s[1:M,1:2],
+    habitatGrid = habitatGrid[1:numHabGridRows,1:numHabGridCols],
+    indicator = z[1:M],
+    numWindows = numHabWindows,
+    nIndividuals = M)
+  
+  densCov[1:numHabWindows] <- log(density[1:numHabWindows]+1) - 0.2
+})
+```
+<br>
+
+
+
+
+## Formatting the data
+
+Here, we use the **`data2nimbleSCR`** wrapper function to help us format the input data.
+We simply have to specify which covariate(s) we want to use in the model by providing their names to the function.
+```{r, data formatting}
+##-- Format input for nimbleSCR
+nimInput <- data2nimbleSCR(
+  data = data.df,
+  ind = ind,
+  ind.covs = c("sex","status"),
+  habitat = habitat.df,
+  habitat.covs = c( "bare rock",
+                    "herbaceous",
+                    "forest",
+                    "pop",
+                    "IUCN"),
+  detectors = detectors.df,
+  detectors.covs = c( "transect_L", 
+                      "transect_qi", 
+                      "snow_fall", 
+                      "log_pop"),
+  detectors.dmax = 80000,
+  detection.fun = "dbinomLocal_normal",
+  M = 2500)
+
+##-- Add number of states to the constants
+nimInput$constants$alpha <- matrix(1,3,2)
+nimInput$constants$numStates <- 3
+```
+
+The **`nimInput`** object now also contains two spatial covariates (**`habCovs`** and **`trapCovs`**).
+::: note
+Remember to also provide initial values for the new parameters in the model **`betaHab`** and **`betaTraps`**!
+:::
+```{r, initial values, eval = FALSE}
+##-- Generate initial values for "z"
+z.init <- rbinom(n = nimInput$constants$M, 1, prob = 0.4)
+z.init[nimInput$data$y[,1]>0] <- 1
+
+##-- Generate initial values for "s"
+s.init <- getSInits(
+  y = nimInput$data$y,
+  trapCoords = as.matrix(nimInput$data$trapCoords),
+  lowerCoords = as.matrix(nimInput$data$lowerHabCoords),
+  upperCoords = as.matrix(nimInput$data$upperHabCoords),
+  habitatGrid = as.matrix(nimInput$data$habitatGrid),
+  lengthYCombined = nimInput$constants$lengthYCombined)
+
+##-- Generate initial values for "sex"
+sex.init <- rbinom(n = nimInput$constants$M, 1, prob = 0.5)
+sex.init[!is.na(nimInput$data$indCovs[ ,"sex"])] <- NA
+
+##-- Generate initial values for "status"
+status.init <- rcat(n = nimInput$constants$M, prob = c(0.3,0.6,0.1))
+status.init[!is.na(nimInput$data$indCovs[ ,"status"])] <- NA
+
+##-- Add to the input
+nimInput$inits <- list( 
+  psi = 0.6,
+  rho = 0.5,
+  theta = cbind(c(0.5,0.45,0.05),
+                c(0.5,0.3,0.2)),
+  sigma0 = cbind(c(0.5,0.5,1),
+                 c(0.5,0.5,1)),
+  p0 = cbind(c(0.1,0.1,0.05),
+             c(0.1,0.1,0.05)),
+  betaHab = rnorm(nimInput$constants$numHabCovs),
+  betaSigma = rnorm(nimInput$constants$numHabCovs),
+  betaTraps = rnorm(nimInput$constants$numTrapCovs),
+  z = c(rep(1,nimInput$constants$M*0.6),
+        rep(1,nimInput$constants$M*0.4)),
+  s = s.init[ , ,1],
+  indCovs = cbind(sex.init, status.init))
+```
+
+```{r, save input, warning = FALSE, echo = FALSE}
+for(c in 1:8){
+  ##-- Generate initial values for "z"
+  z.init <- rbinom(n = nimInput$constants$M, 1, prob = 0.4)
+  z.init[nimInput$data$y[,1]>0] <- 1
+  
+  ##-- Generate initial values for "s"
+  s.init <- getSInits(
+    y = nimInput$data$y,
+    trapCoords = as.matrix(nimInput$data$trapCoords),
+    lowerCoords = as.matrix(nimInput$data$lowerHabCoords),
+    upperCoords = as.matrix(nimInput$data$upperHabCoords),
+    habitatGrid = as.matrix(nimInput$data$habitatGrid),
+    lengthYCombined = nimInput$constants$lengthYCombined)
+  
+  ##-- Generate initial values for "sex"
+  sex.init <- rbinom(n = nimInput$constants$M, 1, prob = 0.5)
+  sex.init[!is.na(nimInput$data$indCovs[ ,"sex"])] <- NA
+  
+  ##-- Generate initial values for "status"
+  status.init <- rcat(n = nimInput$constants$M, prob = c(0.3,0.6,0.1))
+  status.init[!is.na(nimInput$data$indCovs[ ,"status"])] <- NA
+  
+  ##-- Add to the input
+  nimInput$inits <- list( 
+    psi = 0.6,
+    rho = 0.5,
+    theta = cbind(c(0.5,0.45,0.05),
+                  c(0.5,0.3,0.2)),
+    sigma0 = cbind(c(0.5,0.5,1),
+                   c(0.5,0.5,1)),
+    p0 = cbind(c(0.1,0.1,0.05),
+               c(0.1,0.1,0.05)),
+    betaHab = rnorm(nimInput$constants$numHabCovs),
+    betaSigma = rnorm(nimInput$constants$numHabCovs),
+    betaTraps = rnorm(nimInput$constants$numTrapCovs),
+    z = c(rep(1,nimInput$constants$M*0.6),
+          rep(1,nimInput$constants$M*0.4)),
+    s = s.init[ , ,1],
+    indCovs = cbind(sex.init, status.init))
+  
+  ##-- Save nimbleSCR input
+  save( modelCode, nimInput, 
+       file = file.path( thisDir, modelName, "input",
+                         paste0(modelName, "_input_", c, ".RData")))
+}
+```
+<br>
+
+
+
+
+## Fitting the model
+
+Now we are ready to fit the model in **`nimble`**.
+::: note
+Don't forget to provide the names of the additional parameters in the list of tracked parameters!
+:::
+```{r, modFit, warning = FALSE, message = FALSE, eval = FALSE}
+##-- Create the nimble model object
+nimModel <- nimbleModel( code = modelCode,
+                         constants = nimInput$constants,
+                         inits = nimInput$inits,
+                         data = nimInput$data,
+                         check = FALSE,
+                         calculate = FALSE) 
+nimModel$calculate()
+
+##---- Compile the nimble model object to C++
+CsimModel <- compileNimble(nimModel)
+CsimModel$calculate()
+
+##---- Configure and compile the MCMC object 
+conf <- configureMCMC( model = nimModel,
+                       monitors = c("N", "betaHab", "betaTraps","betaSigma",
+                                        "sigma0","psi","p0","density"),
+                       thin = 1,
+                       monitors2 = c("density","s","z","indCovs"))
+Rmcmc <- buildMCMC(conf)
+compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
+Cmodel <- compiledList$model
+Cmcmc <- compiledList$mcmc
+
+##---- Run nimble MCMC in multiple bites
+for(c in 1:1){
+  print(system.time(
+    runMCMCbites( mcmc = Cmcmc,
+                  bite.size = 100,
+                  bite.number = 2,
+                  path = file.path(thisDir, modelName, paste0("output/chain",c)))
+  ))
+}
+
+
+```
+
+```{r, debug, warning = FALSE, message = FALSE, eval = FALSE}
+nimModel$calculate()
+  
+nimModel$logProb_y
+
+i <- 19
+dbinomLocal_normal_SEM(
+  x = nimModel$y[i, ],
+  resizeFactor = 1,
+  size = nimModel$size,
+  p0Traps = nimModel$p0Traps[nimModel$indCovs[i,2],nimModel$indCovs[i,1]+1, ],
+  sigma0 = nimModel$sigma0[nimModel$indCovs[i,2],nimModel$indCovs[i,1]+1],
+  densCov = nimModel$densCov,
+  betaDens = 0,
+  habCovs = nimModel$habCovs,
+  betaHab = nimModel$betaSigma,
+  s = nimModel$s[i,1:2],
+  trapCoords = nimModel$trapCoords,
+  localTrapsIndices = nimModel$localTrapsIndices,
+  localTrapsNum = nimModel$localTrapsNum,
+  habitatGrid = nimModel$habitatGrid,
+  indicator = nimModel$z[i],
+  lengthYCombined = nimInput$constants$lengthYCombined,
+  log = 1)
+```
+
+```{r, loadFit,  message = FALSE, echo = FALSE}
+#-- save output for later
+# save(nimOutput, runtime, file ="nimOutput2.RData")
+niter <- 11000
+nburnin <- 1000
+nchains <- 2 
+
+#-- load saved output
+load(file ="nimOutput2.RData")
+```
+
+This SCR model with covariates took approx.
+`r round(runtime[3]/60)` min to run `r nchains` chains of `r niter` iterations.
+<br>
+
+
+
+
+## Processing the output
+
+Here, we can inspect parameter traceplots and summarize the posteriors. The trace plots on the left show the MCMC sample values throughout fitting process.
+Density plots on the right represent the posterior distribution of the different parameters.
+
+```{r, posterior estimate, warning = FALSE}
+
+##---- Collect multiple MCMC bites and chains
+nimOutput <- collectMCMCbites( path = file.path(thisDir, modelName, "output"),
+                               burnin = 0,
+                               pattern = "mcmcSamples",
+                               param.omit = NULL,
+                               progress.bar = F)
+
+##---- Traceplots
+pdf(file = file.path(thisDir,  modelName, "figures", paste0(modelName, "_traceplots.pdf")))
+plot(nimOutput$samples)
+graphics.off()
+
+##-- Traceplots and density plots for the tracked parameters
+chainsPlot( nimOutput,
+            var = c("N","p0","sigma","psi","betaHab","betaTraps"),
+            line = c(N, p0, sigma, psi, betaHab, betaTraps))
+
+##-- Summary of posteriors
+summary <- summary(nimOutput)$statistics
+summary[c("N","p0","sigma","psi","betaHab","betaTraps"), ]
+```
+
+And we also process the output for more convenient use.
+```{r, more output processing, out.width = "100%", warning = FALSE, message = FALSE}
+procOutput <- ProcessCodaOutput(nimOutput, DIC = F)
+```
+<br>
+
+
+
+
+## Population density
+
+We use the **`plotNimbleSCR_output`** function to generate and compare density maps.
+If provided with the simulated density alues, **`plotNimbleSCR_output`** can make maps of true and estimated densities.
+```{r, output plots, message = FALSE, warning = FALSE}
+output.plots <- plotNimbleSCR_output( procOutput = procOutput,
+                                      habitat.df = habitat.df,
+                                      true.density = true.density)
+```
+
+In addition, we use the habitat grid from  **`output.plots`** to calculate and map predicted density based on covariate values. 
+```{r, predicted density, out.width = "100%",  warning = FALSE, fig.align = 'center'}
+##-- Calculate mean predicted density per habitat cell
+habitat.sf <- output.plots$misc.data$habitat.sf
+habitat.sf$pred.density <- exp(log(procOutput$mean$N/
+                                     sum(exp(procOutput$mean$betaHab*nimInput$data$habCovs))) +
+                                 procOutput$mean$betaHab*nimInput$data$habCovs)
+
+##-- Plot predDensity
+p3 <- ggplot() + 
+  geom_sf( data = habitat.sf,
+           aes_string(fill = habitat.sf$pred.density)) +
+  scale_color_viridis_c(na.value = "white")+
+  scale_fill_viridis_c(na.value = "white")+
+  ggtitle("Predicted density") +
+  theme( panel.grid.major = element_blank(),
+         panel.grid.minor = element_blank(),
+         panel.background = element_blank())
+
+p3 + output.plots$estimated.density.surface + output.plots$true.density.surface
+```
+
+And we extract population size for the area covered by the detector grid, i.e., the study area with the habitat buffer removed.
+```{r, cropped map, out.width = "90%",  warning = FALSE, fig.align = 'center'}
+##-- Mask the density surface with the desired focal area
+focal.sf <- input.plots$misc.data$detector.stuff$effort$detector.poly.sf
+density.r <- habitat.r <- output.plots$misc.data$habitat.r
+density.inside.r <- mask(density.r, focal.sf)
+habitat.sf$cropped.density <- density.inside.r[!is.na(habitat.r)]
+
+##-- Cropped density
+ggplot() + 
+  geom_sf( data = habitat.sf,
+           aes_string(fill = habitat.sf$cropped.density)) +
+  scale_color_viridis_c(na.value = "white")+
+  scale_fill_viridis_c(na.value = "white")+
+  ggtitle("Cropped density") +
+  theme( panel.grid.major = element_blank(),
+         panel.grid.minor = element_blank(),
+         panel.background = element_blank())
+
+```
+
+Using the SCR model with spatial covariates, the abundance inside the study area is estimated to be **`sum(density.inside.r[], na.rm = TRUE)`** = `r round(sum(density.inside.r[], na.rm = TRUE),1)`
+Further, because **`nimbleSCR`** models allow tracking the location and status of each individual separately, we can plot the estimated AC location against the simulated one for each detected individual:
+```{r, individual maps, out.width = "100%",  warning = FALSE, fig.align = 'center'}
+output.plots <- plotNimbleSCR_output( procOutput,
+                                     habitat.df,
+                                     true.ACs = true.s,
+                                     individuals = c("2","9","11","12","16","23"))
+
+output.plots$estimated.and.true.AC.locations +
+  # Adding the outline of the study area to the plot
+  geom_sf(data = st_union(input.plots$misc.data$detector.stuff$effort$detector.poly.sf),
+          color = "white", fill = NA)
+```
+<br>
+
+
+
+
+## Effect plots
+
+Using posterior samples, we can predict the density and baseline detection probability for different covariate values. 
+We can then plot the relationship between the covariates and the variable of interest (with associated uncertainty). First, we look at predicted density.
+```{r, effect plots1, out.width = "90%",  warning = FALSE, fig.align = 'center'}
+##-- Covariate values to predict for
+newCov <- seq( min(nimInput$data$habCovs),
+               max(nimInput$data$habCovs),
+               length.out = 200)
+
+##-- Calculate posterior predicted density
+posterior_D <- sapply(1:length(procOutput$sims.list$N),
+                      function(x){ exp(log(procOutput$sims.list$N[x]/
+                                             sum(exp(procOutput$sims.list$betaHab[x] * nimInput$data$habCovs))) + procOutput$sims.list$betaHab[x] * newCov)})
+
+##-- Make a prediction data.frame
+pred <- cbind.data.frame(
+  "x" = seq(0,100,length.out = 200),
+  "mean" = apply(posterior_D, 1, mean),
+  "lci" = apply(posterior_D, 1, function(x) quantile(x,0.025)),
+  "uci" = apply(posterior_D, 1, function(x) quantile(x,0.975)))
+
+##-- Plot predicted density
+ggplot( data = pred,
+        aes(y = mean, x = x)) +
+  ylab( label = "Density (ids/100km2)") +
+  xlab( label = "Forest cover (%)") + 
+  geom_ribbon( aes(ymin = lci, ymax = uci),
+               fill = "firebrick4",
+               alpha = 0.3) +
+  geom_line( color = "firebrick4",
+             lwd = 1.2) +
+  ggtitle("Predicted density") 
+
+```
+
+Next, we look at the predicted baseline detection probability ($p_0$).
+```{r, effect plots2, out.width = "90%",  warning = FALSE, fig.align = 'center'}
+##-- Covariate values to predict for
+newCov <- seq( min(nimInput$data$trapCovs),
+               max(nimInput$data$trapCovs),
+               length.out = 200)
+
+##-- Calculate posterior predicted density
+posterior_p0 <- sapply(1:length(procOutput$sims.list$p0),
+                       function(x){  ilogit(logit(procOutput$sims.list$p0[x]) +
+                                              procOutput$sims.list$betaTraps[x] * newCov)})
+
+##-- Make a prediction data.frame
+pred <- cbind.data.frame(
+  "x" = newCov,
+  "mean" = apply(posterior_p0, 1, mean),
+  "lci" = apply(posterior_p0, 1, function(x) quantile(x,0.025)),
+  "uci" = apply(posterior_p0, 1, function(x) quantile(x,0.975)))
+
+##-- Plot predicted baseline detecyion probability
+ggplot( data = pred,
+        aes(y = mean, x = x)) +
+  ylab( label = bquote(p[0])) +
+  xlab( label = "Search effort") + 
+  geom_ribbon( aes(ymin = lci, ymax = uci),
+               fill = "firebrick4",
+               alpha = 0.3) +
+  geom_line( color = "firebrick4",
+             lwd = 1.2) +
+  ggtitle("Baseline detection probability") 
+```
+<br>
+
+
+
+
+## Detectability map
+
+We use the detector grid contained in **`input.plots`** to make a map of detector-specifc $p_0$ values. 
+```{r, detectability map, out.width = "90%", warning = FALSE, fig.align = 'center'}
+##-- Find the detector grid
+detector.grid <- input.plots$misc.data$detector.stuff$effort$detector.poly.sf
+
+##-- Calculate mean predicted p0 per detector
+detector.grid$p0 <- ilogit(logit(procOutput$mean$p0) + procOutput$mean$betaTraps * nimInput$data$trapCovs)
+
+##-- Plot map of p0
+ggplot() + 
+  geom_sf( data = habitat.sf,
+           fill = adjustcolor("green",0.2)) +
+  geom_sf( data = detector.grid,
+           aes_string(fill = detector.grid$p0)) +
+  scale_color_viridis_c( na.value = "white")+
+  scale_fill_viridis_c( na.value = "white")+
+  ggtitle( bquote(Detectability ~ (p[0]))) +
+  theme( panel.grid.major = element_blank(),
+         panel.grid.minor = element_blank(),
+         panel.background = element_blank())
+```
+<br>
+
+
