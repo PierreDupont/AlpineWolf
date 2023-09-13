@@ -88,7 +88,7 @@ collectMCMCbites <- function( path,
   } else {
     ## 2 - the path contains multiple directories(== multiple chains)
     ## List the directories containing bite outputs
-    outDir <- list.files(path, pattern = ".RData", ignore.case = T)
+    outDir <- list.files(path, ignore.case = T)
     path.list <- file.path(path, outDir)
   }
   

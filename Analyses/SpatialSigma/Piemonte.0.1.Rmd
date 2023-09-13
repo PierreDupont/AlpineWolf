@@ -70,7 +70,7 @@ The goal of this study is to quantify the variation in home range size in the wo
 In a first attempt to estimate the spatial variation in home-range size of wolves using SCR, we will fit a model where $/sigma$, the scale parameter of the half-normal detection function varies as a function of a set of spatial covariates. In this instance, we will use the same set of spatial covariates in the density of Alpine wolves and $/sigma$.
 
 ::: note
-**Note:** Because of the complexity of the model, we will first perform the analysis on a    subset of the dataset, namely wolf DNA samples that were collected in the regions of **Piemonte**, **Valle d'Aosta** and **Liguria**. 
+**Note:** Because of the complexity of the model, we will first perform the analysis on a subset of the dataset, namely wolf DNA samples that were collected in the regions of **Piemonte**, **Valle d'Aosta** and **Liguria**. 
 :::
 <br>
 
