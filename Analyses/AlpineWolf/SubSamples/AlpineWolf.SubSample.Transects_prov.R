@@ -78,7 +78,12 @@ if(!dir.exists(file.path(thisDir, "results"))){dir.create(file.path(thisDir, "re
 ##---- Load GPS search transects
 transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/paths_completeness/paths_completeness.shp"))
 trans <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20202021/transects_wolfalps_2020-2021.shp"))
-# prov <- read_sf(file.path(dataDir,"GISData/Output_layout/northern_provinces.shp"))
+prov <- read_sf(file.path(dataDir,"GISData/Output_layout/northern_provinces.shp"))
+studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
+studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(prov))
+alps <- studyAreaGrid %>%
+  st_snap(x = ., y = ., tolerance = 0.0001) %>%
+  st_union() 
 
 ##---- Convert dates
 transects$Date <- parse_date_time(transects$date, orders = c('ymd'))
@@ -170,7 +175,7 @@ trans_buf <- st_buffer(trans, dist = 500)
 ngs_sys <- st_filter(ngs,trans_buf)
 ngs_opp <- ngs[!ngs$Sample.ID %in% ngs_sys$Sample.ID, ]
 
-##---- Assign each systematic smaple to a transect
+##---- Assign each systematic sample to a transect
 ngs_sys$transect_ID <- unlist(lapply(st_intersects(ngs_sys, trans_buf), function(x)x[1]))
 ngs_opp$transect_ID <- NA
 
@@ -183,7 +188,7 @@ for (frac in sim_names){
     transectsToKeep <- trans %>%
       mutate(ID = row_number()) %>%  #Applying row_number function and obtaining the indexes
       group_by(trans$PROVINCIA)%>%  # Grouping for provinces
-      slice_sample(prop = frac)    # subsampling given proportions of dataset                       
+      slice_sample(prop = 1)    # subsampling given proportions of dataset                       
       # dplyr::select(ID)
     
     ##---- Remove samples associated w/ sub-sampled transects
@@ -192,7 +197,8 @@ for (frac in sim_names){
     ##---- Keep opportunistic samples
     ngs_sub <- rbind(ngs_sub,ngs_opp)
     ngs_sub <- as.data.frame(ngs_sub)
-    
+    ngs_opp <- as.data.frame(ngs_opp)
+
     ##---- Extract length and number of transects in each grid cell
     ids <- Reduce(intersect, list(trans[transectsToKeep, ]$ID_APP, transects$transect_i))
     transects_sub <- subset(transects, transect_i  %in% ids)
@@ -218,7 +224,7 @@ for (frac in sim_names){
     detectors_sub$grid$mean_transect_L <- scale(detectors_sub$grid$transect_L/detectors_sub$grid$transect_N)
     
     
-    ##---- Drop duplicated detections ate the same sub-detectors
+    ##---- Drop duplicated detections at the same sub-detectors
     ngs_sub <- ngs_sub[!duplicated(ngs_sub[ ,c("sub.detector", "Genotype.ID")]), ]
     ngs_sub <- droplevels(ngs_sub)
     

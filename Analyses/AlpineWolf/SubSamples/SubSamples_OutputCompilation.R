@@ -64,7 +64,7 @@ OutDir <- file.path(thisDir, "output/")
 resLista <- list()  
 
 ## Define loop
-rpp <- 1
+rpp <- 2
 sim_names <- c("25", "50","75")  
 # rep_t <- c("3")
 
@@ -89,7 +89,7 @@ for(sc in 1:length(sim_names)) {
     ## Collect bites from the different chains for this percentage and this repetition only
     nimOutput <- collectMCMCbites(
       path = file.path(OutDir, outputs),
-      burnin = 38) # add in all simulations
+      burnin = 20) 
     ## Proces output
     res <- ProcessCodaOutput(nimOutput)
     
@@ -153,8 +153,8 @@ for(sc in 1:length(sim_names)) {
   
   ## store all scenarios in one final list
   resLista[[sc]] <- tempLista
- }#num
- # }#sc
+  # }#num
+  }#sc
 
 
 # Extracts lists with scenarios stored

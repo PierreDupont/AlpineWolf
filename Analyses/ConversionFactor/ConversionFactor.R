@@ -73,7 +73,7 @@ post_CF <- pivot_longer(posterior_CF2,c("East","West","Total"))
 
 ggplot(post_CF, aes(value, name)) +
   geom_violin( draw_quantiles = c(0.025, 0.5, 0.975),
-               fill = "turquoise",
+               fill = "darkgreen",
                color = "white")
 
 # dev.off()
