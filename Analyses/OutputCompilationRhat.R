@@ -125,5 +125,6 @@ store <- lapply(param_names, function(c){
 names(store) <- param_names
 
 
-
+save(all_res, file ="all_res_trans_provtr.RData")
+save(store, file ="rhatresults_trans_provtr.RData")
 
