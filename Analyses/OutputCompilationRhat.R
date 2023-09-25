@@ -4,11 +4,11 @@
 ##### ---------------- z[psi,rho,theta] ---------------------------------- #####
 ##### ---------------- y[p0(transects + zone + ),sigma] ------------------ #####
 ################################################################################
-## ------1. CLEAN THE WORK ENVIRONMENT ------
+## ------ 1. CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
 
-## ------2. IMPORT REQUIRED LIBRARIES ------
+## ------ 2. IMPORT REQUIRED LIBRARIES ------
 library(rgdal)
 library(raster)
 library(coda)
@@ -37,111 +37,92 @@ library(data.table)
 
 ## ------ 3. SET REQUIRED WORKING DIRECTORIES ------
 source("workingDirectories.R")
-
-## ------ 4.  SOURCE CUSTOM FUNCTIONS ------
-sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-
 modelName = "AlpineWolf.SubSample.Transects_prov_tr"
 thisDir <- file.path(analysisDir, modelName)
+OutDir <- file.path(thisDir, "output")
 
 
-## ------   6. PLOT RESULTS -----
+## ------ 4. SOURCE CUSTOM FUNCTIONS ------
+sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
 
-OutDir <- file.path(thisDir, "output/")
+
+
+
 ## -----------------------------------------------------------------------------
-## ------   6. PROCESS OUTPUTS -----
+## ------ 5. PROCESS OUTPUTS -----
+sim_names <- c(25,50,75)  ## names of your scenarios  (i.e. 25,50,75,100)
+rep_t <- c(3,6)           ## names of the transect repetitions (i.e. 3,6,all)
+rpp <- 1                  ## number of replicates per scenario
 
-
-resLista <-list()  #create a list which will contain all your results
-
-
-rpp <- 1
-sim_names <- c("25","50","75")  #Here the names of your simulation  (i.e. 25,50,75,100)
-rep_t <- c("6")
-
+resLista <- list()  ## list which will contain all your results
 for(sc in 1:length(sim_names)){
+  tmpLista1 <- list() ## temporary list for each scenario
+  
   for(num in 1:length(rep_t)){
+    tmpLista2 <- list() ## temporary list for each replicate
     
-    
-    tempLista <-list() #temporary list for each scenario
-    
-    for(rp in 1:rpp){  #This will be from 1:50
-      outputs <- list.files(OutDir, paste0("AlpineWolf.SubSample.Transects_prov_tr", "_", sim_names[sc], "_", rp, "_", rep_t[num], "_"))
+    for(rp in 1:rpp){  
+      outputs <- list.files(OutDir,
+                            paste0("AlpineWolf.SubSample.Transects_prov_tr", "_", sim_names[sc], "_", rp, "_", rep_t[num], "_"))
       print(outputs)
+      
+      ##-- Compile MCMC bites
+      nimOutput <- collectMCMCbites(
+        path = file.path(OutDir, outputs),
+        burnin = 10,                            ## This will be 10 from now on
+        param.omit = c("s","z","sex","status")) ## We could remove "betaHab" and "betaDet" here to make things faster
 
-            nimOutput <- collectMCMCbites(path = file.path(OutDir, outputs),
-                                     burnin = 10, #This will be 10 from now on
-                                     param.omit = c("s","z","sex","status"))
-      
-      # obtain columns names
-      params <- colnames(nimOutput[[1]]) 
-      # Process mcmc
+      ##-- Process MCMC output
       tmp <- ProcessCodaOutput(nimOutput)
-      # Select only mean, sd and rhat
-      sd <- as.data.frame(unlist(tmp$sd))
-      Rhat <- as.data.frame(unlist(tmp$Rhat))
-      mean <- as.data.frame(unlist(tmp$mean))
-      # bind them in df
-      res <- as.data.frame(cbind(mean,sd,Rhat))
-      res2 <- tibble::rownames_to_column(res, "params")
-      # fix columns names
-      res3 <- setnames(res2, old = c('params','unlist(tmp$mean)','unlist(tmp$sd)', 'unlist(tmp$Rhat)'), 
-                       new = c('params','means','sd','rhat'))
-      # transpose and again fix columns names 
-      res4 <- as.matrix(res3)
-      res5 <- t(res4)
-      res5 <- as.data.frame(res5)
-      colnames(res5) <- res5[1,]
-      res5 <- res5[-1,] 
-      res5 <- tibble::rownames_to_column(res5, "stat")
       
-      # store df per each repetition in a temporary list
-      tempLista[[rp]] <- res5
-      
+      ##-- Select only mean, sd and rhat
+      res <- rbind("mean" = unlist(tmp$mean),
+                   "sd" = unlist(tmp$sd),
+                   "Rhat" = unlist(tmp$Rhat))
+      res <- tibble::rownames_to_column(as.data.frame(res), "stat")
+
+      ##-- Save scenario info
+      res$trsct_scenario <- sim_names[sc]
+      res$trsct_repetitions <- rep_t[num]
+      res$replicate <- rpp
+        
+      ##-- Store df for each scenario and each repetition 
+      tmpLista1[[rp]] <- res
     }#rp
     
-    # store all scenarios in one final list
-    resLista[[sc]] <- tempLista
-    
-  }#rep_t
-}#sc
+    ##-- Rbind all results for transect repetitions "num"
+    tmpLista2[[num]] <- do.call(rbind,tmpLista1)
+  }#num
+  
+  ##-- Rbind all results for scenario "sc"
+  resLista[[sc]] <- do.call(rbind,tmpLista2)
+  }#sc
 
-#
-res25 <- do.call("rbind",resLista[[1]])
-res25["scenario"] <- "25"
-res50 <- do.call("rbind",resLista[[2]])
-res50["scenario"] <- "50"
-res75 <- do.call("rbind",resLista[[3]])
-res75["scenario"] <- "75"
-
-
-all_res <- rbind(res25, res50, res75)
-all_res["rep"] <- "6"
+##-- Combine all results together
+all_res <- do.call(rbind, resLista)
 all_res["subsampling"] <- "Transects Spatial and Intensity"
-res_tot_rhat <- rbind(filter(all_res, stat == "rhat"))
 
-res_tot_rhat[,2:32] <- sapply(res_tot_rhat[,2:32],as.double)
-res_tot_rhat<-res_tot_rhat[,-1] 
+##-- Separate "mean", "sd" and "Rhat"
+all_Rhat <- filter(all_res, stat == "Rhat")
+all_mean <- filter(all_res, stat == "mean")
+all_sd <- filter(all_res, stat == "sd")
 
 
 
-store <- list()
+## -----------------------------------------------------------------------------
+## ------ 6. CHECK Rhat -----
+##-- Identify parameter names
+param_names <- names(all_Rhat)[2:32]
 
-for (c in 1:ncol(res_tot_rhat)) {
-  
-  check <- vector()
-  
-  check <- res_tot_rhat[res_tot_rhat[,c] >= 1.1, ]
-  store[[c]] <- check %>%
-    group_by(scenario, subsampling, rep) %>%
+##-- Check R-hat for each parameter separately
+store <- lapply(param_names, function(c){
+  all_Rhat[all_Rhat[ ,c] >= 1.1, ] %>% 
+    group_by(trsct_scenario,
+             trsct_repetitions,
+             subsampling) %>%
     summarise(Count = n())
-  
-}
-names(store) <- colnames(res_tot_rhat[,1:34]) 
-
-
-
-
+})
+names(store) <- param_names
 
 
 
