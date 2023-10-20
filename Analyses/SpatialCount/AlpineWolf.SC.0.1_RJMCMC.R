@@ -46,7 +46,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.2_RJMCMC"
+modelName = "AlpineWolf.SC.0.1_RJMCMC"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -97,7 +97,7 @@ regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
 ##--- Alps
 alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
 alps <- st_transform(x = alps, crs = st_crs(countries))
-plot(alps)
+# plot(alps)
 
 
 # plot(studyAreaGrid["SCR"], add = T)
@@ -122,35 +122,43 @@ temp <- count[count$CNTRY_NAME %in% c("Albania",
                                       "Slovenia",
                                       "San Marino",
                                       "Switzerland"), ]
-plot(st_geometry(temp),col="gray60")
+# plot(st_geometry(temp),col="gray60")
 temp <- st_transform(temp, st_crs(studyArea))
 
 
 ## ------   2. SEARCH EFFORT DATA ------
-##---- Load GPS search transects
+##---- Load GPS of Camera Traps
 ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ft_alpi.shp"))
 
 ##---- Convert dates
-transects$Date <- parse_date_time(transects$date, orders = c('ymd'))
-transects$Year <- as.numeric(format(transects$Date,"%Y"))
-transects$Month <- as.numeric(format(transects$Date,"%m"))
+ct_2 <- ct %>%
+  mutate(`DATA Fine` = ifelse(is.na(`DATA Fine`) & `DATA Inizi` != "", "2021-04-30",
+                              `DATA Fine`))
+
+
+ct_2$date_st <- parse_date_time(ct_2$`DATA Inizi`, orders = c('dmy'))
+ct_2$date_en <- parse_date_time(ct_2$`DATA Fine`, orders = c('dmy'))
+
+# ct_2$date_st <- parse_date_time(ct_2$`DATA Inizi`, orders = c('ymd'))
+# ct_2$date_en <- parse_date_time(ct_2$`DATA Fine`, orders = c('ymd'))
+
+ct_2$year_st <- as.numeric(format(ct_2$date_st,"%y"))
+ct_2$month_st <- as.numeric(format(ct_2$date_st,"%m"))
+ct_2$year_en <- as.numeric(format(ct_2$date_en,"%y"))
+ct_2$month_en <- as.numeric(format(ct_2$date_en,"%m"))
+
+
 
 ##---- Plot check
-plot(ct, col = "red", add = T)
+plot(studyArea, col="steelblue")
+plot(ct_2$geometry, col = "red", pch=16, add=T)
 
 
+## ------   3. CT DATA ------
 
-
-## ------   3. DNA DATA ------
-##---- All collected NGS samples
-# allSamples <- read_sf(file.path(dataDir,"GISData/scats/merged_scats.shp"))
-# plot(st_geometry(studyArea))
-# plot(st_geometry(countries), col = "gray80",add=T)
-# plot(allSamples, add = T,pch=3)
-
-##---- Genotyped NGS samples
-ngs <- read.csv(file.path(dataDir,"DNA/ngs21032022.csv"))
-dim(ngs)
+##---- Images from Camera Traps data
+pics <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_filtered.shp"))
+dim(pics)
 
 ##---- Use lubridate to clean dates
 # The orders argument is a character vector containing the possible date-time parsing 
@@ -158,93 +166,39 @@ dim(ngs)
 # will try to parse all strings as Day, Month, Year format. If it can't do that 
 # successfully (for example, the date 2021-03-18 won't work as there is no 2021th day), 
 # it will try the next in the list until all strings are parsed, or all orders exhausted.
-ngs$Date <- parse_date_time(ngs$Date, orders = c('dmy','mdy','ymd'))
-ngs$Year <- as.numeric(format(ngs$Date,"%Y"))
-ngs$Month <- as.numeric(format(ngs$Date,"%m"))
+pics$data <- parse_date_time(pics$data, orders = c('dmy','mdy','ymd'))
+pics$Year <- as.numeric(format(pics$data,"%Y"))
+pics$Month <- as.numeric(format(pics$data,"%m"))
+pics$n_lupi <- as.numeric(pics$n_lupi)
 
 ##---- Filter out samples from 2019
-ngs <- ngs[ngs$Year > 2019, ]
-dim(ngs)
-
-##---- Filter out dead recoveries
-ngs <- ngs[ngs$Dead.recovery == "", ]
-dim(ngs)
+pics <- pics[pics$Month != c(6,7,8,9), ]
+dim(pics)
 
 ##---- Number of detections per individual
-numDetsPerId <- table(ngs$Genotype.ID)
-hist(numDetsPerId)
+numDetsPerCT <- table(pics$id_fototra)
+which(is.na(as.numeric(pics$id_fototra)))
+hist(numDetsPerCT)
 
 ##---- Number of individuals detected
-length(numDetsPerId)
+length(numDetsPerCT)
 
 ##---- Mean number of detections per ID
-mean(numDetsPerId)
+mean(numDetsPerCT)
 
 ##---- Number of individuals with > 1 detection
-sum(numDetsPerId > 1)
+sum(numDetsPerCT > 1)
 
-##---- mean number of individual detections by sex
-table(ngs$Sex, useNA = "always")
-apply(table(ngs$Genotype.ID, ngs$Sex, useNA = "always"),
-      2,
-      function(x)sum(x)/sum(x>0))
-
-##---- mean number of individual detections by status
-ngs$Status[ngs$Status == "pup 2016"] <- "pup"
-ngs$Status[ngs$Status == "pup 2017"] <- "pup"
-table(ngs$Status, useNA = "always")
-apply(table(ngs$Genotype.ID, ngs$Status, useNA = "always"),
-      2,
-      function(x)sum(x)/sum(x>0))
-
-##---- mean number of individual detections by sex and status
-apply(table(ngs$Genotype.ID, ngs$Status, ngs$Sex, useNA = "always"),
-      c(2,3),
-      function(x)sum(x)/sum(x>0))
-
-##---- Turn ngs into spatial data frame
-coordinates(ngs) <- cbind.data.frame(ngs$CoordX, ngs$CoordY)
-proj4string(ngs) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
-ngs <- st_as_sf(ngs)
 
 ##---- Plot check
-plot(st_geometry(studyArea))
-plot(st_geometry(countries), col = "gray80",add=T)
-plot(st_geometry(transects), col = "red", add = T)
-plot(st_geometry(ngs), add = T, pch = 3)
-
-# ##---- Calculate distance to the closest transect
-# ## For later: can be quite long with many points and transects
-# dist <- st_distance(ngs, transects)
-# ngs$dist_to_transect <- apply(dist,1,min)
-# range(ngs$dist_to_transect)
-
-# ##---- Fix one problematic wolf (detected in 2 distant locations at the same time)
-# ngs$Genotype.ID[ngs$Genotype.ID=="WBS-M002"][5:7] <- "WBS-M002.2"
-# ngs[ngs$Genotype.ID=="WBS-M002", ]
-
-# ##---- Identify individuals with detections more than 50km apart
-# plot(studyArea)
-# IDs <- unique(ngs$Genotype.ID)
-# resList <- list()
-# for( i in 109:length(IDs)){
-#   print(i)
-#   tmp <- ngs[ngs$Genotype.ID == IDs[i], ]
-#   D <- as.numeric(st_distance(tmp))
-#   if(any(D > 50000)){
-#     resList[[i]] <- tmp
-#     print(IDs[i])
-#     plot(tmp,pch=19,add=T,col= "red")
-#     plot(tmp,pch=19,add=T,type="l",col="red")
-#   }
-# }
-# res <- do.call(rbind,resList)
-# write.csv(res,file = "long_distance_detections.csv")
-
+plot(st_geometry(studyArea), col="steelblue")
+# plot(st_geometry(countries), col = "gray80",add=T)
+plot(st_geometry(ct_2), col = "red", add = T)
+plot(st_geometry(pics), add = T, pch = 3)
 
 ## ------   4. SPATIAL COVARIATES ------
 ##---- Read snow-fall rasters
-tif <- read_stars(file.path(dataDir,"/GISData/Environmental Layers/Snowfall_2020-2021/ERA-5_snowfall_alps_32N.nc"))
+tif <- read_stars(file.path(dataDir,"/GISData/Environmental Layers/Snowfall_2020-2021/ERA-5_snowfall_alps_32N.tif"))
 SNOW <- st_as_sf(tif)
 
 
@@ -299,19 +253,6 @@ st_crs(studyArea_west) <- st_crs(studyArea)
 studyArea_east <- st_difference(st_buffer(studyArea,50000),studyArea_west)
 
 
-##---- Load historical presence data
-packPres_files <- list.files(path = file.path(dataDir, "/GISData/Branchi_SECR"),
-                             pattern = ".shp")
-packPres_raw <- lapply(packPres_files, function(x){
-  tmp <- read_sf(file.path(dataDir, "/GISData/Branchi_SECR", x))
-  tmp <- st_transform(x = tmp, crs = st_crs(studyArea))
-  tmp
-})
-plot(studyArea)
-lapply(packPres_raw, function(x)plot(x, add = T))
-# pack.r <- raster(file.path(dataDir, "/GISData/Packs_history_grid/packs_history_sum.tif"))
-
-
 ##---- Load IUCN presence data
 list.files(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid"))
 iucn_2012_1 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_permanent.shp"))
@@ -334,9 +275,9 @@ iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 
 
 ##---- Load protected areas
-PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
-plot(studyArea)
-plot(PA, add = T)
+# PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
+# plot(studyArea)
+# plot(PA, add = T)
 
 
 
@@ -345,92 +286,42 @@ load(file.path(thisDir,"Habitat.RData"))
 load(file.path(thisDir,"Detectors.RData"))
  
 
-
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
 ##---- Make PAB search grid
-searchGrid <- MakeSearchGrid(
-  data = as_Spatial(studyArea),
-  resolution = detectors$resolution,
-  div = (detectors$resolution/detectors$detSubResolution)^2,
-  center = T,
-  plot = TRUE,
-  fasterize = TRUE)
+detectors$buffer <- st_buffer(ct_2, dist = 500)
+detectors$buffer <- detectors$buffer[,c(6,22)]
 
-##---- Create detector raster
-detectors$raster <- raster(extent(st_bbox(studyArea)))
-res(detectors$raster) <- detectors$resolution
-detectors$raster <- fasterize(countries, detectors$raster)
 
-##---- Mask and crop raster cells outside the study area to obtain the detector grid
-detectors$raster <- mask(detectors$raster, st_as_sf(studyArea))
-detectors$raster <- crop(detectors$raster, st_as_sf(studyArea))
+plot(st_geometry(studyArea), col="steelblue")
+# plot(st_geometry(countries), col = "gray80",add=T)
+plot(detectors$buffer$geometry, add=T)
+plot(st_geometry(ct_2), col = "red", add = T)
+plot(st_geometry(pics), add = T, pch = 3)
 
-##---- Remove glaciers
-glaciers <- CLC
-glaciers[!glaciers[ ] %in% c(9)] <- 0
-glaciers[glaciers[ ] %in% c(9)] <- 1
-to.remove <- glaciers %>%
-  raster::aggregate( x = .,
-                     fact = detectors$resolution/res(glaciers),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>0.5) %>%
-  st_as_sf() %>%
-  fasterize(.,detectors$raster)
 
-detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
-
-##---- Remove big lakes
-lakes <- CLC
-lakes[!lakes[ ] %in% c(7)] <- 0
-lakes[lakes[ ] %in% c(7)] <- 1
-to.remove <- lakes %>%
-  raster::aggregate( x = .,
-                     fact = detectors$resolution/res(lakes),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>0.5) %>%
-  st_as_sf() %>%
-  fasterize(.,detectors$raster)
-detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
-
-##---- Remove big cities
-to.remove <- POP_raw %>%
-  raster::aggregate( x = .,
-                     fact = detectors$resolution/res(POP_raw),
-                     fun = mean) %>%
-  rasterToPolygons(.,fun = function(x)x>5000) %>%
-  st_as_sf() %>%
-  fasterize(.,detectors$raster)
-detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
-
-##---- Transform into spatial grid
-detectors$grid <- st_as_sf(rasterToPolygons(detectors$raster))
-detectors$grid$id <- 1:nrow(detectors$grid)
-st_crs(detectors$grid) <- st_crs(studyArea)
+detectors$buffer$id <- 1:nrow(detectors$buffer)
+st_crs(detectors$buffer) <- st_crs(studyArea)
 
 ##---- Extract length and number of transects in each grid cell
-intersection <- st_intersection(detectors$grid, transects) %>%
-  mutate(LEN = st_length(.),
-         QI = .$Q.index) %>%
+intersection <- st_intersection(detectors$buffer, ct_2)  %>%
+  mutate(n_nights = .$tot_attivi) %>%
   st_drop_geometry() %>%
   group_by(id) %>%
-  summarise(transect_L = sum(LEN),               ## Get total length searched in each detector grid cell
-            transect_N = length(unique(Date)),   ## Get total number of visits in each detector grid cell
-            transect_qi = mean(QI))              ## Get mean transects quality index for each detector grid cell
+  summarise(CT_nights = sum(n_nights),
+            CT_N = n())      ## Get number of CT per grid cell
+
+
 
 ##---- Store in detector grid
-detectors$grid <- detectors$grid %>%
+detectors$buffer <- detectors$buffer %>%
   left_join(intersection, by = "id")
-detectors$grid$transect_L[is.na(detectors$grid$transect_L)] <- 0
-detectors$grid$transect_N[is.na(detectors$grid$transect_N)] <- 1
-detectors$grid$transect_qi[is.na(detectors$grid$transect_qi)] <- 0
-detectors$grid$transect_L <- scale(detectors$grid$transect_L)
-detectors$grid$mean_transect_L <- scale(detectors$grid$transect_L/detectors$grid$transect_N)
+detectors$buffer$CT_nights[is.na(detectors$buffer$CT_nights)] <- 0
+detectors$grid$CT_N[is.na(detectors$grid$CT_N)] <- 1
+detectors$buffer$CT_nights <- scale(detectors$buffer$CT_nights)
+detectors$buffer$mean_CT_nights <- scale(detectors$buffer$CT_nights/detectors$buffer$CT_N)
 
 # ##----#---- If you want only grid cells that contain transects instead
 # detectors$grid <- detectors$grid %>%
@@ -469,7 +360,7 @@ detectors$sub.sp <- searchGrid$detector.sp
 detectors$size <- as.numeric(table(detectors$sub.sp$main.cell.new.id))
 
 ##---- Extract total number of detectors
-detectors$n.detectors <- nrow(detectors$grid)
+detectors$n.detectors <- nrow(detectors$buffer)
 
 
 
@@ -480,18 +371,18 @@ SNOW$snow.mean <- rowMeans(st_drop_geometry(SNOW), na.rm = T)
 SNOW$snow.sum <- rowSums(st_drop_geometry(SNOW), na.rm = T)
 
 ##---- Extract snow-fall in each detector grid cell
-intersection <- st_intersection(detectors$grid, SNOW) %>%
+intersection <- st_intersection(detectors$buffer, SNOW) %>%
   st_drop_geometry() %>%
   group_by(id) %>%
   summarise(snow_fall = mean(snow.mean))
 
 ##---- Store average snow-fall
-detectors$grid <- detectors$grid %>%
+detectors$grid <- detectors$buffer %>%
   left_join(intersection, by = "id")
 
 ##---- scale covariate
-detectors$grid$snow_fall[is.na(detectors$grid$snow_fall)] <- 0
-detectors$grid$snow_fall <- scale(detectors$grid$snow_fall)
+detectors$buffer$snow_fall[is.na(detectors$buffer$snow_fall)] <- 0
+detectors$buffer$snow_fall <- scale(detectors$buffer$snow_fall)
 
 
 
@@ -989,14 +880,11 @@ localObjects <- getLocalObjects(
   coords = scaledCoords$coordsDataScaled[ ,1:2],
   dmax = 25)
 
-
-
-
 ## ------   4. DETECTION DATA ------
 ## ------     4.1. DETECTION MATRIX : y ------
 ##---- Calculate distance between detections and sub-detectors
 closest <- nn2( coordinates(detectors$sub.sp),
-                st_coordinates(ngs),
+                st_coordinates(pics),
                 k = 1,
                 searchtype = "radius",
                 radius = 10000)
