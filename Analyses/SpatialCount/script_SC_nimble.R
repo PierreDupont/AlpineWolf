@@ -1,94 +1,88 @@
-### load pacakges and prep workspace ####
+### load packages and prep workspace ####
 library(parallel)
 library(coda)
 library(nimble)
-source("SC_model.R")
+source("C:/My_documents/AlpineWolf/Analyses/SpatialCount/SC_model.R")
+load("C:/My_documents/AlpineWolf/Analyses/SpatialCount/SC_model.R")
 
-### dynamic things to define ####
-study<-"Rich" #"Algar"
-species<-"caribou"
-year<- 2018
-timeFrame<- "3mos"
-dataType<-"sum"
 
 nadapt<-1000
 niter_upd<-8000
-
-CapStr <- function(y) {
-  c <- strsplit(y, " ")[[1]]
-  paste(toupper(substring(c, 1,1)), substring(c, 2),
-        sep="", collapse=" ")
-}
-LowStr <- function(y) {
-  c <- strsplit(y, " ")[[1]]
-  paste(tolower(substring(c, 1,1)), substring(c, 2),
-        sep="", collapse=" ")
-}
-
-load(paste0("data_",species,"_",study,"_",year,"_",timeFrame,"_forSC.RData"))
-SC_data<-get(paste0(LowStr(commonName),"_SC_",CapStr(dataType),"_",year))
-SC_camOper<-get(paste0(LowStr(commonName),"_camOp_",year))
-             
+str(datasets_list)
+    
 
 
 ### static things to define ####
-             
-inits <- function()list(sigma=rnorm(1,5),lam0=runif(1), z=rep(1,M),psi=0.5)
+xlims <- datasets_list[[1]]$simDat$xlim
+ylims <- datasets_list[[1]]$simDat$ylim
+M <- nrow(datasets_list[[1]]$simSC)
+SC_data <- datasets_list[[1]]$simSC
+oper <- matrix(1,
+                nrow(datasets_list[[1]]$simSC),
+                ncol(datasets_list[[1]]$simSC))
+inits <- list(sigma=rnorm(1,5),lam0=runif(1), z=rep(1,M),psi=0.5)
 nimbledata <- list( n = SC_data)
 nimbleconstants <- list(M = M,
-                        oper=SC_camOper,
-                        X=traplocs,J = nrow(SC_data),
-                        K=ncol(SC_data),
-                        xlim=xlims, ylim=ylims, 
+                        oper = oper,
+                        X = datasets_list[[1]]$traplocs,
+                        J = nrow(SC_data),
+                        K = ncol(SC_data),
+                        xlim = xlims,
+                        ylim = ylims, 
                         area=((xlims[2]-xlims[1])*(ylims[2]-ylims[1])))
 params <- c("N", "D", "lam0", "sigma","psi","z","s")
 
 
-
-### set up cluster ####
-nimbleStart <- Sys.time()
-set.seed(22)
-nc <- 3 # number of chains
-cl<-makeCluster(nc,timeout=5184000)
-
-### tell the cluster what it will need ####
-clusterExport(cl, c("nadapt","niter_upd","caribou_nimble", "inits", "nimbledata", "nimbleconstants", "params"))
-for (j in seq_along(cl)) {
-  set.seed(j)
-  init <- inits()
-  clusterExport(cl[j], "init")
-}
-
-### tell the cluster what to do ####
-out <- clusterEvalQ(cl, {
-  library(nimble)
-  library(coda)
-  model <- nimbleModel(code = caribou_nimble, name = "caribou_nimble",
-                       constants = nimbleconstants, data = nimbledata,
-                       inits = init)
-  Cmodel <- compileNimble(model)
-  modelConf <- configureMCMC(model)
-  modelConf$addMonitors(params)
-  modelMCMC <- buildMCMC(modelConf)
-  CmodelMCMC <- compileNimble(modelMCMC, project = model)
-  out1 <- runMCMC(CmodelMCMC, niter = nadapt)
-  return(as.mcmc(out1))
-})
+model <- nimbleModel( code = caribou_nimble,
+                      name = "caribou_nimble",
+                      constants = nimbleconstants,
+                      data = nimbledata,
+                      inits = inits)
+Cmodel <- compileNimble(model)
+modelConf <- configureMCMC(model)
+modelConf$addMonitors(params)
+modelMCMC <- buildMCMC(modelConf)
+CmodelMCMC <- compileNimble(modelMCMC, project = model)
+out1 <- runMCMC(CmodelMCMC, niter = nadapt)
+#   return(as.mcmc(out1))
+# })
 nimbleEnd <- Sys.time()
 nimbleTime<-nimbleEnd-nimbleStart
 
 ### check on the first batch of results, 200% likely need to keep running ####
-out.mcmc <- as.mcmc(out)
+out.mcmc <- as.mcmc(out1)
 traceplot(out.mcmc[, "N"])
 
-### If has not converged, continue sampling ####
-nimbleStart_upd1 <- Sys.time()
-out2 <- clusterEvalQ(cl, {
-  out1 <- runMCMC(CmodelMCMC, niter = niter_upd)
-  return(as.mcmc(out1))
-})
-nimbleEnd_upd1<- Sys.time()
-nimbleTime_upd1<-nimbleEnd_upd1-nimbleStart_upd1
+
+
+##-- Try second version of the SC model
+oper2 <- rep(ncol(datasets_list[[1]]$simSC),nrow(datasets_list[[1]]$simSC))
+
+nimbledata2 <- list( n = rowSums(SC_data))
+
+nimbleconstants2 <- list(M = M,
+                        oper = oper2,
+                        X = datasets_list[[1]]$traplocs,
+                        J = nrow(SC_data),
+                        xlim = xlims,
+                        ylim = ylims, 
+                        area=((xlims[2]-xlims[1])*(ylims[2]-ylims[1])))
+model <- nimbleModel( code = caribou_nimble2,
+                      name = "caribou_nimble2",
+                      constants = nimbleconstants2,
+                      data = nimbledata2,
+                      inits = inits)
+Cmodel <- compileNimble(model)
+modelConf <- configureMCMC(model)
+modelConf$addMonitors(params)
+modelMCMC <- buildMCMC(modelConf)
+CmodelMCMC <- compileNimble(modelMCMC, project = model)
+#out2 <- runMCMC(CmodelMCMC, niter = nadapt)
+out2 <- runMCMC(CmodelMCMC, niter = 10000)
+out2.mcmc <- as.mcmc(out2)
+traceplot(out2.mcmc[, "N"])
+
+
 
 ### If has not converged, continue sampling ####
 nimbleStart_upd2 <- Sys.time()
