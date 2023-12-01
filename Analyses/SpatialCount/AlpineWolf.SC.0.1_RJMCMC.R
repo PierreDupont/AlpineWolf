@@ -20,6 +20,7 @@ library(R.utils)
 library(sf)
 library(fasterize)
 library(dplyr)
+library(tidyr)
 library(lubridate)
 library(stars)
 library(RANN)
@@ -49,19 +50,6 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 modelName = "AlpineWolf.SC.0.1_RJMCMC"
 thisDir <- file.path(analysisDir, modelName)
 
-## HABITAT SPECIFICATIONS
-habitat = list( resolution = 5000, 
-                buffer = 30000)
-
-## DETECTORS SPECIFICATIONS
-detectors = list( resolution = 5000,
-                  detSubResolution = 1000,
-                  samplingMonths = c(10:12,1:4))
-
-## NGS DATA SPECIFICATIONS
-data = list( sex = c("F","M"),
-             status = c("alpha","pup","other"),
-             aug.factor = 6) 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -128,37 +116,43 @@ temp <- st_transform(temp, st_crs(studyArea))
 
 ## ------   2. SEARCH EFFORT DATA ------
 ##---- Load GPS of Camera Traps
-ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ft_alpi.shp"))
+ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_231201.shp"))
 
 ##---- Convert dates
-ct_2 <- ct %>%
-  mutate(`DATA Fine` = ifelse(is.na(`DATA Fine`) & `DATA Inizi` != "", "2021-04-30",
-                              `DATA Fine`))
 
-
-ct_2$date_st <- parse_date_time(ct_2$`DATA Inizi`, orders = c('dmy'))
-ct_2$date_en <- parse_date_time(ct_2$`DATA Fine`, orders = c('dmy'))
+ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))
+ct$date_en <- parse_date_time(ct$date_en, orders = c('dmy'))
 
 # ct_2$date_st <- parse_date_time(ct_2$`DATA Inizi`, orders = c('ymd'))
 # ct_2$date_en <- parse_date_time(ct_2$`DATA Fine`, orders = c('ymd'))
 
-ct_2$year_st <- as.numeric(format(ct_2$date_st,"%y"))
-ct_2$month_st <- as.numeric(format(ct_2$date_st,"%m"))
-ct_2$year_en <- as.numeric(format(ct_2$date_en,"%y"))
-ct_2$month_en <- as.numeric(format(ct_2$date_en,"%m"))
-
-
+ct$year_st <- as.numeric(format(ct$date_st,"%y"))
+ct$month_st <- as.numeric(format(ct$date_st,"%m"))
+ct$year_en <- as.numeric(format(ct$date_en,"%y"))
+ct$month_en <- as.numeric(format(ct$date_en,"%m"))
+ct$tot_attivi <- as.numeric(ct$tot_attivi) 
 
 ##---- Plot check
 plot(studyArea, col="steelblue")
-plot(ct_2$geometry, col = "red", pch=16, add=T)
+plot(ct$geometry, col = "red", pch=16, add=T)
 
+
+
+##---- Number of pics per CT
+hist(ct$tot_attivi)
+
+
+ct_cl <- ct[,c(1,6)]
+ct_cl$id <- paste0("FT", 1:nrow(ct_cl))
 
 ## ------   3. CT DATA ------
 
 ##---- Images from Camera Traps data
-pics <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_filtered.shp"))
-dim(pics)
+pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
+dim(pics_raw)
+plot(studyArea, col="steelblue")
+plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
+
 
 ##---- Use lubridate to clean dates
 # The orders argument is a character vector containing the possible date-time parsing 
@@ -166,34 +160,110 @@ dim(pics)
 # will try to parse all strings as Day, Month, Year format. If it can't do that 
 # successfully (for example, the date 2021-03-18 won't work as there is no 2021th day), 
 # it will try the next in the list until all strings are parsed, or all orders exhausted.
-pics$data <- parse_date_time(pics$data, orders = c('dmy','mdy','ymd'))
-pics$Year <- as.numeric(format(pics$data,"%Y"))
-pics$Month <- as.numeric(format(pics$data,"%m"))
-pics$n_lupi <- as.numeric(pics$n_lupi)
+pics_raw$date <- parse_date_time(pics_raw$date, orders = c('dmy','mdy','ymd'))
+pics_raw$Year <- as.numeric(format(pics_raw$date,"%Y"))
+pics_raw$Month <- as.numeric(format(pics_raw$date,"%m"))
+pics_raw$n_lupi <- as.numeric(pics_raw$n_wolves)
 
-##---- Filter out samples from 2019
-pics <- pics[pics$Month != c(6,7,8,9), ]
-dim(pics)
+##---- Filter out samples outside the monitoring period
+pics_1 <- filter(pics_raw,Month %in% c(1,2,3,4,10,11,12)) 
+pics_na <- pics_raw[is.na(pics_raw$Month),]
+pics_t <- rbind(pics_1,pics_na)
+dim(pics_t)
+pics_t <- filter(pics_t,C1 %in% 'C1')  
+dim(pics_t)
 
-##---- Number of detections per individual
-numDetsPerCT <- table(pics$id_fototra)
-which(is.na(as.numeric(pics$id_fototra)))
+pics_t <- st_join(ct_cl, pics_t)
+
+
+##---- Aggregate pictures per DAY
+pics_d <- pics_t %>% 
+  group_by(day = lubridate::day(date), id) %>% 
+  summarise(n_wolves = max(n_wolves))
+# hist(pics_d$n_wolves)
+dim(pics_d)
+
+
+##---- Aggregate pictures per WEEK
+pics_w <- pics_t %>% 
+  group_by(week = lubridate::week(date), id) %>% 
+  summarise(n_wolves = max(n_wolves))
+# hist(pics_w$n_wolves)
+dim(pics_w)
+
+
+##---- Aggregate pictures per MONTH
+pics_m <- pics_t %>% 
+  group_by(Month, id) %>% 
+  summarise(n_wolves = max(n_wolves))
+# hist(pics_m$n_wolves)
+dim(pics_m)
+
+
+
+##---- Number of pics per CT
+# pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
+pics <- pics_t
+
+
+numDetsPerCT <- table(pics$id)
+# which(is.na(as.numeric(pics_t$id_ct)))
 hist(numDetsPerCT)
 
-##---- Number of individuals detected
+##---- Number of at least one detection
 length(numDetsPerCT)
 
-##---- Mean number of detections per ID
+##---- Mean number of detections per CT
 mean(numDetsPerCT)
 
-##---- Number of individuals with > 1 detection
+##---- Number of CT with > 1 detection
 sum(numDetsPerCT > 1)
+max(numDetsPerCT)
 
+
+##---- Maximum number of individuals per CT
+maxDetsPerCT <- pics %>% group_by(id) %>% 
+  slice_max(n_wolves, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  select(id, n_wolves) %>% 
+  group_by(id) %>% 
+  summarise(n_wolves = sum(n_wolves))
+# Plot
+hist(maxDetsPerCT$n_wolves)
+
+
+#plot(maxDetsPerCT)
+
+##---- mean number of individual detections by CT
+MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
+hist(MeanDet)
+
+##---- DATA WRANGLING
+# Filter out pics with no camera trap ID
+pics_l <- subset(pics, trimws(id) !="")
+
+# Keep only ct_it, and number of wolves detected
+pics_l <- pics_l[, c(2,4,18)]
+# Give index based on detections per CT
+pics_l2 <- pics_l %>%
+  group_by(id) %>%
+  mutate(index = row_number()) %>%
+  ungroup()
+
+det_w <- pics_l2 %>%
+  pivot_wider(names_from = "index", values_from = "n_wolves")
+
+
+det_w <- det_w %>%
+  mutate(tot_wolves = rowSums(pick(4:68), na.rm = TRUE),
+         tot_detections = rowSums(!is.na(pick(4:68))))
+
+det_w <- det_w[,c(2,1,69:70,4:68,3)]
 
 ##---- Plot check
 plot(st_geometry(studyArea), col="steelblue")
 # plot(st_geometry(countries), col = "gray80",add=T)
-plot(st_geometry(ct_2), col = "red", add = T)
+plot(st_geometry(ct), col = "red", add = T)
 plot(st_geometry(pics), add = T, pch = 3)
 
 ## ------   4. SPATIAL COVARIATES ------
@@ -291,7 +361,7 @@ load(file.path(thisDir,"Detectors.RData"))
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
 ##---- Make PAB search grid
-detectors$buffer <- st_buffer(ct_2, dist = 500)
+detectors$buffer <- st_buffer(ct_cl, dist = 50)
 detectors$buffer <- detectors$buffer[,c(6,22)]
 
 
@@ -304,63 +374,6 @@ plot(st_geometry(pics), add = T, pch = 3)
 
 detectors$buffer$id <- 1:nrow(detectors$buffer)
 st_crs(detectors$buffer) <- st_crs(studyArea)
-
-##---- Extract length and number of transects in each grid cell
-intersection <- st_intersection(detectors$buffer, ct_2)  %>%
-  mutate(n_nights = .$tot_attivi) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(CT_nights = sum(n_nights),
-            CT_N = n())      ## Get number of CT per grid cell
-
-
-
-##---- Store in detector grid
-detectors$buffer <- detectors$buffer %>%
-  left_join(intersection, by = "id")
-detectors$buffer$CT_nights[is.na(detectors$buffer$CT_nights)] <- 0
-detectors$grid$CT_N[is.na(detectors$grid$CT_N)] <- 1
-detectors$buffer$CT_nights <- scale(detectors$buffer$CT_nights)
-detectors$buffer$mean_CT_nights <- scale(detectors$buffer$CT_nights/detectors$buffer$CT_N)
-
-# ##----#---- If you want only grid cells that contain transects instead
-# detectors$grid <- detectors$grid %>%
-#   left_join(intersection, by = "id") %>%
-#  filter(!is.na(transect_L))
-
-detPoly <- rasterToPolygons(detectors$raster)
-proj4string(detPoly) <-"+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
-
-##---- Remove sub-detectors outside the habitat
-detToKeep <- over(x = searchGrid$detector.sp,
-                  y = detPoly)
-searchGrid$detector.sp <- searchGrid$detector.sp[!is.na(detToKeep[,1]), ]
-
-mainDetToKeep <- searchGrid$main.detector.sp$main.cell.id %in% searchGrid$detector.sp$main.cell.id
-searchGrid$main.detector.sp <- searchGrid$main.detector.sp[mainDetToKeep, ]
-
-##---- Re-order detectors to match the detector grid
-searchGrid$main.detector.sp <- searchGrid$main.detector.sp[
-  order(-searchGrid$main.detector.sp$main.cell.y,
-        searchGrid$main.detector.sp$main.cell.x), ]
-searchGrid$main.detector.sp$main.cell.new.id <- 1:nrow(detectors$grid)
-
-##---- Re-name main detectors to match the detector grid
-searchGrid$detector.sp$main.cell.new.id <- sapply(
-  searchGrid$detector.sp$main.cell.id, function(x){
-    which(searchGrid$main.detector.sp$main.cell.id == x)
-  })
-
-##---- Store detector coordinates
-detectors$coords <- st_coordinates(st_centroid(detectors$grid))[ ,c("X","Y")]
-dimnames(detectors$coords) <- list(1:nrow(detectors$grid),
-                                   c("x","y"))
-detectors$sp <- searchGrid$main.detector.sp
-detectors$sub.sp <- searchGrid$detector.sp
-detectors$size <- as.numeric(table(detectors$sub.sp$main.cell.new.id))
-
-##---- Extract total number of detectors
-detectors$n.detectors <- nrow(detectors$buffer)
 
 
 
@@ -848,20 +861,6 @@ habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
 
 
-## ------       2.2.8. PROTECTED AREAS -----
-# intersection <- st_intersection(habitat$grid, PA) %>%
-#   mutate(pa = st_area(.))  %>%
-#   st_drop_geometry() %>%
-#   group_by(id) %>%
-#   summarise(PA = sum(pa)/2.5e+07)
-#
-# ## Store scaled road density
-# habitat$grid <- habitat$grid %>%
-#   left_join(intersection, by = "id")
-# habitat$grid$PA[is.na(habitat$grid$PA)] <- 0
-# habitat$grid$PA[habitat$grid$PA > 1] <- 1
-
-
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
 ##---- Rescale habitat and detector coordinates
@@ -926,513 +925,48 @@ yCombined <- cbind(detNums, ySparse, detIndices)
 
 
 
-## ------     4.2. INDIVIDUAL COVARIATES ------
-##---- List detected indivdual names
-IDs <- dimnames(yCombined)[[1]]
-
-##---- Set-up vectors to store individual covariates
-sex <- status <- pack <- rep(NA, length(IDs))
-for(i in 1:length(IDs)){
-  ##-- Sex 
-  temp <- unique(ngs$Sex[ngs$Genotype.ID %in% IDs[i]])
-  if(length(temp)>1)warning(print(paste("ID:", IDs[i], " sex:", temp)))
-  sex[i] <- ifelse(length(temp>1),temp[1],temp)
-  
-  ##- Social status
-  temp <- unique(ngs$Status[ngs$Genotype.ID %in% IDs[i]])
-  if(length(temp)>1){
-    warning(print(paste("ID:", IDs[i], " status:", temp)))
-    if(any(temp %in% "na")){status[i] <- NA}
-    if(any(temp %in% "na")){status[i] <- "other"}
-  } else {
-    status[i] <- temp
-  }
-  
-  ##-- Pack membership
-  temp <- unique(ngs$Pack[ngs$Genotype.ID %in% IDs[i]])
-  if(any(temp %in% "dispersal")){
-    status[i] <- temp
-  }
-}
-
-##---- Convert to numerical values
-sex[sex == "F"] <- 0
-sex[sex == "M"] <- 1
-sex[sex == ""] <- NA
-sex <- as.numeric(sex)
-
-status[status == "alpha"] <- 1
-status[status == "pup"] <- 2
-status[status == "other"] <- 3
-status[status == "dispersal"] <- 3
-status[status == ""] <- NA
-status <- as.numeric(status)
-
-
-
 
 ## ------     4.3. DATA AUGMENTATION ------
-yCombined.aug <- MakeAugmentation( y = yCombined,
-                                   aug.factor = data$aug.factor,
-                                   replace.value = 0)
-
-sex.aug <- MakeAugmentation( y = sex,
-                             aug.factor = data$aug.factor,
-                             replace.value = NA)
-
-status.aug <- MakeAugmentation( y = status,
-                                aug.factor = data$aug.factor,
-                                replace.value = NA)
-
-
-
-
-## -----------------------------------------------------------------------------
-## ------ III. VISUAL SUMMARY OF DATA PROCESSING ------
-{
-  pdf( file = file.path(thisDir, paste0(modelName, "_data_prep.pdf")),
-       width = 20, height = 12)
-  
-  ## ------   1. BEFORE/AFTER PLOTS ------
-  par(mfrow = c(1,2))
-  
-  ##-- RAW DATA
-  ##-- Study area polygon 
-  plot(studyArea, col = adjustcolor("gray60", alpha.f = 0.5), border = F)
-  mtext( text = "Raw data", side = 1, font = 2)
-  ##-- GPS search tracks 
-  plot(transects, col = "firebrick3", add = T, lwd = 0.5)
-  ##-- NGS samples per sex
-  sexCol <- ifelse(ngs$Sex == "F", "lightgreen", "orange4")
-  plot(ngs, add = T, pch = 21, bg = sexCol, col = sexCol, cex = 0.5)
-  legend( x = 372000, y = 5210000, bty = "n",
-          legend = c("Females", "males"), title = "NGS samples",
-          pch = 21, pt.bg = c("lightgreen", "orange4"))
-  
-  
-  ##-- PROCESSED DATA
-  plot(habitat$polygon, border = "red", lwd = 2)
-  mtext( text = "Processed data", side = 1, font = 2)
-  ##-- Habitat raster
-  temp <- habitat$raster
-  temp[temp[] == 0] <- NA
-  plot(temp,add=T, col = adjustcolor("forestgreen", alpha.f = 0.3), legend = F)
-  plot(st_geometry(countries),add=T)
-  plot(habitat$polygon, add = T, border = "red", lwd = 2)
-  
-  ##-- Main detectors
-  plot(st_centroid(detectors$grid), add = T, cex = 0.3, col = "gray40", pch = 3)
-  ##-- Number of detections per detector
-  numDetsPerDet <- apply(detMat, 2, function(x)sum(x > 0))
-  colPal <- hcl.colors(n = max(numDetsPerDet)+1)
-  plot(st_centroid(detectors$grid[as.numeric(names(numDetsPerDet)), ]),
-       add = T, pch = 21,
-       cex = numDetsPerDet/2,
-       bg = colPal[numDetsPerDet+1],
-       col = colPal[numDetsPerDet+1])
-  mtext( text = "Data Processing", side = 3, line = -2, outer = TRUE, font = 2, cex = 2)
-  
-  nameNumDets <- as.numeric(names(c(table(numDetsPerDet))))
-  legend( x = 430000, y = 4900000, bty = "n",
-          legend = rev(nameNumDets), title = "# of obs. per detector",
-          y.intersp = 1.2, x.intersp = 2,
-          pch = 21, pt.bg = rev(colPal[nameNumDets+1]), pt.cex = rev((nameNumDets+1)/2))
-  
-  
-  
-  
-  ## ------   2. DENSITY COVARIATES ------
-  ##-- Corine Land Cover 
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  for(l in 1:length(layer.index)){
-    temp <- CLC
-    temp[!temp[] %in% layer.index[l]] <- 0
-    temp[temp[] %in% layer.index[l]] <- 1
-    ## Raw data
-    plot(st_geometry(habitat$grid))
-    mtext( text = paste("Raw",layer.names[layer.index[l]]), side = 1, font = 2)
-    plot(temp, add = T)
-    plot(st_geometry(countries), add = T)
-    plot(st_geometry(habitat$grid), add = T)
-    ## Processed data
-    plot(st_geometry(habitat$grid))
-    plot(habitat$grid[ ,layer.names[layer.index[l]]], add=T)
-    mtext( text = paste("Processed",layer.names[layer.index[l]]), side = 1, font = 2)
-    plot(st_geometry(countries), add = T)
-    mtext( text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  }#c
-  
-  # ##-- Elevation
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(st_geometry(habitat$grid))
-  # mtext(text = "Raw elevation", side = 1, font = 2)
-  # plot(DEM_raw, add = T)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(habitat$grid), add = T)
-  # plot(st_geometry(habitat$grid))
-  # mtext(text = "Processed elevation", side = 1, font = 2)
-  # plot(habitat$grid[ ,"elev"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  # 
-  # ##-- Terrain Ruggedness Index
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(st_geometry(habitat$grid))
-  # mtext(text = "Raw terrain ruggedness",side = 1, font = 2)
-  # plot(TRI_raw, add = T)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(habitat$grid), add = T)
-  # plot(st_geometry(habitat$grid))
-  # mtext(text = "Processed terrain ruggedness",side = 1, font = 2)
-  # plot(habitat$grid[ ,"tri"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  # 
-  ##-- Human Population Density 
-  par(mfrow = c(1,3), mar = c(2,2,2,2))
-  plot(st_geometry(habitat$grid))
-  mtext(text = "Raw human density", side = 1, font = 2)
-  plot(POP_raw, add = T)
-  plot(st_geometry(countries), add = T)
-  plot(st_geometry(habitat$grid), add = T)
-  plot(st_geometry(habitat$grid))
-  mtext(text = "Processed human density", side = 1, font = 2)
-  plot(habitat$grid[ ,"pop"], add = T)
-  plot(st_geometry(countries), add = T)
-  plot(st_geometry(habitat$grid))
-  mtext(text = "log(human density+1)", side = 1, font = 2)
-  plot(habitat$grid[ ,"log_pop"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  # ##-- Road density
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(st_geometry(habitat$grid))
-  # mtext(text = "Raw main roads",side = 1, font = 2)
-  # plot(mainRoads[,"highway"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(habitat$grid), add = T)
-  # plot(st_geometry(habitat$grid[ ,"mainRoads_L"]))
-  # mtext(text = "Processed main roads", side = 1, font = 2)
-  # plot(habitat$grid[ ,"mainRoads_L"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  # ##-- East/West
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(st_geometry(habitat$grid))
-  # mtext(text = "East/West zones",side = 1, font = 2)
-  # plot(cutline, add = T, border = "red", lwd = 2)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(habitat$grid[ ,"zone"]))
-  # mtext(text = "Processed East/West zones", side = 1, font = 2)
-  # plot(habitat$grid[ ,"zone"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- Wolf pack presence
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  plot(st_geometry(habitat$grid))
-  mtext(text = "Raw pack presence",side = 1, font = 2)
-  lapply(packPres_raw, function(x)plot(x, add = T))
-  plot(st_geometry(countries), add = T)
-  plot(st_geometry(habitat$grid), add = T)
-  plot(st_geometry(habitat$grid[ ,"presence"]))
-  mtext(text = "Processed pack presence", side = 1, font = 2)
-  plot(habitat$grid[ ,"presence"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- IUCN presence
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  plot(st_geometry(habitat$grid))
-  mtext(text = "Raw IUCN presence",side = 1, font = 2)
-  plot(iucn_2018, add = T, col = adjustcolor("navyblue",0.5))
-  plot(iucn_2012_1, add = T, col = adjustcolor("navyblue",0.2))
-  plot(iucn_2012_2, add = T, col = adjustcolor("navyblue",0.5))
-  plot(st_geometry(countries), add = T)
-  plot(st_geometry(habitat$grid), add = T)
-  plot(st_geometry(habitat$grid[ ,"IUCN"]))
-  mtext(text = "Processed IUCN presence", side = 1, font = 2)
-  plot(habitat$grid[ ,"IUCN"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Density covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  
-  
-  ## ------   3. DETECTOR COVARIATES ------
-  ##-- Search transect length
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.3))
-  plot(transects, col = "firebrick3", add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Search transects (raw)", side = 1, font = 2)
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.3))
-  plot(detectors$grid[ ,"transect_L"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Search transects length (processed)", side = 1, font = 2)
-  mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- Search transect quality
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.3))
-  plot(transects, col = "firebrick3", add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Search transects (raw)", side = 1, font = 2)
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.3))
-  plot(detectors$grid[ ,"transect_qi"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Search transects quality (processed)", side = 1, font = 2)
-  mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- Snow
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  plot(habitat$polygon)
-  plot(SNOW[ ,"snow.sum"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Cumulative snow fall (raw)", side = 1, font = 2)
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.3))
-  plot(detectors$grid[,"snow_fall"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Cumulative snow fall(processed)", side = 1, font = 2)
-  mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- Corine Land Cover
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  for(l in 1:length(layer.index)){
-    temp <- CLC
-    temp[!temp[] %in% layer.index[l]] <- 0
-    temp[temp[] %in% layer.index[l]] <- 1
-    ## Raw data
-    plot(studyArea, col = adjustcolor("gray60", alpha.f = 0.3))
-    mtext( text = paste("Raw",layer.names[layer.index[l]]), side = 1, font = 2)
-    plot(temp, add = T)
-    plot(st_geometry(countries), add = T)
-    plot(st_geometry(detectors$grid), add = T)
-    ## Processed data
-    plot(st_geometry(detectors$grid))
-    plot(detectors$grid[ ,layer.names[layer.index[l]]], add=T)
-    mtext(text = paste("Processed",layer.names[layer.index[l]]), side = 1, font = 2)
-    plot(st_geometry(countries), add = T)
-    mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  }#c
-  
-  # ##-- Elevation
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.3))
-  # mtext(text = "Raw elevation", side = 1, font = 2)
-  # plot(DEM_raw, add = T)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(detectors$grid), add = T)
-  # plot(st_geometry(detectors$grid))
-  # mtext(text = "Processed elevation", side = 1, font = 2)
-  # plot(detectors$grid[ ,"elev"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  # 
-  # ##-- Terrain Ruggedness Index
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(st_geometry(detectors$grid))
-  # mtext(text = "Raw terrain ruggedness",side = 1, font = 2)
-  # plot(TRI_raw, add = T)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(detectors$grid), add = T)
-  # plot(st_geometry(detectors$grid))
-  # mtext(text = "Processed terrain ruggedness",side = 1, font = 2)
-  # plot(detectors$grid[ ,"tri"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- Human Population Density 
-  par(mfrow = c(1,3), mar = c(2,2,2,2))
-  plot(st_geometry(detectors$grid), add = T)
-  plot(st_geometry(detectors$grid))
-  mtext(text = "Processed human density", side = 1, font = 2)
-  plot(detectors$grid[ ,"pop"], add = T)
-  plot(st_geometry(countries), add = T)
-  plot(st_geometry(detectors$grid))
-  mtext(text = "log(human density+1)", side = 1, font = 2)
-  plot(detectors$grid[ ,"log_pop"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  # ##-- Road density
-  # par(mfrow = c(1,2), mar = c(2,2,2,2))
-  # plot(st_geometry(detectors$grid))
-  # mtext(text = "Raw main roads",side = 1, font = 2)
-  # plot(mainRoads[,"highway"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # plot(st_geometry(detectors$grid), add = T)
-  # plot(st_geometry(detectors$grid[ ,"mainRoads_L"]))
-  # mtext(text = "Processed main roads", side = 1, font = 2)
-  # plot(detectors$grid[ ,"mainRoads_L"], add = T)
-  # plot(st_geometry(countries), add = T)
-  # mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  ##-- East/West
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  plot(st_geometry(detectors$grid))
-  mtext(text = "East/West zones",side = 1, font = 2)
-  plot(cutline, add = T, border = "red", lwd = 2)
-  plot(st_geometry(countries), add = T)
-  plot(st_geometry(detectors$grid[ ,"zone"]))
-  mtext(text = "Processed East/West zones", side = 1, font = 2)
-  plot(detectors$grid[ ,"zone"], add = T)
-  plot(st_geometry(countries), add = T)
-  mtext(text = "Detector covariates", side = 3, line = -2, outer = TRUE, font = 2)
-  
-  
-  ## ------   4. INDIVIDUAL COVARIATES -----
-  ##-- individual centroids
-  par(mfrow = c(1,1))
-  centroids <- st_drop_geometry(ngs) %>%
-    group_by(Genotype.ID) %>%
-    summarise(X = mean(CoordX),               ## Get total length searched in each detector grid cell
-              Y = mean(CoordY)) 
-  coordinates(centroids) <- cbind.data.frame(centroids$X,centroids$Y)
-  proj4string(centroids) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
-  centroids <- st_as_sf(centroids)
-  plot(habitat$polygon, col = "gray20", border = F)
-  plot(transects, col = "gray80", add = T)
-  plot(centroids, add = T, pch = 21, cex = 1,
-       bg = adjustcolor("red",0.2),
-       col = "red")
-  mtext( text = "Individual centroids", side = 3, font = 2)
-  
-  ##-- NGS samples per sex
-  par(mfrow = c(1,2))
-  sexCol <- c(hcl.colors(2),"gray60")
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.5), border = F)
-  plot(transects, col = "black", add = T)
-  plot(st_geometry(ngs), add = T, pch = 21, cex = 1,
-       bg = ifelse(ngs$Sex == "F", sexCol[1], sexCol[2]),
-       col = "black")
-  legend( x = 502000, y = 5110000, bty = "n",
-          legend = c("Females", "males", "NA"),
-          title = "NGS samples",
-          pch = 21,
-          pt.bg = sexCol)
-  
-  par(mar = c(10,10,10,10))
-  barplot( cbind(table(sex, useNA = "always")),
-           col = sexCol,
-           ylab = "Number of individuals detected",
-           beside = T)
-  legend( "topright",
-          legend = c("NA", "male","female"),
-          fill =  rev(sexCol))
-  
-  ##-- NGS samples per sex
-  par(mfrow = c(1,2), mar = c(2,2,2,2))
-  statusCol <- c(hcl.colors(3),"gray60")
-  plot(habitat$polygon, col = adjustcolor("gray60", alpha.f = 0.5), border = F)
-  plot(transects, col = "black", add = T, lwd = 0.5)
-  plot(st_geometry(ngs),
-       add = T, pch = 21, cex = 0.5,
-       bg = ifelse(ngs$Status == "alpha", statusCol[1],
-                   ifelse(ngs$Status == "pup",statusCol[2],
-                          ifelse(ngs$Status == "other",statusCol[3],
-                                 statusCol[4]))),
-       col = "black")
-  legend( x = 502000, y = 5110000, bty = "n",
-          legend = c("alpha", "pup", "other", "NA"),
-          title = "NGS samples",
-          pch = 21, pt.bg = statusCol)
-  
-  barplot( cbind(table(status,useNA = "always")),
-           col = statusCol,
-           beside = T)
-  legend("topright",
-         legend = c("alpha","pup","other","NA"),
-         fill =  statusCol)
-  
-  graphics.off()
-  
-}
-
-
 
 
 ## -----------------------------------------------------------------------------
 ## ------ IV. NIMBLE ------- 
 ## ------   1. MODEL ------
-modelCode <- nimbleCode({
-  ##---- SPATIAL PROCESS  
-  psiRJ ~ dunif(0, 1) # inclusion prob
-  
-  for(c in 1:n.habCovs){
-    betaHab.raw[c] ~ dnorm(0.0,0.01)
-    zRJ[c] ~ dbern(psiRJ)
-    betaHab[c] <- betaHab.raw[c] * zRJ[c]
-  }#c
-  
-  habIntensity[1:n.habWindows] <- exp(
-    hab.covs[1:n.habWindows,1:n.habCovs] %*% (betaHab[1:n.habCovs]*zRJ[1:n.habCovs]))
-  
-  sumHabIntensity <- sum(habIntensity[1:n.habWindows])
-  logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
-  logSumHabIntensity <- log(sumHabIntensity)
-  
-  for(i in 1:n.individuals){
-    s[i,1:2] ~ dbernppAC(
-      lowerCoords = lowerHabCoords[1:n.habWindows,1:2],
-      upperCoords = upperHabCoords[1:n.habWindows,1:2],
-      logIntensities = logHabIntensity[1:n.habWindows],
-      logSumIntensity = logSumHabIntensity,
-      habitatGrid = habitatGrid2[1:y.max,1:x.max],
-      numGridRows = y.max,
-      numGridCols = x.max)
-  }#i
-  
-  
-  ##---- DEMOGRAPHIC PROCESS  
-  psi ~ dunif(0,1)
-  rho ~ dunif(0,1)
-  
-  for(ss in 1:2){
-    theta[1:n.states,ss] ~ ddirch(alpha[1:n.states,ss])
-  }#ss
-  
-  for(i in 1:n.individuals){ 
-    sex[i] ~ dbern(rho)
-    z[i] ~ dbern(psi)
-    status[i] ~ dcat(theta[1:n.states,sex[i]+1])
-  }#i 								
-  
-  
-  ##---- DETECTION PROCESS 
-  for(c in 1:n.detCovs){
-    betaDet[c] ~ dnorm(0.0,0.01)
-  }
-  
-  for(s in 1:n.states){
-    for(ss in 1:2){
-      p0[s,ss] ~ dunif(0,0.5)
-      sigma[s,ss] ~ dunif(0,12)
-      logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
-        det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
-    }#ss
-  }#s
-  
-  for(i in 1:n.individuals){
-    y[i,1:n.maxDets] ~ dbinomLocal_normal(
-      size = size[1:n.detectors],
-      p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
-      sigma = sigma[status[i],sex[i]+1],
-      s = s[i,1:2],
-      trapCoords = detCoords[1:n.detectors,1:2],
-      localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
-      localTrapsNum = localTrapsNum[1:n.habWindows],
-      habitatGrid = habitatGrid[1:y.max,1:x.max],
-      indicator = z[i],
-      lengthYCombined = n.maxDets)
-  }#i
-  
+modelCode<-nimbleCode( {
+
+    sigma ~ dunif(0,10)#dgamma(24,8) # weakly informative prior - 38-619 km2
+    p0 ~ dunif(0,1)
+    psi ~ dunif(0,1)#dbeta(1,1)
+    
+    # loop over groups
+    for(g in 1:G) {
+      z[g] ~ dbern(psi)
+      s[g,1:2] ~ dbernppAC(
+        lowerCoords = lowerHabCoords[1:n.habWindows,1:2],
+        upperCoords = upperHabCoords[1:n.habWindows,1:2],
+        logIntensities = logHabIntensity[1:n.habWindows],
+        logSumIntensity = logSumHabIntensity,
+        habitatGrid = habitatGrid2[1:y.max,1:x.max],
+        numGridRows = y.max,
+        numGridCols = x.max)
+      
+      for(j in 1:J) {
+        distsq[g,j] <- (s[g,1] - X[j,1])^2 + (s[g,2] - X[j,2])^2
+        p[g, j] <- p0 * exp(-distsq[g,j] / (2*sigma^2)) * z[g] 
+      }
+    } # End of 1:G
+    for(j in 1:J) {
+      for(k in 1:K) {
+        n[j, k] ~ dcustomFunction(p[1:G,j],GS[1:G])
+        
+      }
+    }
+    
   
   ##-- DERIVED PARAMETERS 
-  N <- sum(z[1:n.individuals])
+  N <- sum(z[1:M])
+  D <- N/area
 })
-
 
 
 
