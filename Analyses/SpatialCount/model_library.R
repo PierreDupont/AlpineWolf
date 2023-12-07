@@ -1,5 +1,5 @@
 ##------- UNMARKED MODEL -----
-SB_model <- nimbleCode({
+SC_model <- nimbleCode({
   
   ##---- SPATIAL PROCESS  
   for(c in 1:n.habCovs){
@@ -7,7 +7,7 @@ SB_model <- nimbleCode({
   }#c
   
   habIntensity[1:n.habWindows] <- exp(
-    hab.covs[1:n.habWindows,1:n.habCovs] %*% (betaHab[1:n.habCovs]*zRJ[1:n.habCovs])
+    hab.covs[1:n.habWindows,1:n.habCovs] %*% (betaHab[1:n.habCovs]*zRJ[1:n.habCovs]))
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -144,6 +144,8 @@ SGM_model <- nimbleCode({
   
   
 })
+  
+  
 
 
 ## ------ SPATIAL CAPTURE RECAPTURE MODEL ------

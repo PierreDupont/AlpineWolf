@@ -1669,37 +1669,36 @@ modelCode <- nimbleCode({
   
   
   
-  ##---- DETECTION PROCESS: 3 DIFFERENT DATA SOURCES 
+  ##---- DETECTION PROCESS: 3 DIFFERENT DATA SOURCES (NGS, WOLF TRACKS, CAMERA TRAPS)
   ##---- sigma PARAMETER IS SHARED BY ALL DETECTION PROCESSES
   ##---- (COULD BE RELAXED LATER...)
   for(s in 1:n.states){
     for(ss in 1:2){
       sigma[s,ss] ~ dunif(0,12)
-    }##ss
-  }##s
+    }#ss
+  }#s
   
   
   ##---- DETECTION PROCESS 1+2 : NGS + WOLF TRACKS
   for(c in 1:n.detCovs){
-    betaDet.SCR[c] ~ dnorm(0.0,0.01)
+    betaDet.NGS[c] ~ dnorm(0.0,0.01)
     betaDet.TRACKS[c] ~ dnorm(0.0,0.01)
   }
   
   for(s in 1:n.states){
     for(ss in 1:2){
-      ## WOLF TRACKS
+      ##-- WOLF TRACKS
       p0.TRACKS[s,ss] ~ dunif(0,0.5)
-      logit(p0_Tracks[s,ss,1:n.detectors]) <- logit(p0.TRACKS[s,ss]) + 
+      logit(p0_TRACKS[s,ss,1:n.detectors]) <- logit(p0.TRACKS[s,ss]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet.TRACKS[1:n.detCovs]
-      ## NGS
+      ##-- NGS
       p0.NGS[s,ss] ~ dunif(0,0.5)
       logit(p0_NGS[s,ss,1:n.detectors]) <- logit(p0.NGS[s,ss]) + 
-        det.covs[1:n.detectors,1:n.detCovs] %*% betaDet.SCR[1:n.detCovs]
+        det.covs[1:n.detectors,1:n.detCovs] %*% betaDet.NGS[1:n.detCovs]
     }#ss
   }#s
-  
 
-  
+  ##-- NGS DETECTIONS
   for(i in 1:n.individuals){
     y[i,1:n.maxDets] ~ dbinomLocal_normal(
       size = size[1:n.detectors],
@@ -1714,10 +1713,9 @@ modelCode <- nimbleCode({
       lengthYCombined = n.maxDets)
   }#i
   
-  
-  ##---- TRY TO INTEGRATE IN dbinomLocal_normal() 
-  ##---- SINCE DETECTORS ARE THE SAME
-  ##---- !!!! NOT POSSIBLE SINCE dbinomLocal_normal is individual-based
+  ##-- WOLF TRACKS DETECTIONS
+  ##---- TRIED TO INTEGRATE IN dbinomLocal_normal() SINCE DETECTORS ARE THE SAME
+  ##---- !!!! NOT POSSIBLE SINCE dbinomLocal_normal is individual-based !!!!
   for(j in 1:n.detectors) {
     for(i in 1:n.individuals){
       distsq[i,j] <- (s[i,1] - detCoords[j,1])^2 + (s[i,2] - detCoords[j,2])^2
@@ -1725,59 +1723,24 @@ modelCode <- nimbleCode({
     }#i
     bigP[j] <- 1-prod(oneMinusP[1:n.individuals,j])
     trackPresence[j] ~ dbern(bigP[j])
-  } #i
+  } #j
   
   
-  for(i in 1:n.individuals){
-    y[i,1:n.maxDets] ~ dintegrated_normal(
-      size = size[1:n.detectors],
-      p0 = p0_NGS[status[i],sex[i]+1,1:n.detectors],
-      p0_unid = p0_TRACKS[status[i],sex[i]+1,1:n.detectors],
-      sigma = sigma[status[i],sex[i]+1],
-      s = s[i,1:2],
-      trapCoords = detCoords[1:n.detectors,1:2],
-      localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
-      localTrapsNum = localTrapsNum[1:n.habWindows],
-      habitatGrid = habitatGrid[1:y.max,1:x.max],
-      indicator = z[i],
-      lengthYCombined = n.maxDets)
-  }#i
-  
-  
-  ##---- TRY TO INTEGRATE IN dbinomLocal_normal() 
-  ##---- SINCE DETECTORS ARE THE SAME
-  for(j in 1:n.detectors) {
-    for(i in 1:n.individuals){
-      distsq[i,j] <- (s[i,1] - detCoords[j,1])^2 + (s[i,2] - detCoords[j,2])^2
-      oneMinusP[i,j] <- 1 - p0Tracks[status[i],sex[i]+1,j] * exp(-distsq[i,j] / (2*sigma[status[i],sex[i]+1]^2)) * z[i] 
-    }#i
-    bigP[j] <- 1-prod(oneMinusP[1:n.individuals,j])
-    trackPresence[j] ~ dbern(bigP[j])
-  } #i
-  
-  
-  
-  
+
   
   ##---- DETECTION PROCESS 3 : CAMERA TRAPS
-  for(i in 1:n.individuals){
-    for(j in 1:.n.camtraps) {
-      distsq[i,j] <- (s[i,1] - trapCoords[j,1])^2 + (s[i,2] - trapCoords[j,2])^2
-      lam[i,j] <- lam0 * exp(-distsq[i,j] / (2*sigma[status[i],sex[i]+1]^2)) * z[i]
-    }
-  } #i
-
   lambda.oper ~ dgamma(1,1)
-
-  for(j in 1:J) {
-    oper[j] ~ T(dpois(lambda.oper),1, )
-    bigLambda[j] <- sum(lam[1:n.individuals,j])
-    n[j] ~ dpois(bigLambda[j]*oper[j])
-  }
-
+  lam0 ~ dgamma(1,1)
   
-  
-
+  for(c in 1:.n.camtraps) {
+    for(i in 1:n.individuals){
+      distsq[i,c] <- (s[i,1] - trapCoords[c,1])^2 + (s[i,2] - trapCoords[c,2])^2
+      lam[i,c] <- lam0 * exp(-distsq[i,c] / (2*sigma[status[i],sex[i]+1]^2)) * z[i]
+    }#c
+    oper[c] ~ T(dpois(lambda.oper),1, )
+    bigLambda[c] <- sum(lam[1:n.individuals,c])
+    n[c] ~ dpois(bigLambda[c]*oper[c])
+  } #i
   
 
   ##-- DERIVED PARAMETERS 
