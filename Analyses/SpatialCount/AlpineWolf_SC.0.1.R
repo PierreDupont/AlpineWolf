@@ -145,7 +145,7 @@ ct$tot_attivi <- as.numeric(ct$tot_attivi)
 # plot(ct$geometry, col = "red", pch=16, add=T)
 
 ##---- Number of pics per CT
-hist(ct$tot_attivi)
+# hist(ct$tot_attivi)
 
 ct_cl <- ct[,c(1,6)]
 ct_cl$id <- paste0("FT", 1:nrow(ct_cl))
@@ -212,11 +212,11 @@ dim(pics_m)
 
 
 
-##---- Number of pics per CT -----
+##---- Number of pics per CT 
 # pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
 pics <- pics_t
 
-# same info -----
+# same info 
 numDetsPerCT <- table(pics$id)
 # which(is.na(as.numeric(pics_t$id_ct)))
 hist(numDetsPerCT)
@@ -933,9 +933,9 @@ localObjects <- getLocalObjects(
 
 
 ## -----------------------------------------------------------------------------
-## ------ IV. NIMBLE ------- 
+## ------ III. NIMBLE ------- 
 ## ------   1. MODEL ------
-modelCode1 <- nimbleCode( {
+modelCode <- nimbleCode( {
 
     sigma ~ dunif(0,10)#dgamma(24,8) # weakly informative prior - 38-619 km2
     lam0 ~ dunif(0,10)
@@ -947,11 +947,10 @@ modelCode1 <- nimbleCode( {
     logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
     logSumHabIntensity <- log(sumHabIntensity)
     
-    # loop over groups
+    # loop over individuals
     for(g in 1:G) {
       
       z[g] ~ dbern(psi)
-      
       
       s[g,1:2] ~ dbernppAC(
         lowerCoords = lowerHabCoords[1:n.habWindows,1:2],
@@ -987,16 +986,12 @@ modelCode1 <- nimbleCode( {
 ## ------   2. BUNDLE DATA ------
 ##---- Set model constants, data & parameter simulated values (==inits)
 G <- 2000
+
 area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
 
-nimInits <- list(sigma = rnorm(1,5),
-                 lam0 = runif(1),
-                 lambda.oper = 1,
-                 z = rbinom(G,1,0.6),
-                 psi = 0.6)
 
 nimData <- list(n = det_w$tot_wolves,
                 habIntensity = rep(1,habitat$n.HabWindows),
@@ -1005,6 +1000,8 @@ nimData <- list(n = det_w$tot_wolves,
                 habitatGrid = localObjects$habitatGrid,
                 lowerHabCoords = habitat$loScaledCoords, 
                 upperHabCoords = habitat$upScaledCoords)
+
+
 
 nimConstants <- list(G = G,
                      J = nrow(det_w),
@@ -1015,79 +1012,94 @@ nimConstants <- list(G = G,
                      x.max = dim(habitat$matrix)[2]) 
 
 
+
+sInits <- matrix(NA,nrow=G,ncol=2)
+
+# Loop
+for (g in 1:G) {
+  sInits[g,] <- rbernppAC(n=1,
+          lowerCoords = nimData$lowerHabCoords,
+          upperCoords = nimData$upperHabCoords,
+          logIntensities = log(nimData$habIntensity),
+          logSumIntensity = log(sum(nimData$habIntensity)),
+          habitatGrid = nimData$habitatGrid,
+          numGridRows = nimConstants$y.max,
+          numGridCols = nimConstants$x.max)
+}
+
+operInits <- rpois(n= nrow(det_w), mean(nimData$oper, na.rm=T))
+operInits[!is.na(nimData$oper)] <- NA
+
+## ------   3. NIMBLE INITIAL VALUES ------
+## Create a list of random initial values (one set per chain)
+nimInits.list <- list()
+for(c in 1:4){
+nimInits.list[[c]] <- list(sigma = rnorm(1,5),
+                 lam0 = runif(1),
+                 oper = operInits,
+                 s = sInits,
+                 lambda.oper = 1,
+                 z = rbinom(G,1,0.6),
+                 psi = 0.6)
+}
+
 nimParams <- c("N", "D", "lam0", "sigma","psi","z","s")
 
 
-##---- Create the nimble model object
-nimModel <- nimbleModel( code = modelCode1,
-                         constants = nimConstants,
-                         inits = nimInits,
-                         data = nimData,
-                         check = FALSE,
-                         calculate = FALSE) 
-nimModel$simulate("s")
-nimModel$simulate("oper")
+## ------   4. SAVE NIMBLE INPUT -----
+for(c in 1:4){
+  nimInits <- nimInits.list[[c]]
+  save( modelCode,
+        nimData,
+        nimConstants,
+        nimInits,
+        nimParams,
+        file = file.path(thisDir, "input",
+                         paste0(modelName, "_", c, ".RData")))
+}#c
 
-nimModel$calculate()
-Cmodel <- compileNimble(nimModel)
-modelConf <- configureMCMC(nimModel,
-                           thin = 1)
-
-modelConf$addMonitors(nimParams)
-modelMCMC <- buildMCMC(modelConf)
-
-CmodelMCMC <- compileNimble(modelMCMC, project = nimModel)
-out2 <- runMCMC(CmodelMCMC, 
-                niter = 20000,
-                nchains = 3)
-
-#   return(as.mcmc(out1))
-# })
-
-str(out1)
-### check on the first batch of results, 200% likely need to keep running ####
-# out.mcmc <- as.mcmc(out1)
-
-MCMCplot(object = out1, 
-         params = 'N')
-
-
-MCMCtrace(object = out1,
-          pdf = TRUE, # no export to PDF
-          ind = TRUE, # separate density lines per chain
-          params = "N")
-
-# ##---- Compile the nimble model object to C++
-# CsimModel <- compileNimble(nimModel)
-# CsimModel$calculate()
-# 
-# ##---- Configure and compile the MCMC object 
-# conf <- configureMCMC( model = nimModel,
-#                        monitors = nimParams,
-#                        thin = 1)
-# 
-# ##---- Configure reversible jump
-# configureRJ( conf =  conf,
-#             targetNodes = 'betaHab.raw',
-#             indicatorNodes = 'zRJ',
-#             control = list(mean = 0, scale = .2))
-# 
-# Rmcmc <- buildMCMC(conf)
-# compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
-# Cmodel <- compiledList$model
-# Cmcmc <- compiledList$mcmc
-# 
-# ##---- Run nimble MCMC in multiple bites
-# for(c in 1:1){
-#   print(system.time(
-#     runMCMCbites( mcmc = Cmcmc,
-#                   bite.size = 50,
-#                   bite.number = 2,
-#                   path = file.path(thisDir, paste0("output/chain",c)))
-#   ))
-# }
-# 
-
+## -----------------------------------------------------------------------------
+## ------ IV. FIT NIMBLE MODEL -----
+for(c in 1:4){
+  load( file.path(thisDir, "input", paste0(modelName, "_", c, ".RData")))
+  
+  ##---- Create the nimble model object
+  nimModel <- nimbleModel( code = modelCode,
+                           constants = nimConstants,
+                           inits = nimInits,
+                           data = nimData,
+                           check = FALSE,
+                           calculate = FALSE) 
+  nimModel$calculate()
+  
+  ##---- Compile the nimble model object to C++
+  CsimModel <- compileNimble(nimModel)
+  CsimModel$calculate()
+  
+  ##---- Configure and compile the MCMC object 
+  conf <- configureMCMC( model = nimModel,
+                         monitors = nimParams,
+                         thin = 10,
+                         monitors2 = nimParams2,
+                         thin2 = 40)
+  
+  
+  Rmcmc <- buildMCMC(conf)
+  compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
+  Cmodel <- compiledList$model
+  Cmcmc <- compiledList$mcmc
+  
+  ##---- Run nimble MCMC in multiple bites
+  mcmcRuntime <- system.time(
+    runMCMCbites( mcmc = Cmcmc,
+                  model = Cmodel,
+                  bite.size = 100000,
+                  bite.number = 1000,
+                  path = file.path(thisDir, "output", modelName, "_", c),
+                  save.rds = TRUE))  
+  
+  print(mcmcRuntime)
+}#c 
 
 
 
