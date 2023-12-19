@@ -51,9 +51,7 @@ CsimModel$calculate()
 ##---- Configure and compile the MCMC object
 conf <- configureMCMC( model = nimModel,
                        monitors = nimParams,
-                       thin = 10,
-                       monitors2 = nimParams2,
-                       thin2 = 40)
+                       thin = 10)
 
 
 Rmcmc <- buildMCMC(conf)
@@ -65,8 +63,8 @@ Cmcmc <- compiledList$mcmc
 outFileName <- paste0()
 mcmcRuntime <- system.time(
   runMCMCbites( mcmc = Cmcmc,
-                bite.size = 100000,
-                bite.number = 1000,
+                bite.size = 1000,
+                bite.number = 100,
                 path = file.path(outPath, paste0(modelName, "_", c_value, ".RData"))))
 
 print(mcmcRuntime)
