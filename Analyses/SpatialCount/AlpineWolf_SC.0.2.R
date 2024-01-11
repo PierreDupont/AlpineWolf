@@ -1,6 +1,7 @@
 ## -------------------------------------------------------------------------- ##
-## ----------------- ALPINE WOLF Spatial Count Model ------------------------ ##
+## ----------------------- ALPINE WOLF SC ---------------------------------- ##
 ## -------------------------------------------------------------------------- ##
+
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
@@ -48,7 +49,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf_SC.0.1"
+modelName = "AlpineWolf.SC.0.2"
 thisDir <- file.path(analysisDir, modelName)
 
 
@@ -142,7 +143,7 @@ ct$tot_attivi <- as.numeric(ct$tot_attivi)
 # plot(ct$geometry, col = "red", pch=16, add=T)
 
 ##---- Number of pics per CT
-hist(ct$tot_attivi)
+# hist(ct$tot_attivi)
 
 ct_cl <- ct[,c(1,6)]
 ct_cl$id <- paste0("FT", 1:nrow(ct_cl))
@@ -152,7 +153,7 @@ colnames(ct_cl$coords) = c("x", "y")
 
 
 dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
-                                   c("x","y"))
+                               c("x","y"))
 
 ## ------   3. PICTURES/SIGHTENING DATA ------
 ##---- Images from Camera Traps data
@@ -209,11 +210,11 @@ dim(pics_m)
 
 
 
-##---- Number of pics per CT -----
+##---- Number of pics per CT 
 # pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
 pics <- pics_t
 
-# same info -----
+# same info 
 numDetsPerCT <- table(pics$id)
 # which(is.na(as.numeric(pics_t$id_ct)))
 hist(numDetsPerCT)
@@ -274,104 +275,10 @@ det_w <- det_w[,c(2,1,69:70,4:68,3)]
 # plot(st_geometry(ct), col = "red", add = T)
 # plot(st_geometry(pics), add = T, pch = 3)
 
-## ------   4. SPATIAL COVARIATES ------
-##---- Read snow-fall rasters
-tif <- read_stars(file.path(dataDir,"/GISData/Environmental Layers/Snowfall_2020-2021/ERA-5_snowfall_alps_32N.tif"))
-SNOW <- st_as_sf(tif)
-
-
-##---- Load Corine Land Cover data
-CLC <- raster(file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/corine32Ncrop_reclassed.tif"))
-## 1 = developed
-## 2 = agriculture
-## 3 = forest
-## 4 = herbaceous
-## 5 = bare rock
-## 6 = sea features
-## 7 = inland water
-## 9 = perpetual snow
-layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
-                 "sea features","inland water","NA","perpetual snow")
-plot(CLC)
-
-
-##---- Load elevation data
-DEM_raw <- raster(file.path(dataDir,"/GISData/Environmental Layers/Orography/E40N20_crop_1km.tif"))
-plot(DEM_raw)
-
-
-##---- Load terrain ruggedness data
-TRI_raw <- raster(file.path(dataDir,"/GISData/Environmental Layers/Orography/TRI_1km.tif"))
-plot(TRI_raw)
-
-
-##---- Load human population density data
-POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
-plot(POP_raw)
-
-
-##---- Load roads data
-roads <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Road Density/road_density_tot_clipped.shp"))
-table(roads$highway) # see https://wiki.openstreetmap.org/wiki/Key:highway for road classes description
-mainRoads <- subset(roads, highway %in% c("motorway", "trunk", "primary"))
-rm(roads)
-
-
-##---- Create a line to delineate the "western Alps"
-cutline <- st_linestring(rbind(c(700000,4800000), c(500000,5230000)))
-cutline <- st_sfc(cutline)
-st_crs(cutline) <- st_crs(studyArea)
-cutline <- st_buffer(cutline, dist = 0.0001)
-plot(studyArea)
-plot(cutline, add = T, border = "blue", lwd = 2)
-
-##---- Create east and western Alps polygons
-studyArea_west <- st_sfc(st_cast(st_difference(st_buffer(studyArea,50000), cutline),"POLYGON")[[1]])
-st_crs(studyArea_west) <- st_crs(studyArea)
-studyArea_east <- st_difference(st_buffer(studyArea,50000),studyArea_west)
-
-
-##---- Load IUCN presence data
-list.files(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid"))
-iucn_2012_1 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_permanent.shp"))
-iucn_2012_1$SPOIS <- 3
-iucn_2012_1 <- st_transform(iucn_2012_1, st_crs(studyArea))
-plot(st_geometry(studyArea))
-plot(st_geometry(iucn_2012_1), add = T, col = "lightskyblue4")
-
-iucn_2012_2 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_sporadic.shp"))
-iucn_2012_2$SPOIS <- 1
-iucn_2012_2 <- st_transform(iucn_2012_2, st_crs(studyArea))
-plot(st_geometry(iucn_2012_2), add = T, col = "lightskyblue2")
-
-iucn_2018 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/2018_06_06_Wolf_IUCN_Redlist.shp"))
-iucn_2018 <- st_transform(iucn_2018, st_crs(studyArea))
-plot(st_geometry(studyArea))
-plot(iucn_2018[ ,"SPOIS"], add = T)
-## Code back to numeric
-iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
-
-
-##---- Load protected areas
-# PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
-# plot(studyArea)
-# plot(PA, add = T)
-
-
-
-## ------   5. PRE-PROCESSED STUFF ------
-load(file.path(thisDir,"Habitat.RData"))
-load(file.path(thisDir,"Detectors.RData"))
-
- 
-
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
-##---- Make PAB search grid
-# Buffer around camera traps
-# ct_cl$buffer <- st_buffer(ct_cl, dist = 50)
 # Define detectors
 detectors <- ct_cl[,c(4,2,5)]
 
@@ -384,150 +291,6 @@ detectors <- ct_cl[,c(4,2,5)]
 
 detectors$n.detectors <- 1:nrow(detectors)
 # st_crs(detectors$buffer) <- st_crs(studyArea)
-
-
-
-## ------     1.2. DETECTOR COVARIATES ------
-## ------       1.2.1. SNOWFALL ERA-5 ------
-##---- Calculate mean and cumulative snowfall
-SNOW$snow.mean <- rowMeans(st_drop_geometry(SNOW), na.rm = T)
-SNOW$snow.sum <- rowSums(st_drop_geometry(SNOW), na.rm = T)
-
-##---- Extract snow-fall in each detector grid cell
-intersection <- st_intersection(detectors$buffer, SNOW) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(snow_fall = mean(snow.mean))
-
-##---- Store average snow-fall
-detectors$grid <- detectors$buffer %>%
-  left_join(intersection, by = "id")
-
-##---- scale covariate
-detectors$buffer$snow_fall[is.na(detectors$buffer$snow_fall)] <- 0
-detectors$buffer$snow_fall <- scale(detectors$buffer$snow_fall)
-
-
-
-
-## ------       1.2.2. CORINE LAND COVER ------
-##---- Identify layers we want to use
-layer.index <- c(1,2,3,4,5,9)
-
-##---- Set-up data frame to store CLC values
-CLC.df <- as.data.frame(matrix(NA, detectors$n.detectors, length(layer.index)))
-names(CLC.df) <- layer.names[layer.index]
-CLC.df$id <- 1:detectors$n.detectors
-COV <- list()
-
-##---- Loop over the different layers of interest
-for(l in 1:length(layer.index)){
-  temp <- st_as_stars(CLC)
-  temp[!temp[] %in% layer.index[l]] <- 0
-  temp[temp[] %in% layer.index[l]] <- 1
-  # plot(temp)
-  # plot(st_geometry(detectors$geometry), add = T)
-
-  # COV[[l]] <- raster::aggregate(x = temp, detectors$grid)
-  # plot(COV[[l]])
-  # plot(st_geometry(detectors$grid), add = T)
-  CLC.df[ ,l] <- st_extract( x = temp,
-                             at = detectors$geometry)
-  print(layer.index[l])
-}#c
-
-##---- Store in detector grid
-detectors$grid <- left_join(detectors$grid, CLC.df, by = "id")
-
-
-## ------       1.2.3. ELEVATION -------
-##---- Aggregate to the detector resolution
-DEM <- raster::aggregate( x = DEM_raw,
-                          fact = detectors$resolution/res(DEM_raw),
-                          fun = mean)
-plot(DEM)
-plot(st_geometry(detectors$grid), add = T)
-
-##---- Extract scaled elevation values
-detectors$grid$elev <- DEM %>%
-  raster::extract(y = detectors$sp) %>%
-  scale()
-
-
-
-
-## ------       1.2.4. TERRAIN RUGGEDNESS INDEX -------
-##---- Aggregate to the detector resolution
-TRI <- raster::aggregate( x = TRI_raw ,
-                          fact = detectors$resolution/res(TRI_raw ),
-                          fun = mean)
-
-plot(TRI)
-plot(st_geometry(detectors$grid), add = T)
-
-##---- Extract scaled terrain ruggedness
-detectors$grid$tri <- TRI %>%
-  raster::extract(y = detectors$sp) %>%
-  scale()
-
-
-
-
-## ------       1.2.5. HUMAN POPULATION DENSITY -------
-##---- Aggregate to the detector resolution
-POP <- raster::aggregate( x = POP_raw ,
-                          fact = detectors$resolution/res(POP_raw ),
-                          fun = mean)
-
-plot(POP)
-plot(st_geometry(detectors$grid), add = T)
-
-##----Extract scaled human pop density
-detectors$grid$pop <- POP %>%
-  raster::extract(y = detectors$sp) %>%
-  scale()
-
-##---- Extract log(human pop density + 1)
-log_POP <- POP
-log_POP[ ] <- log(POP[]+1)
-detectors$grid$log_pop <- log_POP %>%
-  raster::extract(y = detectors$sp) %>%
-  scale()
-
-
-
-
-## ------       1.2.6. ROAD DENSITY -------
-##---- Extract road length in each detector grid cell
-intersection <- st_intersection(detectors$grid, mainRoads) %>%
-  mutate(length = st_length(.))  %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(mainRoads_L = sum(length))
-
-##---- Store scaled road density
-detectors$grid <- detectors$grid %>%
-  left_join(intersection, by = "id")
-detectors$grid$mainRoads_L[is.na(detectors$grid$mainRoads_L)] <- 0
-detectors$grid$mainRoads_L <- scale(detectors$grid$mainRoads_L)
-
-
-##---- Display all detector covariates
-plot(detectors$grid[ ,3:length(detectors$grid)], max.plot = 15)
-
-
-
-
-## ------       1.2.7. EAST/WEST ------
-##---- Calculate distance of all detectors to each zone
-distWest <- st_distance(detectors$grid,studyArea_west)
-distEast <- st_distance(detectors$grid,studyArea_east)
-
-##---- Assign detectors to the closest zone
-detectors$grid$zone <- apply(cbind(distWest,distEast),1,
-                             function(x)which.min(x)-1)
-
-
 
 
 ## ------   2. HABITAT ------
@@ -556,47 +319,6 @@ habitat$raster[habitat$raster[ ] < 50] <- NA
 habitat$raster[habitat$raster[ ] >= 50] <- 1
 # plot(habitat$raster)
 
-##---- Remove glaciers
-# glaciers <- CLC
-# glaciers[!glaciers[ ] %in% c(9)] <- 0
-# glaciers[glaciers[ ] %in% c(9)] <- 1
-# to.remove <- glaciers %>%
-#   raster::aggregate( x = .,
-#                      fact = habitat$resolution/res(temp),
-#                      fun = mean) %>%
-#   rasterToPolygons(.,fun = function(x)x>0.5) %>%
-#   st_as_sf() %>%
-#   fasterize(.,habitat$raster)
-# 
-# habitat$raster[to.remove[ ] == 1] <- NA
-# plot(habitat$raster)
-# 
-# ##---- Remove big lakes
-# lakes <- CLC
-# lakes[!lakes[ ] %in% c(7)] <- 0
-# lakes[lakes[ ] %in% c(7)] <- 1
-# to.remove <- lakes %>%
-#   raster::aggregate( x = .,
-#                      fact = habitat$resolution/res(lakes),
-#                      fun = mean) %>%
-#   rasterToPolygons(.,fun = function(x)x>0.5) %>%
-#   st_as_sf() %>%
-#   fasterize(.,habitat$raster)
-# habitat$raster[to.remove[ ] == 1] <- NA
-# plot(habitat$raster)
-# 
-# ##---- Remove big cities
-# to.remove <- POP_raw %>%
-#   raster::aggregate( x = .,
-#                      fact = habitat$resolution/res(POP_raw),
-#                      fun = mean) %>%
-#   rasterToPolygons(.,fun = function(x)x>5000) %>%
-#   st_as_sf() %>%
-#   fasterize(.,habitat$raster)
-# habitat$raster[to.remove[ ] == 1] <- NA
-# plot(habitat$raster)
-
-
 
 ##---- Mask and crop habitat to the buffer
 habitat$raster <- mask(habitat$raster, st_as_sf(habitat$polygon))
@@ -608,19 +330,6 @@ habitat$grid <- st_as_sf(rasterToPolygons( habitat$raster,
 habitat$grid$id <- 1:nrow(habitat$grid)
 habitat$grid <- habitat$grid[,c(2,3)]
 st_crs(habitat$grid) <- st_crs(habitat$polygon)
-
-##---- Create "COMPARISON" habitat raster (for comparison between models)
-# comparison <- st_buffer(st_union(detectors$grid[as.numeric(detectors$grid$transect_L) >0, ]),5000)
-# habitat$comparison <- mask(habitat$raster, st_as_sf(comparison))
-# habitat$comparison[habitat$comparison == 0] <- NA
-# 
-# ##---- Create "EXTRACTION" habitat raster (for the report)
-# habitat$extraction <- mask(habitat$raster, st_as_sf(st_union(SCRGrid)))
-# habitat$extraction[habitat$extraction == 0] <- NA
-# 
-# ##---- Create "ITALY" habitat raster (for density estimates)
-# habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
-# habitat$Italia[habitat$Italia == 0] <- NA
 
 ##---- Create Habitat matrix of cell ID
 habitat$matrix <- habitat$raster
@@ -657,215 +366,6 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 # plot(ct_cl,add=T, col="red")
 
 
-
-## ------     2.2. HABITAT COVARIATES ------
-## ------       2.2.1. CORINE LAND COVER ------
-## Legend :
-## 1	= developed; 2 = agriculture; 3 = forest; 4 = herbaceous; 5 =	bare rock;
-## 6 = sea features; 7 = inland water; 9 = perpetual snow
-layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
-                 "sea features","inland water","NA","perpetual snow")
-layer.index <- c(1,2,3,4,5,9)
-par(mfrow = c(1,2))
-
-CLC.df <- as.data.frame(matrix(NA, habitat$n.HabWindows, length(layer.index)))
-names(CLC.df) <- layer.names[layer.index]
-CLC.df$id <- 1:habitat$n.HabWindows
-
-COV <- list()
-for(l in 1:length(layer.index)){
-  temp <- CLC
-  temp[!temp[] %in% layer.index[l]] <- 0
-  temp[temp[] %in% layer.index[l]] <- 1
-  plot(temp)
-  plot(st_geometry(habitat$grid), add = T)
-
-  COV[[l]] <- raster::aggregate( x = temp,
-                                 fact = habitat$resolution/res(temp),
-                                 fun = mean)
-
-  COV[[l]] <- raster::focal(x = COV[[l]],
-                            w = matrix(1,3,3),
-                            fun = mean,
-                            na.rm = T)
-
-  plot(COV[[l]])
-  plot(st_geometry(habitat$grid), add = T)
-  CLC.df[ ,l] <- raster::extract( x = COV[[l]],
-                                  y = habitat$sp)
-  print(layer.index[l])
-}#c
-
-## Store in habitat grid
-habitat$grid <- left_join(habitat$grid, CLC.df, by = "id")
-
-habitat$grid$alpine <- habitat$grid$herbaceous + habitat$grid$`bare rock`
-habitat$grid$human <- habitat$grid$developed + habitat$grid$agriculture
-
-
-## ------       2.2.2. ELEVATION -------
-## Aggregate to the detector resolution
-DEM <- raster::aggregate( x = DEM_raw,
-                          fact = habitat$resolution/res(DEM_raw),
-                          fun = mean)
-plot(DEM)
-plot(st_geometry(habitat$grid), add = T)
-
-## Extract scaled elevation values
-habitat$grid$elev <- DEM %>%
-  raster::extract(y = habitat$sp) %>%
-  scale()
-
-
-
-
-## ------       2.2.3. TERRAIN RUGGEDNESS INDEX -------
-## Aggregate to the detector resolution
-TRI <- raster::aggregate( x = TRI_raw ,
-                          fact = habitat$resolution/res(TRI_raw ),
-                          fun = mean)
-TRI <- raster::focal(x = TRI,
-                     w = matrix(1,3,3),
-                     fun = mean,
-                     na.rm = T)
-plot(TRI)
-plot(st_geometry(habitat$grid), add = T)
-
-## Extract scaled terrain ruggedness
-habitat$grid$tri <- TRI %>%
-  raster::extract(y = habitat$sp) %>%
-  scale()
-
-
-
-
-## ------       2.2.4. HUMAN POPULATION DENSITY -------
-## Aggregate to the detector resolution
-POP <- raster::aggregate( x = POP_raw ,
-                          fact = habitat$resolution/res(POP_raw ),
-                          fun = mean)
-POP <- raster::focal(x = POP,
-                     w = matrix(1,3,3),
-                     fun = mean,
-                     na.rm = T)
-plot(POP)
-plot(st_geometry(habitat$grid), add = T)
-
-## Extract scaled human pop density
-habitat$grid$pop <- POP %>%
-  raster::extract(y = habitat$sp) %>%
-  scale()
-
-## Extract log(human pop density + 1)
-log_POP <- POP
-log_POP[ ] <- log(POP[]+1)
-
-par(mfrow=c(1,2))
-plot(POP)
-plot(st_geometry(countries),add=T)
-plot(log_POP)
-plot(st_geometry(countries),add=T)
-
-habitat$grid$log_pop <- log_POP %>%
-  raster::extract(y = habitat$sp) %>%
-  scale()
-
-
-
-## ------       2.2.5. ROAD DENSITY -------
-## Extract road length in each habitat grid cell
-intersection <- st_intersection(habitat$grid, mainRoads) %>%
-  mutate(length = st_length(.))  %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(mainRoads_L = sum(length))
-
-## Store scaled road density
-habitat$grid <- habitat$grid %>%
-  left_join(intersection, by = "id")
-habitat$grid$mainRoads_L[is.na(habitat$grid$mainRoads_L)] <- 0
-habitat$grid$mainRoads_L <- scale(habitat$grid$mainRoads_L)
-
-
-
-## ------       2.2.6. EAST/WEST ------
-##---- Calculate distance of all detectors to each zone
-distWest <- st_distance(habitat$grid, studyArea_west)
-distEast <- st_distance(habitat$grid, studyArea_east)
-
-##---- Assign detectors to the closest zone
-habitat$grid$zone <- apply(cbind(distWest,distEast),1,
-                           function(x)which.min(x)-1)
-
-
-## ------       2.2.7. HISTORICAL PRESENCE ------
-habitat$grid$presence <- 0
-
-for(y in 1:length(packPres_raw)){
-  ## Extract historical pack presence in each habitat grid cell
-  intersection <- st_intersection(habitat$grid, packPres_raw[[y]]) %>%
-    mutate(pres = 1)  %>%
-    st_drop_geometry() %>%
-    group_by(id) %>%
-    summarise(sumpres = sum(pres))
-
-  tmp <- habitat$grid %>%
-    left_join(intersection, by = "id")
-  tmp$sumpres[is.na(tmp$sumpres)] <- 0
-  habitat$grid$presence <- habitat$grid$presence + tmp$sumpres
-  plot(habitat$grid[,"presence"])
-}
-
-habitat$grid$presence <- scale(habitat$grid$presence)
-
-
-
-
-## ------       2.2.8. IUCN PRESENCE ------
-## Extract LCIE wolf permanent presence in each habitat grid cell
-intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
-  mutate(iucn = st_area(.)) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(IUCN = sum(iucn*SPOIS)/2.5e+07)
-
-habitat$grid <- habitat$grid %>%
-  left_join(intersection, by = "id")
-habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
-plot(habitat$grid[,"IUCN"])
-
-## Extract LCIE wolf sporadic presence in each habitat grid cell
-intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
-  mutate(iucn = st_area(.)) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07)
-
-tmp <- habitat$grid %>%
-  left_join(intersection, by = "id")
-tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
-habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
-
-## Extract LCIE wolf presence in each habitat grid cell
-intersection <- st_intersection(habitat$grid, iucn_2018) %>%
-  mutate(iucn = st_area(.)) %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07)
-
-tmp <- habitat$grid %>%
-  left_join(intersection, by = "id")
-tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
-habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
-
-habitat$grid$IUCN <- scale(habitat$grid$IUCN)
-
-
-
-
-
 ## ------   3. RESCALE HABITAT & DETECTORS ------
 ##---- Rescale habitat and detector coordinates
 scaledCoords <- scaleCoordsToHabitatGrid(
@@ -885,97 +385,53 @@ localObjects <- getLocalObjects(
 
 
 
-## ------   4. DETECTION DATA ------
-## ------     4.1. DETECTION MATRIX : y ------
-##---- Calculate distance between detections and sub-detectors
-# closest <- nn2( coordinates(detectors$coords),
-#                 st_coordinates(pics),
-#                 k = 1,
-#                 searchtype = "radius",
-#                 radius = 10000)
-# 
-# ##---- Assign each detection to a main detector based on minimum distance
-# pics$sub.detector <- c(closest$nn.idx)
-# pics$detector <- detectors$sub.sp$main.cell.new.id[closest$nn.idx] 
-# 
-# ##---- Drop duplicated detections ate the same sub-detectors
-# # pics <- pics[!duplicated(pics[ ,c("sub.detector", "id_ct.x")]), ] 
-# #ngs <- droplevels(ngs)
-# 
-# ##---- Count individual detections per detector
-# detMat <- as.matrix(table(pics$id_ct.x, pics$sub.detector))
-# 
-# # ##---- Convert to binary detections (might keep later for binomial model)
-# # detMat[detMat > 0] <- 1
-# 
-# ##---- Retrieve the number of detectors at which each individual is detected
-# detNums <- apply(detMat, 1, function(x) sum(x>0))
-# 
-# ##--- Set-up matrices to store individual detection frequencies and indices
-# n.detected <- dim(detMat)[1]
-# detIndices <- matrix(-1, n.detected, max(detNums)*2)
-# ySparse <- matrix(-1, n.detected, max(detNums)*2)
-# 
-# ##---- Fill in the matrix
-# for(i in 1:n.detected){
-#   ##-- Get where detections occur (detectors index)
-#   detIndices[i,1:detNums[i]] <- as.numeric(names(which(detMat[i, ] > 0)))
-#   ##-- Get detection frequencies (always 1 in case of Bernoulli) 
-#   ySparse[i,1:detNums[i]] <- detMat[i,which(detMat[i, ] > 0)]
-# }
-# 
-# ##---- Combine individual detection number, frequencies and indices
-# yCombined <- cbind(detNums, ySparse, detIndices)
-
-
 ## -----------------------------------------------------------------------------
-## ------ IV. NIMBLE ------- 
+## ------ III. NIMBLE ------- 
 ## ------   1. MODEL ------
-modelCode1 <- nimbleCode( {
-
-    sigma ~ dunif(0,10)#dgamma(24,8) # weakly informative prior - 38-619 km2
-    lam0 ~ dunif(0,10)
-    psi ~ dunif(0,1)#dbeta(1,1)
+modelCode <- nimbleCode( {
+  
+  sigma ~ dunif(0,10)#dgamma(24,8) # weakly informative prior - 38-619 km2
+  lam0 ~ dunif(0,10)
+  psi ~ dunif(0,1)#dbeta(1,1)
+  
+  ## Intensity of the AC distribution point process
+  # habIntensity[1:numHabWindows] <- exp(habCoeffSlope * habCovs[1:numHabWindows])
+  sumHabIntensity <- sum(habIntensity[1:n.habWindows])
+  logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
+  logSumHabIntensity <- log(sumHabIntensity)
+  
+  # loop over individuals
+  for(g in 1:G) {
     
-    ## Intensity of the AC distribution point process
-    # habIntensity[1:numHabWindows] <- exp(habCoeffSlope * habCovs[1:numHabWindows])
-    sumHabIntensity <- sum(habIntensity[1:n.habWindows])
-    logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
-    logSumHabIntensity <- log(sumHabIntensity)
+    z[g] ~ dbern(psi)
     
-    # loop over groups
-    for(g in 1:G) {
-      
-      z[g] ~ dbern(psi)
-      
-      
-      s[g,1:2] ~ dbernppAC(
-        lowerCoords = lowerHabCoords[1:n.habWindows,1:2],
-        upperCoords = upperHabCoords[1:n.habWindows,1:2],
-        logIntensities = logHabIntensity[1:n.habWindows],
-        logSumIntensity = logSumHabIntensity,
-        habitatGrid = habitatGrid[1:y.max,1:x.max],
-        numGridRows = y.max,
-        numGridCols = x.max)
-      
-      for(j in 1:J) {
-        
-        distsq[g,j] <- (s[g,1] - trapCoords[j,1])^2 + (s[g,2] - trapCoords[j,2])^2
-        lam[g,j] <- lam0 * exp(-distsq[g,j] / (2*sigma^2)) * z[g] 
-      }
-    } # End of 1:M
-    
-    lambda.oper ~ dgamma(1,1)
+    s[g,1:2] ~ dbernppAC(
+      lowerCoords = lowerHabCoords[1:n.habWindows,1:2],
+      upperCoords = upperHabCoords[1:n.habWindows,1:2],
+      logIntensities = logHabIntensity[1:n.habWindows],
+      logSumIntensity = logSumHabIntensity,
+      habitatGrid = habitatGrid[1:y.max,1:x.max],
+      numGridRows = y.max,
+      numGridCols = x.max)
     
     for(j in 1:J) {
       
-      oper[j] ~ T(dpois(lambda.oper),1,)
-        bigLambda[j] <- sum(lam[1:G,j]) 
-        n[j] ~ dpois(bigLambda[j]*oper[j])
-      }
+      distsq[g,j] <- (s[g,1] - trapCoords[j,1])^2 + (s[g,2] - trapCoords[j,2])^2
+      lam[g,j] <- lam0 * exp(-distsq[g,j] / (2*sigma^2)) * z[g] 
+    }
+  } # End of 1:M
+  
+  lambda.oper ~ dgamma(1,1)
+  
+  for(j in 1:J) {
     
-    N <- sum(z[1:G])
-    D <- N/area
+    oper[j] ~ T(dpois(lambda.oper),1,)
+    bigLambda[j] <- sum(lam[1:G,j]) 
+    n[j] ~ dpois(bigLambda[j]*oper[j])
+  }
+  
+  N <- sum(z[1:G])
+  D <- N/area
 })
 
 
@@ -983,16 +439,12 @@ modelCode1 <- nimbleCode( {
 ## ------   2. BUNDLE DATA ------
 ##---- Set model constants, data & parameter simulated values (==inits)
 G <- 2000
+
 area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
 
-nimInits <- list(sigma = rnorm(1,5),
-                 lam0 = runif(1),
-                 lambda.oper = 1,
-                 z = rbinom(G,1,0.6),
-                 psi = 0.6)
 
 nimData <- list(n = det_w$tot_wolves,
                 habIntensity = rep(1,habitat$n.HabWindows),
@@ -1001,6 +453,8 @@ nimData <- list(n = det_w$tot_wolves,
                 habitatGrid = localObjects$habitatGrid,
                 lowerHabCoords = habitat$loScaledCoords, 
                 upperHabCoords = habitat$upScaledCoords)
+
+
 
 nimConstants <- list(G = G,
                      J = nrow(det_w),
@@ -1011,79 +465,94 @@ nimConstants <- list(G = G,
                      x.max = dim(habitat$matrix)[2]) 
 
 
+
+sInits <- matrix(NA,nrow=G,ncol=2)
+
+# Loop
+for (g in 1:G) {
+  sInits[g,] <- rbernppAC(n=1,
+                          lowerCoords = nimData$lowerHabCoords,
+                          upperCoords = nimData$upperHabCoords,
+                          logIntensities = log(nimData$habIntensity),
+                          logSumIntensity = log(sum(nimData$habIntensity)),
+                          habitatGrid = nimData$habitatGrid,
+                          numGridRows = nimConstants$y.max,
+                          numGridCols = nimConstants$x.max)
+}
+
+operInits <- rpois(n= nrow(det_w), mean(nimData$oper, na.rm=T))
+operInits[!is.na(nimData$oper)] <- NA
+
+## ------   3. NIMBLE INITIAL VALUES ------
+## Create a list of random initial values (one set per chain)
+nimInits.list <- list()
+for(c in 1:4){
+  nimInits.list[[c]] <- list(sigma = rnorm(1,5),
+                             lam0 = runif(1),
+                             oper = operInits,
+                             s = sInits,
+                             lambda.oper = 1,
+                             z = rbinom(G,1,0.6),
+                             psi = 0.6)
+}
+
 nimParams <- c("N", "D", "lam0", "sigma","psi","z","s")
 
 
-##---- Create the nimble model object
-nimModel <- nimbleModel( code = modelCode1,
-                         constants = nimConstants,
-                         inits = nimInits,
-                         data = nimData,
-                         check = FALSE,
-                         calculate = FALSE) 
-nimModel$simulate("s")
-nimModel$simulate("oper")
+## ------   4. SAVE NIMBLE INPUT -----
+for(c in 1:4){
+  nimInits <- nimInits.list[[c]]
+  save( modelCode,
+        nimData,
+        nimConstants,
+        nimInits,
+        nimParams,
+        file = file.path(thisDir, "input",
+                         paste0(modelName, "_", c, ".RData")))
+}#c
 
-nimModel$calculate()
-Cmodel <- compileNimble(nimModel)
-modelConf <- configureMCMC(nimModel,
-                           thin = 1)
-
-modelConf$addMonitors(nimParams)
-modelMCMC <- buildMCMC(modelConf)
-
-CmodelMCMC <- compileNimble(modelMCMC, project = nimModel)
-out2 <- runMCMC(CmodelMCMC, 
-                niter = 20000,
-                nchains = 3)
-
-#   return(as.mcmc(out1))
-# })
-
-str(out1)
-### check on the first batch of results, 200% likely need to keep running ####
-# out.mcmc <- as.mcmc(out1)
-
-MCMCplot(object = out1, 
-         params = 'N')
-
-
-MCMCtrace(object = out1,
-          pdf = TRUE, # no export to PDF
-          ind = TRUE, # separate density lines per chain
-          params = "N")
-
-# ##---- Compile the nimble model object to C++
-# CsimModel <- compileNimble(nimModel)
-# CsimModel$calculate()
-# 
-# ##---- Configure and compile the MCMC object 
-# conf <- configureMCMC( model = nimModel,
-#                        monitors = nimParams,
-#                        thin = 1)
-# 
-# ##---- Configure reversible jump
-# configureRJ( conf =  conf,
-#             targetNodes = 'betaHab.raw',
-#             indicatorNodes = 'zRJ',
-#             control = list(mean = 0, scale = .2))
-# 
-# Rmcmc <- buildMCMC(conf)
-# compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
-# Cmodel <- compiledList$model
-# Cmcmc <- compiledList$mcmc
-# 
-# ##---- Run nimble MCMC in multiple bites
-# for(c in 1:1){
-#   print(system.time(
-#     runMCMCbites( mcmc = Cmcmc,
-#                   bite.size = 50,
-#                   bite.number = 2,
-#                   path = file.path(thisDir, paste0("output/chain",c)))
-#   ))
-# }
-# 
-
+## -----------------------------------------------------------------------------
+## ------ IV. FIT NIMBLE MODEL -----
+for(c in 1:4){
+  load( file.path(thisDir, "input", paste0(modelName, "_", c, ".RData")))
+  
+  ##---- Create the nimble model object
+  nimModel <- nimbleModel( code = modelCode,
+                           constants = nimConstants,
+                           inits = nimInits,
+                           data = nimData,
+                           check = FALSE,
+                           calculate = FALSE) 
+  nimModel$calculate()
+  
+  ##---- Compile the nimble model object to C++
+  CsimModel <- compileNimble(nimModel)
+  CsimModel$calculate()
+  
+  ##---- Configure and compile the MCMC object 
+  conf <- configureMCMC( model = nimModel,
+                         monitors = nimParams,
+                         thin = 10,
+                         monitors2 = nimParams2,
+                         thin2 = 40)
+  
+  
+  Rmcmc <- buildMCMC(conf)
+  compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
+  Cmodel <- compiledList$model
+  Cmcmc <- compiledList$mcmc
+  
+  ##---- Run nimble MCMC in multiple bites
+  mcmcRuntime <- system.time(
+    runMCMCbites( mcmc = Cmcmc,
+                  model = Cmodel,
+                  bite.size = 100000,
+                  bite.number = 1000,
+                  path = file.path(thisDir, "output", modelName, "_", c),
+                  save.rds = TRUE))  
+  
+  print(mcmcRuntime)
+}#c 
 
 
 
@@ -1092,11 +561,11 @@ MCMCtrace(object = out1,
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 10)
+                               burnin = 0)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput$samples)
+plot(nimOutput)
 graphics.off()
 
 
@@ -1644,12 +1113,12 @@ for(b in 1:ncol(res$sims.list$betaHab)){
        tck = 0.01, las = 1, cex = 2)
   
   
- # for(m in 1:nrow(aggr)){
-m <- 1
-    ##-- Identify iterations for this model
-    tmp <- as.data.frame(betas.wide[betas.wide$model == aggr$model[m],1:5])
-    
-    ##-- Calculate intensity
+  # for(m in 1:nrow(aggr)){
+  m <- 1
+  ##-- Identify iterations for this model
+  tmp <- as.data.frame(betas.wide[betas.wide$model == aggr$model[m],1:5])
+  
+  ##-- Calculate intensity
   intensity <- do.call( rbind,
                         lapply(1:nrow(tmp),
                                function(x){
