@@ -1,8 +1,64 @@
+################################################################################
+##### ----------------------- ALPINE WOLF SGM ---------------------------- #####
+################################################################################
+## ------ CLEAN THE WORK ENVIRONMENT ------
+rm(list=ls())
+
+
+## ------ IMPORT REQUIRED LIBRARIES ------
+library(rgdal)
+library(raster)
+library(coda)
+library(nimble)
+library(nimbleSCR)
+library(stringr)
+library(abind)
+library(R.utils)
+library(sf)
+library(fasterize)
+library(dplyr)
+library(lubridate)
+library(stars)
 
 library(extraDistr)
-library(dplyr)
 library(ggplot2)
-library(nimble)
+#source("SpatialCount")
+
+## ------ SET REQUIRED WORKING DIRECTORIES ------
+source("workingDirectories.R")
+
+
+## ------ SOURCE CUSTOM FUNCTIONS ------
+sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
+
+
+
+## -----------------------------------------------------------------------------
+## ------ 0. SET ANALYSIS CHARACTERISTICS -----
+## MODEL NAME 
+modelName = "sim_SGM_0.0"
+
+## HABITAT SPECIFICATIONS
+habitat = list( country =  c("SWE","NOR"),
+                resolution = 10000, 
+                buffer = 60000)
+
+## NGS DATA SPECIFICATIONS
+dna = NA #list( sex = c("female","male")) 
+
+## DETECTORS SPECIFICATIONS
+detectors = list( detSubResolution = 1000,
+                  detResolution = 5000,
+                  samplingMonths = c(10:12,1:4))
+
+if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
+if(is.null(simDir))stop("YOU SHOULD PROBABLY CHOOSE A WORKING DIRECTORY FOR THIS ANALYSIS/MODEL")
+if(!dir.exists(file.path(simDir, modelName))){dir.create(file.path(simDir, modelName))}
+
+
+
+
+## -----------------------------------------------------------------------------
 
 
 ## ----- 1. DATA SIMULATION ------
@@ -70,7 +126,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
   p <- p0 * exp(-alpha1 * D * D)
   
   ##-- Set-up observation matrix y:
-  ##-- the dimensions are ntraps*K and it contains the number of wolves 
+  ##-- the dimensions are n.traps*K and it contains the number of wolves 
   ##-- photographed together for each trap and occasion
   V <- array(NA, c(n.groups+1,n.traps,n.occasions))
   dimnames(V) <- list("groups" = c(1:n.groups,"undetected"),
@@ -97,7 +153,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
     ##-- Sample number of wolves detected together for each visit
     for(j in 1:n.traps){
       ##-- Identify which group visited detector j (if any)
-      whichGroup <- which(V[1:G,j,k] > 0)
+      whichGroup <- which(V[1:n.groups,j,k] > 0)
       ##-- Sample number of wolves detected together
       if(length(whichGroup)>0){
         Y[j,k] <- rtbinom(n = 1,
@@ -111,7 +167,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
   ##-- Output
   return(list( "Y" = Y,
                "n.groups" = n.groups,
-               "n.traps" = ntraps,
+               "n.traps" = n.traps,
                "n.occasions" = n.occasions,
                "groupSize" = GS, 
                "S" = S,
@@ -125,53 +181,19 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
 
 
 ## -----   1.2. SIMULATE DATA ------
-testSim <- sim.SGM()
+testSim <- sim.SGM( n.groups = 10,                ## Number of groups
+                    n.occasions = 20,                ## Number of detection occasions
+                    p0 = 0.75,             ## Baseline probability of visit 
+                    sigma = 0.5,           ## Scale parameter
+                    lambda = 3,            ## Mean group size in the population
+                    alpha = 0.75,          ## Cohesion of the group (probability to detect X ids together)
+                    traps_dim = c(5,5))
 
 
 
 
 ## ----------------------------------------------------------------------------
 ## ----- 2. MODEL DEFINITION ------
-## -----  2.1. CUSTOM FUNCTION ------
-dbinom_vector_truncated <- nimbleFunction(
-  run = function( x = double(0),           ## Number of wolves detected together 
-                  size = double(1),        ## Group sizes
-                  prob = double(1),        ## Group-specific detection probs (includes visits)
-                  log = integer(0, default = 0)
-  ){
-    returnType(double(0))
-    
-    ##-- Shortcut if the number of pictures taken is 0
-    if(x == 0){
-      if(sum(prob) == 0){
-        if (log == 0) 
-          return(1)
-        else return(0)
-      }
-      else {
-        if (log == 0) 
-          return(0)
-        else return(-Inf)
-      }
-    }
-    
-    ##-- If detNums > 0; loop over groups and calculate the probability
-    ##-- to get X individuals detected together given the group size and number of visits
-    numGroups <- length(size)
-    logProb <- 0
-    
-    for(g in 1:numGroups){
-      thisProb <- dbinom(x,
-                           prob = prob[g],
-                           size = size[g],
-                           log = TRUE)T(1, )
-      logProb <- logProb + thisProb
-    }#g
-    if(log) return(logProb) else return(exp(logProb))
-  })
-
-
-## -----  2.2. NIMBLE MODEL ------
 
 ##-- SPATIAL GROUP MODEL (SGM)
 ##-- The idea of the SGM is to further develop the spatial count model 
@@ -187,14 +209,13 @@ SGM_model <- nimbleCode({
   }#g
   
   
-  
   ##---- DEMOGRAPHIC PROCESS 
   psi ~ dunif(0,1)
   lambda ~ dunif(0,10)
   
   for(g in 1:G){
     z[g] ~ dbern(psi)
-    groupSize[g] ~ dpois(lambda)T(1, )
+    groupSize[g] ~ T(dpois(lambda),1, )
   }#g
   n.groups <- sum(z[1:G])
   N <- sum(z[1:G]*groupSize[1:G])
@@ -209,28 +230,16 @@ SGM_model <- nimbleCode({
 
   ##-- Detection probability of one group (= probability of visit for now)
   for(j in 1:n.traps){
-    for(g in 1:G){
-      d2[g,j] <- (s[g,1] - trapCoords[j,1])^2 + (s[g,2] - trapCoords[j,2])^2
-      ##-- Group-specific probability of visit:
-      p[g,j] <- p0 * exp(-d2[g,j] / (2*sigma^2)) * z[g] 
-    }#g
-    
-    ##-- Derive probability of 0 visit:
-    sum.p[j] <- sum(p[1:G,j])
-    risk[j] <- 1 - exp(-sum.p[j])
-    newP[1:G,j] <- risk[j] * p[1:G,j]/sum.p[j]
-    newP[G1,j] <- 1 - risk[j]
-    
     for(k in 1:n.occasions){
       ##-- Sample group visit :
-      v[1:G1,j,k] ~ dmulti(
-        size = 1,
-        prob = newP[1:G1,j])
-      
-      ##-- Expected number of ids detected per picture per group:
-      n[j,k] ~ dbinom_vector_truncated(
-        size = groupSize[1:G],
-        prob = alpha * v[1:G,j,k])
+      n[j,k] ~ dcustom( 
+        size = groupSize[1:G],        
+        p0 = p0,
+        sigma = sigma,
+        alpha = alpha,
+        s = s[1:G,1:2],
+        trapCoords = trapCoords[j,1:2],
+        indicator = z[1:G])
     }#k
   }#j
   
@@ -249,7 +258,6 @@ nimData <- list( n = testSim$Y)
 
 ##-- Nimble constants
 nimConstants <- list( G = testSim$n.groups*2,
-                      G1 = testSim$n.groups*2+1,
                       n.traps = testSim$n.traps,
                       n.occasions = testSim$n.occasions,
                       trapCoords = testSim$trapCoords,
@@ -260,24 +268,21 @@ nimConstants <- list( G = testSim$n.groups*2,
 z.init <- c(rep(1,testSim$n.groups),
             rep(0,testSim$n.groups))
 
-v.init <- array(0,
-                c(nimConstants$G1, nimConstants$n.traps, nimConstants$n.occasions))
-v.init[1:testSim$n.groups, , ] <- testSim$visits[1:testSim$n.groups, , ]
-v.init[nimConstants$G+1, , ] <- testSim$visits[testSim$n.groups+1, , ]
+groupSize.init <- c(testSim$groupSize,
+                    testSim$groupSize)
 
 nimInits <- list( p0 = runif(1,0,1),
                   psi = 0.5,
                   sigma = 0.5,           ## Scale parameter
                   lambda = 3,            ## Mean group size in the population
                   alpha = 0.75,
-                  z = z.init,
-                  v = v.init)
+                  groupSize = groupSize.init,
+                  z = z.init)#,
+                  #v = v.init)
 
 ##-- Nimble parameters
 params <- c("N", "groupSize", "D", "n.groups", "lambda",
             "psi", "p0", "sigma", "alpha" )
-
-
 
 
 ## -----  3.2. FIT MODEL ------
@@ -286,6 +291,7 @@ model <- nimbleModel( code = SGM_model,
                       data = nimData,
                       inits = nimInits)
 Cmodel <- compileNimble(model)
+Cmodel$calculate()
 modelConf <- configureMCMC(model)
 modelConf$addMonitors(params)
 modelMCMC <- buildMCMC(modelConf)

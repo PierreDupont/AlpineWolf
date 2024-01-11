@@ -1,8 +1,5 @@
 ## -------------------------------------------------------------------------- ##
-## ----------------------- ALPINE WOLF SCR ---------------------------------- ##
-## ----------------- s[CLC + HumPop + Zone] --------------------------------- ##
-## ---------------- z[psi,rho,theta] ---------------------------------------- ##
-## ---------------- y[p0(transects + zone + ),sigma] ------------------------ ##
+## ----------------- ALPINE WOLF Spatial Count Model ------------------------ ##
 ## -------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
@@ -51,7 +48,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.SC.0.1"
+modelName = "AlpineWolf_SC.0.1"
 thisDir <- file.path(analysisDir, modelName)
 
 
@@ -365,6 +362,7 @@ iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 ## ------   5. PRE-PROCESSED STUFF ------
 load(file.path(thisDir,"Habitat.RData"))
 load(file.path(thisDir,"Detectors.RData"))
+
  
 
 ## -----------------------------------------------------------------------------
@@ -650,8 +648,6 @@ habitat$sp <- SpatialPoints(coords = habitat$coords,
 habitat$lowerCoords <- habitat$coords - 0.5*habitat$resolution
 habitat$upperCoords <- habitat$coords + 0.5*habitat$resolution
 habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
-
-
 
 
 ##---- Visual plotting to check if everything is right
