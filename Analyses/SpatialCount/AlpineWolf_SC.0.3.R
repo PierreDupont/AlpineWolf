@@ -49,7 +49,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.SC.0.2"
+modelName = "AlpineWolf.SC.0.3"
 thisDir <- file.path(analysisDir, modelName)
 
 
@@ -176,13 +176,18 @@ pics_raw$n_lupi <- as.numeric(pics_raw$n_wolves)
 
 ##---- Filter out samples outside the monitoring period
 pics_1 <- filter(pics_raw,Month %in% c(1,2,3,4,10,11,12)) 
+##---- Create an object with only NA in month (no data pictures) Aosta
 pics_na <- pics_raw[is.na(pics_raw$Month),]
+##---- Add back the NA to the object without non-monitoring months
 pics_t <- rbind(pics_1,pics_na)
 dim(pics_t)
+##---- Filter out samples unideal for analysis
 pics_t <- filter(pics_t,C1 %in% 'C1')  
 dim(pics_t)
 
+# Add info about the camera traps to the pictures
 pics_t <- st_join(ct_cl, pics_t)
+dim(pics_t)
 
 
 ##---- Aggregate pictures per DAY ----
@@ -210,7 +215,7 @@ dim(pics_m)
 
 
 
-##---- Number of pics per CT 
+##---- Number of pics per CT  -----
 # pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
 pics <- pics_t
 
@@ -249,7 +254,7 @@ hist(MeanDet)
 
 ##---- DATA WRANGLING -----
 # Filter out pics with no camera trap ID
-pics_l <- subset(pics, trimws(id) !="")
+pics_l <- subset(pics, trimws(id_ct) !="")
 
 # Keep only ct_it, and number of wolves detected
 pics_l <- pics_l[, c(2,4,19)]
@@ -270,10 +275,10 @@ det_w <- det_w %>%
 det_w <- det_w[,c(2,1,69:70,4:68,3)]
 
 ##---- Plot check
-# plot(st_geometry(studyArea), col="steelblue")
-# # plot(st_geometry(countries), col = "gray80",add=T)
-# plot(st_geometry(ct), col = "red", add = T)
-# plot(st_geometry(pics), add = T, pch = 3)
+plot(st_geometry(studyArea), col="lightslateblue", border = F)
+# plot(st_geometry(countries), col = "gray80",add=T)
+plot(st_geometry(ct), col = "firebrick2", cex = 0.8, pch = 16, add = T)
+plot(st_geometry(pics_l), col = "gold1",cex = 0.4, pch = 16, add = T)
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
@@ -438,7 +443,7 @@ modelCode <- nimbleCode( {
 
 ## ------   2. BUNDLE DATA ------
 ##---- Set model constants, data & parameter simulated values (==inits)
-G <- 2000
+G <- 5000
 
 area <- st_area(grid) %>%
   drop_units() %>%
@@ -514,7 +519,7 @@ for(c in 1:4){
 ## -----------------------------------------------------------------------------
 ## ------ IV. FIT NIMBLE MODEL -----
 for(c in 1:4){
-  load( file.path(thisDir, "input", paste0(modelName, "_", c, ".RData")))
+  load( file.path(thisDir, "input", paste0(modelName, "_", 1, ".RData")))
   
   ##---- Create the nimble model object
   nimModel <- nimbleModel( code = modelCode,
@@ -561,7 +566,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 30,
+                               burnin = 5,
                                param.omit = c("z","s"))
 
 ##---- Traceplots
@@ -571,9 +576,9 @@ graphics.off()
 
 
 ##---- Process and save MCMC samples
-res <- ProcessCodaOutput(nimOutput$samples)
-res_sxy <- ProcessCodaOutput(nimOutput$samples2)
-save(res, res_sxy, 
+res <- ProcessCodaOutput(nimOutput)
+# res_sxy <- ProcessCodaOutput(nimOutput$samples2)
+save(res, 
      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 

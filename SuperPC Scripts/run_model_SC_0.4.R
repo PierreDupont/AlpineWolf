@@ -22,7 +22,7 @@ project_dir = "/archive/home/ofriard/projects/virginia-boiani/SC_model"
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = "Source", modifiedOnly = F)
 
-modelName = "AlpineWolf_SC.0.3"
+modelName = "AlpineWolf_SC.0.4"
 
 ##---- Set-up directories
 inPath <- file.path(modelName, "input/")       ## Directory with input files as .RData
@@ -33,7 +33,7 @@ outPath <- file.path(modelName, "output/")     ## Directory to store processed o
 ## ------ III. FIT NIMBLE MODEL -----
 
 
-load( file.path(inPath, paste0("AlpineWolf_SC.0.3_", c_value, ".RData")))
+load( file.path(inPath, paste0(modelName, "_", c_value, ".RData")))
 
 ##---- Create the nimble model object
 nimModel <- nimbleModel( code = modelCode,
@@ -63,6 +63,7 @@ Cmcmc <- compiledList$mcmc
 outFileName <- paste0()
 mcmcRuntime <- system.time(
   runMCMCbites( mcmc = Cmcmc,
+                model=nimModel,
                 bite.size = 1000,
                 bite.number = 100,
                 path = file.path(outPath, paste0(modelName, "_", c_value, ".RData")),
@@ -72,5 +73,3 @@ print(mcmcRuntime)
 
 
 #}#c
-
-

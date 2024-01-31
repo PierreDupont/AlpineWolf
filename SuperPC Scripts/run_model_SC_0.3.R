@@ -33,7 +33,7 @@ outPath <- file.path(modelName, "output/")     ## Directory to store processed o
 ## ------ III. FIT NIMBLE MODEL -----
 
 
-load( file.path(inPath, paste0("AlpineWolf_SC.0.3_", c_value, ".RData")))
+load( file.path(inPath, paste0(modelName, "_", c_value, ".RData")))
 
 ##---- Create the nimble model object
 nimModel <- nimbleModel( code = modelCode,
@@ -72,5 +72,3 @@ print(mcmcRuntime)
 
 
 #}#c
-
-
