@@ -54,7 +54,7 @@ points(scaledS[indicator>0,"y"]~scaledS[indicator>0,"x"],col="red",pch=16)
 
 ## PARAMETERS
 lambda0 <- 1
-sigma <- 0.5
+sigma <- 2
 
 # III. USING THE RANDOM GENERATION FUNCTION 
 y <- rpoisLocalSC_normal( n = 1,
@@ -79,27 +79,35 @@ points( scaledtrapCoords[,"y"]~scaledtrapCoords[,"x"],
 
 # II. USING THE DENSITY FUNCTION 
 # OPTION 1: USING THE RANDOM GENERATION FUNCTIONNALITY 
-system.time(
-dpoisLocalSC_normal( x = y,
-                     lambda0 = lambda0,
-                     sigma = sigma,
-                     s = s,
-                     trapCoords = trapCoords,
-                     oper = oper,
-                     localTrapsIndices = localTraps$localIndices,
-                     localTrapsNum = localTraps$numLocalIndices,
-                     resizeFactor = 1,
-                     habitatGrid = localTraps$habitatGrid,
-                     indicator = indicator,
-                     log = T)
-)
+# system.time(
+#   dpoisSC_normal2( x = y,
+#                    lambda0 = lambda0,
+#                    sigma = sigma,
+#                    s = s,
+#                    trapCoords = trapCoords,
+#                    oper = oper,
+#                    indicator = indicator,
+#                    log = T)
+# )
+
 
 system.time(
   dpoisSC_normal( x = y,
+                  lambda0 = lambda0,
+                  sigma = sigma,
+                  s = s,
+                  trapCoords = trapCoords,
+                  oper = oper,
+                  indicator = indicator,
+                  log = T)
+)
+
+system.time(
+  dpoisLocalSC_normal( x = y,
                        lambda0 = lambda0,
                        sigma = sigma,
-                       s = s,
-                       trapCoords = trapCoords,
+                       s = scaledS,
+                       trapCoords = scaledtrapCoords,
                        oper = oper,
                        localTrapsIndices = localTraps$localIndices,
                        localTrapsNum = localTraps$numLocalIndices,
@@ -108,18 +116,6 @@ system.time(
                        indicator = indicator,
                        log = T)
 )
-
-system.time(
-  dpoisSC_normal2( x = y,
-                   lambda0 = lambda0,
-                   sigma = sigma,
-                   s = s,
-                   trapCoords = trapCoords,
-                   oper = oper,
-                   indicator = indicator,
-                   log = T)
-)
-
 
 
 

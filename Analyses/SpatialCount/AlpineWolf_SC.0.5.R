@@ -1,7 +1,6 @@
 ## -------------------------------------------------------------------------- ##
 ## ----------------------- ALPINE WOLF SC ---------------------------------- ##
 ## -------------------------------------------------------------------------- ##
-
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
@@ -387,15 +386,12 @@ localObjects <- getLocalObjects(
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
-  # psiRJ ~ dunif(0, 1) # inclusion prob
   # for(c in 1:n.habCovs){
-  #   betaHab.raw[c] ~ dnorm(0.0,0.01)
-  #   zRJ[c] ~ dbern(psiRJ)
-  #   betaHab[c] <- betaHab.raw[c] * zRJ[c]
+  #   betaHab[c] ~ dnorm(0.0,0.01)
   # }#c
   
   ##-- Intensity of the AC distribution point process
-  # habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% (betaHab[1:n.habCovs]*zRJ[1:n.habCovs]))
+  # habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -457,7 +453,7 @@ modelCode <- nimbleCode({
 
 ## ------   2. BUNDLE DATA ------
 ##---- Set model constants, data & parameter simulated values (==inits)
-M <- 2000
+M <- 3000
 
 area <- st_area(grid) %>%
   drop_units() %>%
@@ -472,7 +468,15 @@ nimData <- list( y = det_w$tot_wolves,
                  localTrapsNum = localObjects$numLocalIndices,
                  trapCoords = detectors$scaledCoords,
                  lowerHabCoords = habitat$loScaledCoords, 
-                 upperHabCoords = habitat$upScaledCoords)
+                 upperHabCoords = habitat$upScaledCoords
+                 #,
+                 # hab.covs = cbind.data.frame(
+                 #   "bare rock" = habitat$grid$`bare rock`,
+                 #   "herbaceous" = habitat$grid$`herbaceous`,
+                 #   "forest" = habitat$grid$`forest`,
+                 #   "pop" = habitat$grid$pop,
+                 #   "IUCN" = habitat$grid$`IUCN`)
+                 )
 
 
 nimConstants <- list( M = M,
@@ -480,9 +484,15 @@ nimConstants <- list( M = M,
                       n.habWindows = habitat$n.HabWindows,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
-                      x.max = dim(habitat$matrix)[2]) 
+                      x.max = dim(habitat$matrix)[2]
+                      #,
+                      #n.habCovs = ncol(nimData$hab.covs)
+                      ) 
 
 
+
+
+## ------   3. NIMBLE INITIAL VALUES ------
 ## Create initial individual AC locations
 sInits <- matrix(NA, nrow = M, ncol = 2)
 for (i in 1:M) {
@@ -497,25 +507,26 @@ for (i in 1:M) {
 }
 
 ## Create initial number of days operated (only when NA)
-operInits <- rpois(n= nrow(det_w), mean(nimData$oper, na.rm = T))
+operInits <- rpois( n = nrow(det_w), mean(nimData$oper, na.rm = T))
 operInits[!is.na(nimData$oper)] <- NA
 
-
-
-## ------   3. NIMBLE INITIAL VALUES ------
 ## Create a list of random initial values (one set per chain)
 nimInits.list <- list()
 for(c in 1:4){
-  nimInits.list[[c]] <- list(sigma = rnorm(1,5),
-                             lambda0 = runif(1),
-                             oper = operInits,
-                             s = sInits,
-                             lambda.oper = 1,
-                             z = rbinom(G,1,0.6),
-                             psi = 0.6)
+  nimInits.list[[c]] <- list( 
+    sigma = rnorm(1,1,0.1),
+    lambda0 = runif(1,0,2),
+    oper = operInits,
+    s = sInits,
+    lambda.oper = 1,
+    z = rbinom(M,1,0.6),
+    psi = 0.6
+    #,
+    #betaHab = rep(0,nimConstants$n.habCovs),
+    )
 }
 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi")
+nimParams <- c("N", "D", "lambda0", "sigma", "psi")#, betaHab)
 nimParams2 <- c("z", "s")
 
 
@@ -532,6 +543,7 @@ for(c in 1:4){
         file = file.path(thisDir, "input",
                          paste0(modelName, "_", c, ".RData")))
 }#c
+
 
 
 ## -----------------------------------------------------------------------------
