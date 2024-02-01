@@ -6,7 +6,6 @@ rm(list=ls())
 
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
-library(rgdal)
 library(raster)
 library(coda)
 library(nimble)
@@ -19,7 +18,6 @@ library(fasterize)
 library(dplyr)
 library(lubridate)
 library(stars)
-
 library(extraDistr)
 library(ggplot2)
 #source("SpatialCount")
@@ -156,7 +154,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
       whichGroup <- which(V[1:n.groups,j,k] > 0)
       ##-- Sample number of wolves detected together
       if(length(whichGroup)>0){
-        Y[j,k] <- rtbinom(n = 1,
+        Y[j,k] <-  extraDistr::rtbinom(n = 1,
                           size = GS[whichGroup],
                           prob = alpha,
                           a = 0)
@@ -239,10 +237,10 @@ SGM_model <- nimbleCode({
         alpha = alpha,
         s = s[1:G,1:2],
         trapCoords = trapCoords[j,1:2],
-        indicator = z[1:G])
+        indicator = z[1:G],
+        numGroups = numGroups)
     }#k
   }#j
-  
 })
 
 
@@ -253,8 +251,8 @@ SGM_model <- nimbleCode({
 ## -----  3.1. BUNDLE DATA ------
 
 ##-- Nimble data
-nimData <- list( n = testSim$Y)
-
+nimData <- list( n = testSim$Y,
+                 numGroups = testSim$n.groups*2)
 
 ##-- Nimble constants
 nimConstants <- list( G = testSim$n.groups*2,
@@ -283,6 +281,7 @@ nimInits <- list( p0 = runif(1,0,1),
 ##-- Nimble parameters
 params <- c("N", "groupSize", "D", "n.groups", "lambda",
             "psi", "p0", "sigma", "alpha" )
+
 
 
 ## -----  3.2. FIT MODEL ------

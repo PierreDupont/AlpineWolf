@@ -78,7 +78,7 @@ dtbinom <- nimbleFunction(
     
     ##-- Case 2: a <= x <= b 
     ##-- Compute P(a < X < b) for X ~ Binomial(size,prob)
-    normCst <- 0
+    normCst <- nimNumeric(length = 0,value = 0)
     
     for(i in a:b){
       thisProb <- dbinom( x = i,
@@ -93,56 +93,56 @@ dtbinom <- nimbleFunction(
   })
 
 
-
-#' @rdname dtbinom
-#' @export
-rtbinom <- nimbleFunction(
-  run = function( n = double(0, default = 1),                   
-                  size = double(0),              
-                  prob = double(0), 
-                  a = integer(0, default = 0),
-                  b = integer(0, default = 0),
-                  log = integer(0, default = 0)
-  ){
-    ##-- Define output type
-    returnType(double(0))
-
-    ##-- Return type declaration
-    if(n!=1){print("rtbinom only allows n = 1; using n = 1")}
-
-    ##-- Define boundaries
-    if(a <= 0) a <- 0 
-    if(b <= 0) b <- size
-    
-    ##-- Case 2: a <= x <= b 
-    ##-- Compute P(a < X < b) for X ~ Binomial(size,prob)
-    for(i in a:b){
-      thisProb <- dbinom( x = i,
-                          size = size,
-                          prob = prob,
-                          log = 0)
-      normCst <- normCst + thisProb
-    }#i
-    logProb <- dbinom(x,size,prob,log = 1) - log(normCst)
-    
-  return(y) 
-  })
-
-
-
-##-- Register distribution
-registerDistributions(
-  list(
-    dtbinom = list(
-      BUGSdist ='dtbinom(size, prob, a, b)',
-      Rdist = c('dtbinom(size, prob, a, b)'),
-      types = c('value = double(0)',
-                'size = double(0)',
-                'prob = double(0)',
-                'a = double(0)',
-                'b = double(0)'),
-      discrete = TRUE,
-      mixedSizes = TRUE,
-      pqAvail = FALSE)
-  ), verbose = F)
+#' 
+#' #' @rdname dtbinom
+#' #' @export
+#' rtbinom <- nimbleFunction(
+#'   run = function( n = double(0, default = 1),                   
+#'                   size = double(0),              
+#'                   prob = double(0), 
+#'                   a = integer(0, default = 0),
+#'                   b = integer(0, default = 0),
+#'                   log = integer(0, default = 0)
+#'   ){
+#'     ##-- Define output type
+#'     returnType(double(0))
+#' 
+#'     ##-- Return type declaration
+#'     if(n!=1){print("rtbinom only allows n = 1; using n = 1")}
+#' 
+#'     ##-- Define boundaries
+#'     if(a <= 0) a <- 0 
+#'     if(b <= 0) b <- size
+#'     
+#'     ##-- Case 2: a <= x <= b 
+#'     ##-- Compute P(a < X < b) for X ~ Binomial(size,prob)
+#'     for(i in a:b){
+#'       thisProb <- dbinom( x = i,
+#'                           size = size,
+#'                           prob = prob,
+#'                           log = 0)
+#'       normCst <- normCst + thisProb
+#'     }#i
+#'     logProb <- dbinom(x,size,prob,log = 1) - log(normCst)
+#'     
+#'   return(y) 
+#'   })
+#' 
+#' 
+#' 
+#' ##-- Register distribution
+#' registerDistributions(
+#'   list(
+#'     dtbinom = list(
+#'       BUGSdist ='dtbinom(size, prob, a, b)',
+#'       Rdist = c('dtbinom(size, prob, a, b)'),
+#'       types = c('value = double(0)',
+#'                 'size = double(0)',
+#'                 'prob = double(0)',
+#'                 'a = double(0)',
+#'                 'b = double(0)'),
+#'       discrete = TRUE,
+#'       mixedSizes = TRUE,
+#'       pqAvail = FALSE)
+#'   ), verbose = F)
 
