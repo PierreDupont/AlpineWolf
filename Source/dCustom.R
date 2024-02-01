@@ -1,24 +1,24 @@
-dcustom(
-  x = model$n[1,1]
-         ,
-         size = model$groupSize
-         ,
-         p0 = model$p0
-         ,
-         sigma = model$sigma
-         ,
-         alpha = model$alpha
-         ,
-         s = model$s
-         ,
-         trapCoords = nimConstants$trapCoords[1, ]
-         ,
-         indicator = model$z
-         ,
-         numGroups = nimConstants$G
-         ,
-         log = 0
-         )
+# dcustom(
+#   x = model$n[1,1]
+#          ,
+#          size = model$groupSize
+#          ,
+#          p0 = model$p0
+#          ,
+#          sigma = model$sigma
+#          ,
+#          alpha = model$alpha
+#          ,
+#          s = model$s
+#          ,
+#          trapCoords = nimConstants$trapCoords[1, ]
+#          ,
+#          indicator = model$z
+#          ,
+#          numGroups = nimConstants$G
+#          ,
+#          log = 0
+#          )
 
 
 
