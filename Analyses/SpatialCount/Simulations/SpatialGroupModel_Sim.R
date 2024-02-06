@@ -57,8 +57,6 @@ if(!dir.exists(file.path(simDir, modelName))){dir.create(file.path(simDir, model
 
 
 ## -----------------------------------------------------------------------------
-
-
 ## ----- 1. DATA SIMULATION ------
 ## -----   1.1. SIMULATION FUNCTION ------
 
@@ -77,7 +75,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
   ##-- Set up trap locations
   if(is.null(trapCoords)) {
     trapCoords <- expand.grid(X = seq(1, traps_dim[1], by = 1), 
-                            Y = seq(1, traps_dim[2], by = 1))
+                              Y = seq(1, traps_dim[2], by = 1))
   }
   n.traps <- nrow(trapCoords)
   
@@ -155,9 +153,9 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
       ##-- Sample number of wolves detected together
       if(length(whichGroup)>0){
         Y[j,k] <-  extraDistr::rtbinom(n = 1,
-                          size = GS[whichGroup],
-                          prob = alpha,
-                          a = 0)
+                                       size = GS[whichGroup],
+                                       prob = alpha,
+                                       a = 0)
       }#if
     }#j
   }#k
@@ -192,15 +190,50 @@ testSim <- sim.SGM( n.groups = 10,                ## Number of groups
 
 ## ----------------------------------------------------------------------------
 ## ----- 2. MODEL DEFINITION ------
+## -----  2.1. SPATIAL COUNT MODEL -----
+SC_model <- nimbleCode({
+  ##---- SPATIAL PROCESS 
+  for(g in 1:G){
+    s[g,1] ~ dunif(xlim[1], xlim[2])
+    s[g,2] ~ dunif(ylim[1], ylim[2])
+  }#g
+  
+  
+  ##---- DEMOGRAPHIC PROCESS  
+  psi ~ dunif(0,1)
+  
+  for(i in 1:M){ 
+    z[i] ~ dbern(psi)
+  }#i 								
+  
+  
+  ##---- DETECTION PROCESS 
+  sigma ~ dunif(0,10)
+  lambda0 ~ dunif(0,10)
+  
+  y[1:J] ~ dpoisSC_normal(
+    lambda0 = lambda0,
+    sigma = sigma,
+    s = s[1:M,1:2],
+    trapCoords = trapCoords[1:J,1:2],
+    oper = oper[1:J],
+    indicator = z[1:M])
+  
+  
+  ##-- DERIVED PARAMETERS 
+  N <- sum(z[1:M])
+  D <- N/area
+})
 
-##-- SPATIAL GROUP MODEL (SGM)
+
+
+## -----  2.2. SPATIAL COUNT MODEL -----
 ##-- The idea of the SGM is to further develop the spatial count model 
 ##-- (AKA the unmarked SCR), to account for the fact that:
 ##--   1. multiple individuals from the same group are detected simultaneously 
 ##--   2. only one group is detected in a given picture
 SGM_model <- nimbleCode({
-  
-  ##---- SPATIAL PROCESS 
+  ##---- SPATIAL PROCESS  
   for(g in 1:G){
     s[g,1] ~ dunif(xlim[1], xlim[2])
     s[g,2] ~ dunif(ylim[1], ylim[2])
@@ -215,9 +248,6 @@ SGM_model <- nimbleCode({
     z[g] ~ dbern(psi)
     groupSize[g] ~ T(dpois(lambda),1, )
   }#g
-  n.groups <- sum(z[1:G])
-  N <- sum(z[1:G]*groupSize[1:G])
-  D <- N/area
   
   
   
@@ -225,7 +255,7 @@ SGM_model <- nimbleCode({
   sigma ~ dunif(0,10)
   p0 ~ dunif(0,1)
   alpha ~ dunif(0,1) ## cohesion parameter (proportion of the group detected together)
-
+  
   ##-- Detection probability of one group (= probability of visit for now)
   for(j in 1:n.traps){
     for(k in 1:n.occasions){
@@ -237,10 +267,14 @@ SGM_model <- nimbleCode({
         alpha = alpha,
         s = s[1:G,1:2],
         trapCoords = trapCoords[j,1:2],
-        indicator = z[1:G],
-        numGroups = numGroups)
+        indicator = z[1:G])
     }#k
   }#j
+  
+  ##-- DERIVED PARAMETERS 
+  n.groups <- sum(z[1:G])
+  N <- sum(z[1:G]*groupSize[1:G])
+  D <- N/area
 })
 
 
@@ -248,7 +282,8 @@ SGM_model <- nimbleCode({
 
 ## ----------------------------------------------------------------------------
 ## ----- 3. MODEL FITTING ------
-## -----  3.1. BUNDLE DATA ------
+## -----  3.1. SPATIAL COUNT MODEL -----
+## -----    3.1.1. BUNDLE DATA ------
 
 ##-- Nimble data
 nimData <- list( n = testSim$Y,
@@ -276,7 +311,7 @@ nimInits <- list( p0 = runif(1,0,1),
                   alpha = 0.75,
                   groupSize = groupSize.init,
                   z = z.init)#,
-                  #v = v.init)
+#v = v.init)
 
 ##-- Nimble parameters
 params <- c("N", "groupSize", "D", "n.groups", "lambda",
@@ -284,7 +319,57 @@ params <- c("N", "groupSize", "D", "n.groups", "lambda",
 
 
 
-## -----  3.2. FIT MODEL ------
+## -----    3.1.2. FIT MODEL ------
+model <- nimbleModel( code = SGM_model,
+                      constants = nimConstants,
+                      data = nimData,
+                      inits = nimInits)
+Cmodel <- compileNimble(model)
+Cmodel$calculate()
+modelConf <- configureMCMC(model)
+modelConf$addMonitors(params)
+modelMCMC <- buildMCMC(modelConf)
+CmodelMCMC <- compileNimble(modelMCMC, project = model)
+out1 <- runMCMC(CmodelMCMC, niter = nadapt)
+
+## -----  3.". SPATIAL GORUP MODEL -----
+## -----    3.".1. BUNDLE DATA ------
+
+##-- Nimble data
+nimData <- list( n = testSim$Y,
+                 numGroups = testSim$n.groups*2)
+
+##-- Nimble constants
+nimConstants <- list( G = testSim$n.groups*2,
+                      n.traps = testSim$n.traps,
+                      n.occasions = testSim$n.occasions,
+                      trapCoords = testSim$trapCoords,
+                      xlim = testSim$habitatBoundaries$x,
+                      ylim =  testSim$habitatBoundaries$y)
+
+##-- Nimble inits
+z.init <- c(rep(1,testSim$n.groups),
+            rep(0,testSim$n.groups))
+
+groupSize.init <- c(testSim$groupSize,
+                    testSim$groupSize)
+
+nimInits <- list( p0 = runif(1,0,1),
+                  psi = 0.5,
+                  sigma = 0.5,           ## Scale parameter
+                  lambda = 3,            ## Mean group size in the population
+                  alpha = 0.75,
+                  groupSize = groupSize.init,
+                  z = z.init)#,
+#v = v.init)
+
+##-- Nimble parameters
+params <- c("N", "groupSize", "D", "n.groups", "lambda",
+            "psi", "p0", "sigma", "alpha" )
+
+
+
+## -----    3..2. FIT MODEL ------
 model <- nimbleModel( code = SGM_model,
                       constants = nimConstants,
                       data = nimData,
