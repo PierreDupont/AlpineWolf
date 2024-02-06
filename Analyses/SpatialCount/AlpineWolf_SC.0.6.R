@@ -227,11 +227,11 @@ max(numDetsPerCT)
 
 
 ##---- Maximum number of individuals per CT
-maxDetsPerCT <- pics %>% group_by(id) %>% 
-  slice_max(n_wolves, with_ties = FALSE) %>% 
-  ungroup() %>% 
-  select(id, n_wolves) %>% 
-  group_by(id) %>% 
+maxDetsPerCT <- pics %>% group_by(id) %>%
+  slice_max(n_wolves, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(id, n_wolves) %>%
+  group_by(id) %>%
   summarise(n_wolves = sum(n_wolves))
 # Plot
 hist(maxDetsPerCT$n_wolves)
@@ -560,7 +560,7 @@ for(c in 1:4){
 ## -----------------------------------------------------------------------------
 ## ------ IV. FIT NIMBLE MODEL -----
 for(c in 1:4){
-  load( file.path(thisDir, "input", paste0(modelName, "_", c, ".RData")))
+  load( file.path(thisDir, "input", paste0(modelName,"_", c ,".RData")))
   
   ##---- Create the nimble model object
   nimModel <- nimbleModel( code = modelCode,
