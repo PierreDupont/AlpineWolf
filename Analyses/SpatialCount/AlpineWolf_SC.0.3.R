@@ -125,7 +125,7 @@ temp <- st_transform(temp, st_crs(studyArea))
 
 ## ------   2. CAMERA TRAPS DATA ------
 ##---- Load GPS of Camera Traps
-ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_231201.shp"))
+ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240117.shp"))
 
 ##---- Convert dates
 ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))

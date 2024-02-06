@@ -153,7 +153,7 @@ dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
 
 ## ------   3. PICTURES/SIGHTENING DATA ------
 ##---- Images from Camera Traps data
-pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
+pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240117.shp"))
 dim(pics_raw)
 # plot(studyArea, col="steelblue")
 # plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
@@ -266,10 +266,10 @@ det_w <- det_w %>%
 det_w <- det_w[,c(2,1,69:70,4:68,3)]
 
 ##---- Plot check
-# plot(st_geometry(studyArea), col="steelblue")
-# # plot(st_geometry(countries), col = "gray80",add=T)
-# plot(st_geometry(ct), col = "red", add = T)
-# plot(st_geometry(pics), add = T, pch = 3)
+plot(st_geometry(studyArea), col="steelblue")
+# plot(st_geometry(countries), col = "gray80",add=T)
+plot(st_geometry(ct), col = "red", add = T)
+plot(st_geometry(pics), add = T, pch = 3)
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
@@ -356,10 +356,10 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 
 
 ##---- Visual plotting to check if everything is right
-# plot(habitat$raster)
-# plot(st_geometry(countries), add = T)
-# plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
-# plot(ct_cl,add=T, col="red")
+plot(habitat$raster)
+plot(st_geometry(countries), add = T)
+plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
+plot(ct_cl,add=T, col="red")
 
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
@@ -580,10 +580,11 @@ for(c in 1:4){
   
   ##---- Run nimble MCMC in multiple bites
   mcmcRuntime <- system.time(
+    
     runMCMCbites( mcmc = Cmcmc,
                   model = Cmodel,
-                  bite.size = 100000,
-                  bite.number = 1000,
+                  bite.size = 100,
+                  bite.number = 10,
                   path = file.path(thisDir, "output", modelName, "_", c),
                   save.rds = TRUE))  
   
