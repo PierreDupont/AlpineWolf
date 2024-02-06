@@ -431,11 +431,6 @@ modelCode <- nimbleCode({
   sigma ~ dunif(0,10)
   lambda0 ~ dunif(0,10)
   
-  
-  ##---- DETECTION PROCESS 
-  sigma ~ dunif(0,10)
-  lambda0 ~ dunif(0,10)
-  
   for(i in 1:M){ 
     lambda[i,1:J] <- calculateLocalLambda(
       lambda0 = lambda0,
@@ -453,7 +448,6 @@ modelCode <- nimbleCode({
     bigLambda[j] <- sum(lambda[1:M,j]) 
     y[j] ~ dpois(bigLambda[j]*oper[j])
   }#j
-  
   
   ##-- DERIVED PARAMETERS 
   N <- sum(z[1:M])
@@ -593,8 +587,8 @@ for(c in 1:4){
   mcmcRuntime <- system.time(
     runMCMCbites( mcmc = Cmcmc,
                   model = Cmodel,
-                  bite.size = 100000,
-                  bite.number = 1000,
+                  bite.size = 100,
+                  bite.number = 1,
                   path = file.path(thisDir, "output", modelName, "_", c),
                   save.rds = TRUE))  
   
