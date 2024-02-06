@@ -1,10 +1,102 @@
-## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
-
-
-## ------ IMPORT REQUIRED LIBRARIES ------
 library(nimble)
-library(nimbleSCR)
+
+
+## ------ CUSTOM FUNCTIONS -----
+dpoisSC_normal <- nimbleFunction(
+  run = function( x = double(1),
+                  lambda0 = double(0),
+                  sigma = double(0),
+                  s = double(2),
+                  trapCoords = double(2),
+                  oper = double(1, default = 1.0),
+                  indicator = double(1),
+                  log = integer(0, default = 0)
+  ){
+    ## Specify return type
+    returnType(double(0))
+    
+    ## Identify dimensions
+    numIndividuals <- nimDim(s)[1]
+    numTraps <- nimDim(trapCoords)[1]
+    
+    ## Initialize objects
+    alpha <- -1.0 / (2.0 * sigma * sigma)
+    
+    ## Calculate trap-specific detection rates
+    lambda <- nimNumeric(numTraps)
+    
+    ## Loop over individuals
+    for(i in 1:numIndividuals){
+      if(indicator[i]>0){
+        ## Loop over traps 
+        for(j in 1:numTraps){
+          d2 <- pow(trapCoords[j,1] - s[i,1], 2) + pow(trapCoords[j,2] - s[i,2], 2)
+          lambda[j] <- lambda[j] + lambda0 * exp(alpha * d2) 
+        }#if
+      }#j
+    }#i
+    
+    ## Calculate the log-probability of the vector of detections
+    logProb <- 0.0 
+    ## Loop over traps 
+    for(j in 1:numTraps){
+      logProb <- logProb + dpois( x = x[j],
+                                  lambda = lambda[j]*oper[j],
+                                  log = TRUE)
+    }#j
+    
+    ## Return the probability of the vector of detections (or log-probability if required)
+    if(log)return(logProb)
+    return(exp(logProb))
+  })
+
+rpoisSC_normal <- nimbleFunction(
+  run = function( n = double(0, default = 1),
+                  lambda0 = double(0),
+                  sigma = double(0),
+                  s = double(2),
+                  trapCoords = double(2),
+                  oper = double(1, default = 1.0),
+                  indicator = double(1)
+  ){
+    ## Specify return type
+    returnType(double(1))
+    if(n!=1){print("rpoisSC_normal only allows n = 1; using n = 1")}
+    
+    ## Identify dimensions
+    numIndividuals <- nimDim(s)[1]
+    numTraps <- nimDim(trapCoords)[1]
+    
+    ## Initialize objects
+    alpha <- -1.0 / (2.0 * sigma * sigma)
+    
+    ## Calculate trap-specific detection rates
+    lambda <- nimNumeric( length = numTraps)
+    
+    ## Loop over individuals
+    for(i in 1:numIndividuals){
+      if(indicator[i]>0){
+        ## Loop over traps 
+        for(j in 1:numTraps){
+          d2 <- pow(trapCoords[j,1] - s[i,1], 2) + pow(trapCoords[j,2] - s[i,2], 2)
+          lambda[j] <- lambda[j] + lambda0 * exp(alpha * d2) 
+        }#if
+      }#j
+    }#i
+    
+    ## Calculate the log-probability of the vector of detections
+    out <- nimNumeric(numTraps)
+    ## Loop over traps 
+    for(j in 1:numTraps){
+      out[j] <- rpois(n = 1,
+                      lambda = lambda[j]*oper[j])
+      
+    }#j
+    
+    ## Output
+    return(out)
+  })
 
 
 ## -----------------------------------------------------------------------------

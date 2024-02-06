@@ -1,4 +1,4 @@
-calcLambda <- nimbleFunction(
+calculateLambda <- nimbleFunction(
   run = function( lambda0 = double(0),
                   sigma = double(0),
                   s = double(1),
@@ -30,7 +30,7 @@ calcLambda <- nimbleFunction(
   })
 
 
-calcLocalLambda <- nimbleFunction(
+calculateLocalLambda <- nimbleFunction(
   run = function( lambda0 = double(0),
                   sigma = double(0),
                   s = double(1),
@@ -58,7 +58,7 @@ calcLocalLambda <- nimbleFunction(
     alpha <- -1.0 / (2.0 * sigma * sigma)
     
     ## Retrieve the habitat grid cell ID for this individual's AC 
-    sID <- habitatGrid[trunc(s[i,2]/resizeFactor)+1, trunc(s[i,1]/resizeFactor)+1]
+    sID <- habitatGrid[trunc(s[2]/resizeFactor)+1, trunc(s[1]/resizeFactor)+1]
     
     ## Retrieve the local traps surrounding the selected habitat grid cell
     theseLocalTraps <- localTrapsIndices[sID,1:localTrapsNum[sID]]
