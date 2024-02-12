@@ -175,10 +175,9 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
 
 
 
-
 ## -----   1.2. SIMULATE DATA ------
-testSim <- sim.SGM( n.groups = 10,                ## Number of groups
-                    n.occasions = 20,                ## Number of detection occasions
+testSim <- sim.SGM( n.groups = 10,         ## Number of groups
+                    n.occasions = 4,       ## Number of detection occasions
                     p0 = 0.75,             ## Baseline probability of visit 
                     sigma = 0.5,           ## Scale parameter
                     lambda = 3,            ## Mean group size in the population
@@ -188,51 +187,175 @@ testSim <- sim.SGM( n.groups = 10,                ## Number of groups
 
 
 
+## -----   1.3. BUNDLE DATA ------
+
+##-- Nimble data
+nimData <- list( y = testSim$Y)
+
+##-- Nimble constants
+nimConstants_SG <- list( G = testSim$n.groups*2,
+                         J = testSim$n.traps,
+                         K = testSim$n.occasions,
+                         trapCoords = as.matrix(testSim$trapCoords),
+                         xlim = testSim$habitatBoundaries$x,
+                         ylim = testSim$habitatBoundaries$y)
+
+nimConstants_SC <- list( M = testSim$n.groups*4,
+                         J = testSim$n.traps,
+                         K = testSim$n.occasions,
+                         trapCoords = as.matrix(testSim$trapCoords),
+                         xlim = testSim$habitatBoundaries$x,
+                         ylim = testSim$habitatBoundaries$y)
+
+
+##-- Nimble inits
+s.init_SG <- rbind(testSim$S,
+                   testSim$S)
+z.init_SG <- c(rep(1,testSim$n.groups),
+               rep(0,testSim$n.groups))
+groupSize.init <- c(testSim$groupSize,
+                    testSim$groupSize)
+nimInits_SG <- list( p0 = runif(1,0,1),
+                     p = matrix(0.05,
+                                nrow = nimConstants_SG$G,
+                                ncol = nimConstants_SG$J),
+                     psi = 0.5,
+                     sigma = 0.5,           
+                     lambda = 3,            
+                     alpha = 0.75,
+                     groupSize = groupSize.init,
+                     z = z.init_SG,
+                     s = s.init_SG)
+
+
+s.init_SC <- rbind( testSim$S,
+                 testSim$S,
+                 testSim$S,
+                 testSim$S)
+z.init_SC <- c(rep(1,testSim$n.groups*2),
+            rep(0,testSim$n.groups*2))
+nimInits_SC <- list( lambda0 = runif(1,0,3),
+                     psi = 0.5,
+                     sigma = 0.5,           
+                     z = z.init_SC,
+                     s = s.init_SC)
+
+##-- Nimble parameters
+params_SG <- c( "N", "groupSize", "n.groups", "lambda",
+                "psi", "p0", "sigma", "alpha")
+
+params_SC <- c( "N", "psi", "lambda0", "sigma")
+
+
 ## ----------------------------------------------------------------------------
 ## ----- 2. MODEL DEFINITION ------
 ## -----  2.1. SPATIAL COUNT MODEL -----
 SC_model <- nimbleCode({
   ##---- SPATIAL PROCESS 
-  for(g in 1:G){
-    s[g,1] ~ dunif(xlim[1], xlim[2])
-    s[g,2] ~ dunif(ylim[1], ylim[2])
+  for(i in 1:M){ 
+    s[i,1] ~ dunif(xlim[1], xlim[2])
+    s[i,2] ~ dunif(ylim[1], ylim[2])
   }#g
-  
   
   ##---- DEMOGRAPHIC PROCESS  
   psi ~ dunif(0,1)
-  
   for(i in 1:M){ 
     z[i] ~ dbern(psi)
   }#i 								
-  
   
   ##---- DETECTION PROCESS 
   sigma ~ dunif(0,10)
   lambda0 ~ dunif(0,10)
   
-  y[1:J] ~ dpoisSC_normal(
-    lambda0 = lambda0,
-    sigma = sigma,
-    s = s[1:M,1:2],
-    trapCoords = trapCoords[1:J,1:2],
-    oper = oper[1:J],
-    indicator = z[1:M])
+  for(i in 1:M){ 
+    lambda[i,1:J] <- calculateLambda(
+      lambda0 = lambda0,
+      sigma = sigma,
+      s = s[i,1:2],
+      trapCoords = trapCoords[1:J,1:2],
+      indicator = z[i])
+  }#i
   
+  for(j in 1:J){
+    bigLambda[j] <- sum(lambda[1:M,j]) 
+    for(k in 1:K){
+    y[j,k] ~ dpois(bigLambda[j])
+    }
+  }#j
   
   ##-- DERIVED PARAMETERS 
   N <- sum(z[1:M])
-  D <- N/area
 })
 
+model2 <- nimbleModel( code = SC_model,
+                       constants = nimConstants_SC,
+                       data = nimData,
+                       inits = nimInits_SC)
+Cmodel2 <- compileNimble(model2)
+system.time(Cmodel2$calculate())
+modelConf2 <- configureMCMC(model2)
+modelConf2$addMonitors(params_SC)
+modelMCMC2 <- buildMCMC(modelConf2)
+CmodelMCMC2 <- compileNimble(modelMCMC2, project = model2,resetFunctions = T)
+system.time(out2 <- runMCMC(CmodelMCMC2,
+                            niter = 500,
+                            nchains = 2,
+                            samplesAsCodaMCMC = T))
 
 
-## -----  2.2. SPATIAL COUNT MODEL -----
+
+## -----  2.2. SPATIAL GROUP MODEL -----
 ##-- The idea of the SGM is to further develop the spatial count model 
 ##-- (AKA the unmarked SCR), to account for the fact that:
 ##--   1. multiple individuals from the same group are detected simultaneously 
 ##--   2. only one group is detected in a given picture
-SGM_model <- nimbleCode({
+dcustom <- nimbleFunction(
+  run = function( x = double(0),           ## data: Number of wolves detected together 
+                  size = double(1),        ## Group sizes
+                  p = double(1),           ## Group-specific detection probabilities
+                  alpha = double(0),       ## Cohesion (i.e. prob of detection given visit)
+                  indicator = double(1),   ## Group-specific augmentation indicator
+                  log = integer(0, default = 0)
+  ){
+    ##-- Return type
+    returnType(double(0))
+    
+    ##-- Derive probability of 0 visit:
+    numGroups <- length(p)
+    sumP <- sum(p[1:numGroups])
+    pNULL<- exp(-sumP)
+    risk <- 1 - pNULL
+    
+    ##-- if n = 0, return probability of 0 visit :
+    if(x == 0){
+      if(log == 0){return(pNULL)}else{return(log(pNULL))}
+    }
+    
+    ##-- If x > 0; loop over groups and calculate the probability
+    ##-- to detect X individuals simultaneously given the group size 
+    ##-- and group-specific probability of visit :
+    totalProb <- 0
+    for(g in 1:numGroups){
+      if(indicator[g] <= 0){
+        if(x <= size[g]){
+          ##-- Probability of visit by group[g]
+          probThisGroup <- risk * p[g]/sumP
+          ##-- Probability of x wolves from group[g] detected together 
+          probThisNum <- dtbinom( x,
+                               prob = alpha,
+                               size = size[g],
+                               a = 1,
+                               log = 0)
+          ##-- Probability of the data
+          totalProb <- totalProb + probThisGroup * probThisNum
+        }#if
+      }
+    }#g
+    if(log) return(log(totalProb)) else return(totalProb)
+  })
+
+
+SG_model <- nimbleCode({
   ##---- SPATIAL PROCESS  
   for(g in 1:G){
     s[g,1] ~ dunif(xlim[1], xlim[2])
@@ -250,26 +373,32 @@ SGM_model <- nimbleCode({
   }#g
   
   
-  
   ##---- DETECTION PROCESS
   sigma ~ dunif(0,10)
   p0 ~ dunif(0,1)
   alpha ~ dunif(0,1) ## cohesion parameter (proportion of the group detected together)
   
+  ##-- Calculate individual detection prob. at all traps
+  for(i in 1:G){ 
+    p[i,1:J] <- calculateP(
+      p0 = p0,
+      sigma = sigma,
+      s = s[i,1:2],
+      trapCoords = trapCoords[1:J,1:2],
+      indicator = z[i])
+  }#i
+  
   ##-- Detection probability of one group (= probability of visit for now)
-  for(j in 1:n.traps){
-    for(k in 1:n.occasions){
-      ##-- Sample group visit :
+  for(j in 1:J){
+    for(k in 1:K){
       n[j,k] ~ dcustom( 
         size = groupSize[1:G],        
-        p0 = p0,
-        sigma = sigma,
+        p = p[1:G,j],
         alpha = alpha,
-        s = s[1:G,1:2],
-        trapCoords = trapCoords[j,1:2],
         indicator = z[1:G])
     }#k
   }#j
+  
   
   ##-- DERIVED PARAMETERS 
   n.groups <- sum(z[1:G])
@@ -278,13 +407,25 @@ SGM_model <- nimbleCode({
 })
 
 
+model <- nimbleModel( code = SG_model,
+                      constants = nimConstants_SG,
+                      data = nimData,
+                      inits = nimInits_SG)
+Cmodel <- compileNimble(model)
+Cmodel$calculate()
+modelConf <- configureMCMC(model)
+modelConf$addMonitors(params)
+modelMCMC <- buildMCMC(modelConf)
+CmodelMCMC <- compileNimble(modelMCMC, project = model)
+out1 <- runMCMC(CmodelMCMC, niter = nadapt)
+
+
 
 
 ## ----------------------------------------------------------------------------
 ## ----- 3. MODEL FITTING ------
-## -----  3.1. SPATIAL COUNT MODEL -----
+## -----  3.1. SPATIAL GROUP MODEL -----
 ## -----    3.1.1. BUNDLE DATA ------
-
 ##-- Nimble data
 nimData <- list( n = testSim$Y,
                  numGroups = testSim$n.groups*2)
@@ -320,34 +461,25 @@ params <- c("N", "groupSize", "D", "n.groups", "lambda",
 
 
 ## -----    3.1.2. FIT MODEL ------
-model <- nimbleModel( code = SGM_model,
-                      constants = nimConstants,
-                      data = nimData,
-                      inits = nimInits)
-Cmodel <- compileNimble(model)
-Cmodel$calculate()
-modelConf <- configureMCMC(model)
-modelConf$addMonitors(params)
-modelMCMC <- buildMCMC(modelConf)
-CmodelMCMC <- compileNimble(modelMCMC, project = model)
-out1 <- runMCMC(CmodelMCMC, niter = nadapt)
 
-## -----  3.". SPATIAL GORUP MODEL -----
-## -----    3.".1. BUNDLE DATA ------
+
+## -----  3.2. SPATIAL GORUP MODEL -----
+## -----    3.2.1. BUNDLE DATA ------
 
 ##-- Nimble data
-nimData <- list( n = testSim$Y,
-                 numGroups = testSim$n.groups*2)
+nimData <- list( n = testSim$Y)
 
 ##-- Nimble constants
 nimConstants <- list( G = testSim$n.groups*2,
                       n.traps = testSim$n.traps,
                       n.occasions = testSim$n.occasions,
-                      trapCoords = testSim$trapCoords,
+                      trapCoords = as.matrix(testSim$trapCoords),
                       xlim = testSim$habitatBoundaries$x,
-                      ylim =  testSim$habitatBoundaries$y)
+                      ylim = testSim$habitatBoundaries$y)
 
 ##-- Nimble inits
+s.init <- rbind(testSim$S,
+                    testSim$S)
 z.init <- c(rep(1,testSim$n.groups),
             rep(0,testSim$n.groups))
 
@@ -355,13 +487,16 @@ groupSize.init <- c(testSim$groupSize,
                     testSim$groupSize)
 
 nimInits <- list( p0 = runif(1,0,1),
+                  p = matrix(0.05,
+                             nrow = nimConstants$G,
+                             ncol = nimConstants$n.traps),
                   psi = 0.5,
                   sigma = 0.5,           ## Scale parameter
                   lambda = 3,            ## Mean group size in the population
                   alpha = 0.75,
                   groupSize = groupSize.init,
-                  z = z.init)#,
-#v = v.init)
+                  z = z.init,
+                  s = s.init)
 
 ##-- Nimble parameters
 params <- c("N", "groupSize", "D", "n.groups", "lambda",
@@ -369,15 +504,6 @@ params <- c("N", "groupSize", "D", "n.groups", "lambda",
 
 
 
-## -----    3..2. FIT MODEL ------
-model <- nimbleModel( code = SGM_model,
-                      constants = nimConstants,
-                      data = nimData,
-                      inits = nimInits)
-Cmodel <- compileNimble(model)
-Cmodel$calculate()
-modelConf <- configureMCMC(model)
-modelConf$addMonitors(params)
-modelMCMC <- buildMCMC(modelConf)
-CmodelMCMC <- compileNimble(modelMCMC, project = model)
-out1 <- runMCMC(CmodelMCMC, niter = nadapt)
+## -----    3.2.2. FIT MODEL ------
+
+## ----------------------------------------------------------------------------
