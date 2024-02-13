@@ -587,9 +587,9 @@ for(c in 1:4){
   mcmcRuntime <- system.time(
     runMCMCbites( mcmc = Cmcmc,
                   model = Cmodel,
-                  bite.size = 100,
-                  bite.number = 1,
-                  path = file.path(thisDir, "output", modelName, "_", c),
+                  bite.size = 10000,
+                  bite.number = 100,
+                  path = file.path(thisDir,"output", paste0(modelName, "_", c, ".RData")),
                   save.rds = TRUE))  
   
   print(mcmcRuntime)

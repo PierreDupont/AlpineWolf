@@ -45,7 +45,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.SC.0.6"
+modelName = "AlpineWolf.SC.0.8"
 thisDir <- file.path(analysisDir, modelName)
 
 
@@ -121,7 +121,7 @@ temp <- st_transform(temp, st_crs(studyArea))
 
 ## ------   2. CAMERA TRAPS DATA ------
 ##---- Load GPS of Camera Traps
-ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_231201.shp"))
+ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240213.shp"))
 
 ##---- Convert dates
 ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))
@@ -153,7 +153,7 @@ dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
 
 ## ------   3. PICTURES/SIGHTENING DATA ------
 ##---- Images from Camera Traps data
-pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
+pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240213.shp"))
 dim(pics_raw)
 # plot(studyArea, col="steelblue")
 # plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
@@ -182,27 +182,27 @@ pics_t <- st_join(ct_cl, pics_t)
 
 
 ##---- Aggregate pictures per DAY ----
-pics_d <- pics_t %>% 
-  group_by(day = lubridate::day(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_d$n_wolves)
-dim(pics_d)
-
-
-##---- Aggregate pictures per WEEK ----
-pics_w <- pics_t %>% 
-  group_by(week = lubridate::week(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_w$n_wolves)
-dim(pics_w)
-
-
-##---- Aggregate pictures per MONTH ----
-pics_m <- pics_t %>% 
-  group_by(Month, id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_m$n_wolves)
-dim(pics_m)
+# pics_d <- pics_t %>% 
+#   group_by(day = lubridate::day(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# # hist(pics_d$n_wolves)
+# dim(pics_d)
+# 
+# 
+# ##---- Aggregate pictures per WEEK ----
+# pics_w <- pics_t %>% 
+#   group_by(week = lubridate::week(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# # hist(pics_w$n_wolves)
+# dim(pics_w)
+# 
+# 
+# ##---- Aggregate pictures per MONTH ----
+# pics_m <- pics_t %>% 
+#   group_by(Month, id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# # hist(pics_m$n_wolves)
+# dim(pics_m)
 
 
 
@@ -211,37 +211,37 @@ dim(pics_m)
 pics <- pics_t
 
 # same info 
-numDetsPerCT <- table(pics$id)
-# which(is.na(as.numeric(pics_t$id_ct)))
-hist(numDetsPerCT)
-
-##---- Number of at least one detection
-length(numDetsPerCT)
-
-##---- Mean number of detections per CT
-mean(numDetsPerCT)
-
-##---- Number of CT with > 1 detection
-sum(numDetsPerCT > 1)
-max(numDetsPerCT)
-
-
-##---- Maximum number of individuals per CT
-maxDetsPerCT <- pics %>% group_by(id) %>%
-  slice_max(n_wolves, with_ties = FALSE) %>%
-  ungroup() %>%
-  select(id, n_wolves) %>%
-  group_by(id) %>%
-  summarise(n_wolves = sum(n_wolves))
-# Plot
-hist(maxDetsPerCT$n_wolves)
+# numDetsPerCT <- table(pics$id)
+# # which(is.na(as.numeric(pics_t$id_ct)))
+# hist(numDetsPerCT)
+# 
+# ##---- Number of at least one detection
+# length(numDetsPerCT)
+# 
+# ##---- Mean number of detections per CT
+# mean(numDetsPerCT)
+# 
+# ##---- Number of CT with > 1 detection
+# sum(numDetsPerCT > 1)
+# max(numDetsPerCT)
+# 
+# 
+# ##---- Maximum number of individuals per CT
+# maxDetsPerCT <- pics %>% group_by(id) %>%
+#   slice_max(n_wolves, with_ties = FALSE) %>%
+#   ungroup() %>%
+#   select(id, n_wolves) %>%
+#   group_by(id) %>%
+#   summarise(n_wolves = sum(n_wolves))
+# # Plot
+# hist(maxDetsPerCT$n_wolves)
 
 
 #plot(maxDetsPerCT)
 
 ##---- mean number of individual detections by CT
-MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
-hist(MeanDet)
+# MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
+# hist(MeanDet)
 
 ##---- DATA WRANGLING -----
 # Filter out pics with no camera trap ID
