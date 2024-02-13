@@ -297,8 +297,7 @@ model2 <- nimbleModel( code = SC_model,
                        inits = nimInits_SC)
 Cmodel2 <- compileNimble(model2)
 system.time(Cmodel2$calculate())
-modelConf2 <- configureMCMC(model2)
-modelConf2$addMonitors(params_SC)
+modelConf2 <- configureMCMC(model2,monitors = params_SC)
 modelMCMC2 <- buildMCMC(modelConf2)
 CmodelMCMC2 <- compileNimble(modelMCMC2, project = model2)
 system.time(out2 <- runMCMC(CmodelMCMC2,
@@ -325,13 +324,6 @@ dcustom <- nimbleFunction(
     ##-- Return type
     returnType(double(0))
     
-    # dcustom( x = nimData$y[1,4]
-    #          ,
-    #          size = model$groupSize,
-    #          p = model$p[ ,1],
-    #          alpha = model$alpha,
-    #          indicator = model$z)
-    
     ##-- Derive probability of 0 visit:
     numGroups <- length(p)
     sumP <- sum(p[1:numGroups])
@@ -353,17 +345,12 @@ dcustom <- nimbleFunction(
           ##-- Probability of visit by group[g]
           probThisGroup <- risk * p[g]/sumP
           ##-- Probability of x wolves from group[g] detected together 
-          # probThisNum <- dtbinom( x,
-          #                      prob = alpha,
-          #                      size = size[g],
-          #                      a = 1,
-          #                      log = 0)
           normCst <- 0
           for (i in 1:size[g]) {
-            thisProb <- dbinom(x = i,
-                               size = size[g],
-                               prob = alpha, 
-                               log = 0)
+            thisProb <- dbinom( x = i,
+                                size = size[g],
+                                prob = alpha, 
+                                log = 0)
             normCst <- normCst + thisProb
           }
           logProbThisNum <- dbinom(x = x,
@@ -371,9 +358,6 @@ dcustom <- nimbleFunction(
                                    prob = alpha,
                                    log = 1) - log(normCst)
 
-          
-          
-          
           ##-- Probability of the data
           totalProb <- totalProb + probThisGroup * exp(logProbThisNum)
         }#if
@@ -440,8 +424,7 @@ model <- nimbleModel( code = SG_model,
                       inits = nimInits_SG)
 Cmodel <- compileNimble(model)
 Cmodel$calculate()
-modelConf <- configureMCMC(model)
-modelConf$addMonitors(params_SG)
+modelConf <- configureMCMC(model,monitors = params_SG)
 modelMCMC <- buildMCMC(modelConf)
 CmodelMCMC <- compileNimble(modelMCMC, project = model)
 system.time(out1 <- runMCMC(CmodelMCMC,
@@ -449,8 +432,8 @@ system.time(out1 <- runMCMC(CmodelMCMC,
                             nchains = 2,
                             nburnin = 2000,
                             samplesAsCodaMCMC = T))
-
 plot(out1)
+
 
 
 ## ----------------------------------------------------------------------------

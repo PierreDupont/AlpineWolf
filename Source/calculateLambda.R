@@ -3,9 +3,8 @@ calculateLambda <- nimbleFunction(
                   sigma = double(0),
                   s = double(1),
                   trapCoords = double(2),
-                  indicator = double(0), 
-                  log = integer(0, default = 0)
-  ){
+                  indicator = double(0)
+                  ){
     ## Specify return type
     returnType(double(1))
     
@@ -35,8 +34,7 @@ calculateP <- nimbleFunction(
                   sigma = double(0),
                   s = double(1),
                   trapCoords = double(2),
-                  indicator = double(0), 
-                  log = integer(0, default = 0)
+                  indicator = double(0) 
   ){
     ## Specify return type
     returnType(double(1))
@@ -71,8 +69,7 @@ calculateLocalLambda <- nimbleFunction(
                   localTrapsNum = double(1),
                   resizeFactor = double(0, default = 1),
                   habitatGrid = double(2),
-                  indicator = double(0), 
-                  log = integer(0, default = 0)
+                  indicator = double(0)
   ){
     ## Specify return type
     returnType(double(1))
@@ -117,8 +114,7 @@ calculateLocalP <- nimbleFunction(
                   localTrapsNum = double(1),
                   resizeFactor = double(0, default = 1),
                   habitatGrid = double(2),
-                  indicator = double(0), 
-                  log = integer(0, default = 0)
+                  indicator = double(0)
   ){
     ## Specify return type
     returnType(double(1))
