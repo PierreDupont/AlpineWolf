@@ -261,11 +261,12 @@ numWolfTotal <- pics %>%
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
 # Define detectors
-detectors <- ct[ ,c("id","tot_attivi")]
-detectors$coords <- st_coordinates(ct)
+detectors <- ct[,c("id","tot_attivi")]
+detectors$coords <- st_coordinates(detectors)
 colnames(detectors$coords) = c("x", "y")
 dimnames(detectors$coords) <- list(1:nrow(detectors$coords),
                                c("x","y"))
+
 
 # plot(st_geometry(studyArea), col="steelblue")
 # # plot(st_geometry(countries), col = "gray80",add=T)
@@ -496,7 +497,7 @@ habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
 ##---- Rescale habitat and detector coordinates
-scaledCoords <- scaleCoordsToHabitatGrid(
+ scaledCoords <- scaleCoordsToHabitatGrid(
   coordsData = detectors$coords,
   coordsHabitatGridCenter = habitat$coords)
 
@@ -523,7 +524,7 @@ modelCode <- nimbleCode({
   }#c
   
   ##-- Intensity of the AC distribution point process
-  # habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
+  habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -695,10 +696,8 @@ for(c in 1:4){
                      0.1026112, 0.08729223), byrow = T, nrow = 3),
     sex = rbinom(M,1,0.5),
     status = rcat(n = M, prob = c(0.28,0.62,0.1)),
-    psi = 0.6
-    #,
-    #betaHab = rep(0,nimConstants$n.habCovs),
-  )
+    psi = 0.6,
+    betaHab = rep(0,nimConstants$n.habCovs))
 }
 
 nimParams <- c("N", "D", "lambda0", "sigma", "psi", "theta", "rho", "betaHab")
