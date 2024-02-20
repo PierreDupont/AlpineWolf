@@ -748,11 +748,10 @@ graphics.off()
 
 ##---- Process and save MCMC samples
 res <- ProcessCodaOutput(nimOutput$samples)
-res_sxy <- ProcessCodaOutput(nimOutput$samples2)
-save(res, res_sxy, 
+# res_sxy <- ProcessCodaOutput(nimOutput$samples2)
+save(res, 
+     # res_sxy, 
      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
-
-
 
 
 ## ------   1. CALCULATE AC-BASED DENSITY ------

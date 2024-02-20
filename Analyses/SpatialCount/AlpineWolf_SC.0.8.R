@@ -120,44 +120,31 @@ temp <- st_transform(temp, st_crs(studyArea))
 
 
 ## ------   2. CAMERA TRAPS DATA ------
-##---- Load GPS of Camera Traps
+##---- Load GPS positions of Camera Traps
 ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240213.shp"))
 
 ##---- Convert dates
 ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))
 ct$date_en <- parse_date_time(ct$date_en, orders = c('dmy'))
-
-
-ct$year_st <- as.numeric(format(ct$date_st,"%y"))
-ct$month_st <- as.numeric(format(ct$date_st,"%m"))
-ct$year_en <- as.numeric(format(ct$date_en,"%y"))
-ct$month_en <- as.numeric(format(ct$date_en,"%m"))
 ct$tot_attivi <- as.numeric(ct$tot_attivi) 
 
+##---- Set-up new identifier fro each camera-trap
+ct$id <- paste0("FT", 1:nrow(ct))
+head(ct)
+
 ##---- Plot check
-# plot(studyArea, col="steelblue")
-# plot(ct$geometry, col = "red", pch=16, add=T)
-
-##---- Number of pics per CT
-# hist(ct$tot_attivi)
-
-ct_cl <- ct[,c(1,6)]
-ct_cl$id <- paste0("FT", 1:nrow(ct_cl))
-
-ct_cl$coords <- st_coordinates(ct_cl)
-colnames(ct_cl$coords) = c("x", "y")
+plot(studyArea, col = "steelblue")
+plot(ct$geometry, col = "blue", pch = 3, add = T)
 
 
-dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
-                               c("x","y"))
 
 ## ------   3. PICTURES/SIGHTENING DATA ------
-##---- Images from Camera Traps data
-pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240213.shp"))
-dim(pics_raw)
-# plot(studyArea, col="steelblue")
-# plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
+##---- Load all images available
+pics <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240213.shp"))
+dim(pics)
 
+##---- Plot check
+plot(pics$geometry, col = "blue", add = T)
 
 ##---- Use lubridate to clean dates
 # The orders argument is a character vector containing the possible date-time parsing 
@@ -165,57 +152,62 @@ dim(pics_raw)
 # will try to parse all strings as Day, Month, Year format. If it can't do that 
 # successfully (for example, the date 2021-03-18 won't work as there is no 2021th day), 
 # it will try the next in the list until all strings are parsed, or all orders exhausted.
-pics_raw$date <- parse_date_time(pics_raw$date, orders = c('dmy','mdy','ymd'))
-pics_raw$Year <- as.numeric(format(pics_raw$date,"%Y"))
-pics_raw$Month <- as.numeric(format(pics_raw$date,"%m"))
-pics_raw$n_lupi <- as.numeric(pics_raw$n_wolves)
+pics$date <- parse_date_time(pics$date, orders = c('dmy','mdy','ymd'))
+pics$Year <- as.numeric(format(pics$date,"%Y"))
+pics$Month <- as.numeric(format(pics$date,"%m"))
+pics$n_wolves <- as.numeric(pics$n_wolves)
 
 ##---- Filter out samples outside the monitoring period
-pics_1 <- filter(pics_raw,Month %in% c(1,2,3,4,10,11,12)) 
-pics_na <- pics_raw[is.na(pics_raw$Month),]
-pics_t <- rbind(pics_1,pics_na)
-dim(pics_t)
-pics_t <- filter(pics_t,C1 %in% 'C1')  
-dim(pics_t)
+##---- Keep NAs (mostly from val d'aosta with weird format)
+pics <- filter(pics, Month %in% c(1,2,3,4,10,11,12) | is.na(Month)) 
+dim(pics)
 
-pics_t <- st_join(ct_cl, pics_t)
+##-- Filter out pictures of poor quality
+pics <- filter(pics, C1 %in% 'C1')  
+dim(pics)
+
+##---- Create unique picture ID
+pics$uniqueID <- 1:nrow(pics)
+
+##---- Join pictures and camera-trap locations (using a 10m buffer)
+##---- This operation filters out all pictures that are not linked to a verified camera-trap
+pics_joined <- st_join(ct[ ,"id"], pics)
+# pics_joined <- pics_joined[!is.na(pics_joined$uniqueID), ]
+plot(pics_joined$geometry, col = "green",add=T,pch=19)
+
+pics_to_check <- pics[!pics$uniqueID %in%pics_joined$uniqueID, ]
+plot(pics_to_check$geometry, col = "red",add=T,pch = 19)
 
 
-##---- Aggregate pictures per DAY ----
-# pics_d <- pics_t %>% 
+pics <- pics_joined
+
+##---- Aggregate pictures per DAY 
+# pics_d <- pics %>% 
 #   group_by(day = lubridate::day(date), id) %>% 
 #   summarise(n_wolves = max(n_wolves))
-# # hist(pics_d$n_wolves)
+# hist(pics_d$n_wolves)
 # dim(pics_d)
 # 
-# 
-# ##---- Aggregate pictures per WEEK ----
-# pics_w <- pics_t %>% 
+# ##---- Aggregate pictures per WEEK 
+# pics_w <- pics %>% 
 #   group_by(week = lubridate::week(date), id) %>% 
 #   summarise(n_wolves = max(n_wolves))
-# # hist(pics_w$n_wolves)
+# hist(pics_w$n_wolves)
 # dim(pics_w)
 # 
-# 
-# ##---- Aggregate pictures per MONTH ----
-# pics_m <- pics_t %>% 
+# ##---- Aggregate pictures per MONTH 
+# pics_m <- pics %>% 
 #   group_by(Month, id) %>% 
 #   summarise(n_wolves = max(n_wolves))
-# # hist(pics_m$n_wolves)
+# hist(pics_m$n_wolves)
 # dim(pics_m)
 
 
-
 ##---- Number of pics per CT 
-# pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
-pics <- pics_t
-
-# same info 
 # numDetsPerCT <- table(pics$id)
-# # which(is.na(as.numeric(pics_t$id_ct)))
 # hist(numDetsPerCT)
 # 
-# ##---- Number of at least one detection
+# ##---- Number of camera traps with at least one detection
 # length(numDetsPerCT)
 # 
 # ##---- Mean number of detections per CT
@@ -224,7 +216,6 @@ pics <- pics_t
 # ##---- Number of CT with > 1 detection
 # sum(numDetsPerCT > 1)
 # max(numDetsPerCT)
-# 
 # 
 # ##---- Maximum number of individuals per CT
 # maxDetsPerCT <- pics %>% group_by(id) %>%
@@ -237,33 +228,30 @@ pics <- pics_t
 # hist(maxDetsPerCT$n_wolves)
 
 
-#plot(maxDetsPerCT)
-
 ##---- mean number of individual detections by CT
 # MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
 # hist(MeanDet)
 
 ##---- DATA WRANGLING -----
-# Filter out pics with no camera trap ID
-pics_l <- subset(pics, trimws(id) !="")
-
-# Keep only ct_it, and number of wolves detected
-pics_l <- pics_l[, c(2,4,19)]
-# Give index based on detections per CT
-pics_l2 <- pics_l %>%
+##---- Extract number of wolves detected per visit
+numWolfPerVisit <- pics[ ,c("id","geometry","n_wolves")] %>%
   group_by(id) %>%
   mutate(index = row_number()) %>%
-  ungroup()
+  ungroup() %>%
+  pivot_wider( names_from = "index",
+               values_from = "n_wolves")
+numWolfPerVisit[is.na(numWolfPerVisit)]<- 0
 
-det_w <- pics_l2 %>%
-  pivot_wider(names_from = "index", values_from = "n_wolves")
+##---- Extract total number of wolves detected per trap
+##---- (including repeated visits of same wolves)
+numWolfTotal <- pics %>%
+  group_by(id) %>%
+  summarise(tot_wolves = sum(n_wolves),
+            tot_visits = n())
+numWolfTotal[is.na(numWolfTotal)]<- 0
 
-
-det_w <- det_w %>%
-  mutate(tot_wolves = rowSums(pick(4:68), na.rm = TRUE),
-         tot_detections = rowSums(!is.na(pick(4:68))))
-
-det_w <- det_w[,c(2,1,69:70,4:68,3)]
+plot(numWolfTotal$geometry)
+plot(numWolfPerVisit$geometry, col="red", add =TRUE)
 
 ##---- Plot check
 # plot(st_geometry(studyArea), col="steelblue")
@@ -276,13 +264,11 @@ det_w <- det_w[,c(2,1,69:70,4:68,3)]
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
 # Define detectors
-detectors <- ct_cl[,c(4,2,5)]
-
-
-# plot(st_geometry(studyArea), col="steelblue")
-# # plot(st_geometry(countries), col = "gray80",add=T)
-# plot(detectors$geometry, col="red", add=T)
-# plot(st_geometry(pics), add = T, pch = 3)
+detectors <- ct[,c("id","tot_attivi")]
+detectors$coords <- st_coordinates(detectors)
+colnames(detectors$coords) = c("x", "y")
+dimnames(detectors$coords) <- list(1:nrow(detectors$coords),
+                                   c("x","y"))
 
 
 detectors$n.detectors <- 1:nrow(detectors)
@@ -360,6 +346,147 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 # plot(st_geometry(countries), add = T)
 # plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
 # plot(ct_cl,add=T, col="red")
+## ------       2.2. HABITAT COVARIATES ------
+## ------       2.2.1. HUMAN POPULATION DENSITY -------
+##---- Load human population density data
+POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
+plot(POP_raw)
+## Aggregate to the detector resolution
+POP <- raster::aggregate( x = POP_raw ,
+                          fact = habitat$resolution/res(POP_raw ),
+                          fun = mean)
+POP <- raster::focal(x = POP,
+                     w = matrix(1,3,3),
+                     fun = mean,
+                     na.rm = T)
+plot(POP)
+plot(st_geometry(grid), add = T)
+
+## Extract scaled human pop density
+habitat$grid$pop <- POP %>%
+  raster::extract(y = habitat$sp) %>%
+  scale()
+
+## Extract log(human pop density + 1)
+log_POP <- POP
+log_POP[ ] <- log(POP[]+1)
+
+par(mfrow=c(1,2))
+plot(POP)
+plot(st_geometry(countries),add=T)
+plot(log_POP)
+plot(st_geometry(countries),add=T)
+
+habitat$grid$log_pop <- log_POP %>%
+  raster::extract(y = habitat$sp) %>%
+  scale()
+
+
+## ------       2.2.2. CORINE LAND COVER ------
+##---- Load Corine Land Cover data
+CLC <- raster(file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/corine32Ncrop_reclassed.tif"))
+
+## Legend :
+## 1	= developed; 2 = agriculture; 3 = forest; 4 = herbaceous; 5 =	bare rock;
+## 6 = sea features; 7 = inland water; 9 = perpetual snow
+layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
+                 "sea features","inland water","NA","perpetual snow")
+layer.index <- c(1,2,3,4,5,9)
+par(mfrow = c(1,2))
+
+CLC.df <- as.data.frame(matrix(NA, habitat$n.HabWindows, length(layer.index)))
+names(CLC.df) <- layer.names[layer.index]
+CLC.df$id <- 1:habitat$n.HabWindows
+
+COV <- list()
+for(l in 1:length(layer.index)){
+  temp <- CLC
+  temp[!temp[] %in% layer.index[l]] <- 0
+  temp[temp[] %in% layer.index[l]] <- 1
+  plot(temp)
+  plot(st_geometry(habitat$grid), add = T)
+  
+  COV[[l]] <- raster::aggregate( x = temp,
+                                 fact = habitat$resolution/res(temp),
+                                 fun = mean)
+  
+  COV[[l]] <- raster::focal(x = COV[[l]],
+                            w = matrix(1,3,3),
+                            fun = mean,
+                            na.rm = T)
+  
+  plot(COV[[l]])
+  plot(st_geometry(habitat$grid), add = T)
+  CLC.df[ ,l] <- raster::extract( x = COV[[l]],
+                                  y = habitat$sp)
+  print(layer.index[l])
+}#c
+
+## Store in habitat grid
+habitat$grid <- left_join(habitat$grid, CLC.df, by = "id")
+
+
+
+## ------       2.2.3. IUCN PRESENCE ------
+##---- Load IUCN presence data
+list.files(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid"))
+iucn_2012_1 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_permanent.shp"))
+iucn_2012_1$SPOIS <- 3
+iucn_2012_1 <- st_transform(iucn_2012_1, st_crs(studyArea))
+plot(st_geometry(studyArea))
+plot(st_geometry(iucn_2012_1), add = T, col = "lightskyblue4")
+
+iucn_2012_2 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_sporadic.shp"))
+iucn_2012_2$SPOIS <- 1
+iucn_2012_2 <- st_transform(iucn_2012_2, st_crs(studyArea))
+plot(st_geometry(iucn_2012_2), add = T, col = "lightskyblue2")
+
+iucn_2018 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/2018_06_06_Wolf_IUCN_Redlist.shp"))
+iucn_2018 <- st_transform(iucn_2018, st_crs(studyArea))
+plot(st_geometry(studyArea))
+plot(iucn_2018[ ,"SPOIS"], add = T)
+## Code back to numeric
+iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
+
+## Extract LCIE wolf permanent presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(IUCN = sum(iucn*SPOIS)/2.5e+07)
+
+habitat$grid <- habitat$grid %>%
+  left_join(intersection, by = "id")
+habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
+plot(habitat$grid[,"IUCN"])
+
+## Extract LCIE wolf sporadic presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07)
+
+tmp <- habitat$grid %>%
+  left_join(intersection, by = "id")
+tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
+habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
+plot(habitat$grid[,"IUCN"])
+
+## Extract LCIE wolf presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn_2018) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07)
+
+tmp <- habitat$grid %>%
+  left_join(intersection, by = "id")
+tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
+habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
+plot(habitat$grid[,"IUCN"])
+
+habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
@@ -386,12 +513,12 @@ localObjects <- getLocalObjects(
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
-  # for(c in 1:n.habCovs){
-  #   betaHab[c] ~ dnorm(0.0,0.01)
-  # }#c
+  for(c in 1:n.habCovs){
+    betaHab[c] ~ dnorm(0.0,0.01)
+  }#c
   
   ##-- Intensity of the AC distribution point process
-  # habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
+  habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -464,34 +591,34 @@ area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
-nimData <- list( y = det_w$tot_wolves,
-                 habIntensity = rep(1,habitat$n.HabWindows),
+nimData <- list( y = numWolfTotal$tot_wolves,
+                 habIntensity = rep(NA,habitat$n.HabWindows),
                  area = area,
-                 oper = det_w$tot_attivi,
+                 oper = detectors$tot_attivi,
                  habitatGrid = localObjects$habitatGrid,
                  localTrapsIndices = localObjects$localIndices,
                  localTrapsNum = localObjects$numLocalIndices,
                  trapCoords = detectors$scaledCoords,
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords
-                 #,
-                 # hab.covs = cbind.data.frame(
-                 #   "bare rock" = habitat$grid$`bare rock`,
-                 #   "herbaceous" = habitat$grid$`herbaceous`,
-                 #   "forest" = habitat$grid$`forest`,
-                 #   "pop" = habitat$grid$pop,
-                 #   "IUCN" = habitat$grid$`IUCN`)
+                 ,
+                 hab.covs = cbind.data.frame(
+                   "bare rock" = habitat$grid$`bare rock`,
+                   "herbaceous" = habitat$grid$`herbaceous`,
+                   "forest" = habitat$grid$`forest`,
+                   "pop" = habitat$grid$pop,
+                   "IUCN" = habitat$grid$`IUCN`)
 )
 
 
 nimConstants <- list( M = M,
-                      J = nrow(det_w),
+                      J = nrow(numWolfTotal),
                       n.habWindows = habitat$n.HabWindows,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2]
-                      #,
-                      #n.habCovs = ncol(nimData$hab.covs)
+                      ,
+                      n.habCovs = ncol(nimData$hab.covs)
 ) 
 
 
@@ -512,7 +639,7 @@ for (i in 1:M) {
 }
 
 ## Create initial number of days operated (only when NA)
-operInits <- rpois( n = nrow(det_w), mean(nimData$oper, na.rm = T))
+operInits <- rpois( n = nrow(detectors), mean(nimData$oper, na.rm = T))
 operInits[!is.na(nimData$oper)] <- NA
 
 ## Create a list of random initial values (one set per chain)
@@ -525,13 +652,12 @@ for(c in 1:4){
     s = sInits,
     lambda.oper = 1,
     z = rbinom(M,1,0.6),
-    psi = 0.6
-    #,
-    #betaHab = rep(0,nimConstants$n.habCovs),
+    psi = 0.6,
+    betaHab = rep(0,nimConstants$n.habCovs)
   )
 }
 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi")#, betaHab)
+nimParams <- c("N", "D", "lambda0", "sigma", "psi", "betaHab")
 nimParams2 <- c("z", "s")
 
 

@@ -172,7 +172,7 @@ pics$uniqueID <- 1:nrow(pics)
 ##---- Join pictures and camera-trap locations (using a 10m buffer)
 ##---- This operation filters out all pictures that are not linked to a verified camera-trap
 pics_joined <- st_join(ct[ ,"id"], pics)
-pics_joined <- pics_joined[!is.na(pics_joined$uniqueID), ]
+# pics_joined <- pics_joined[!is.na(pics_joined$uniqueID), ]
 plot(pics_joined$geometry, col = "green",add=T,pch=19)
 
 pics_to_check <- pics[!pics$uniqueID %in%pics_joined$uniqueID, ]
@@ -182,55 +182,55 @@ plot(pics_to_check$geometry, col = "red",add=T,pch = 19)
 pics <- pics_joined
 
 ##---- Aggregate pictures per DAY 
-pics_d <- pics %>% 
-  group_by(day = lubridate::day(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-hist(pics_d$n_wolves)
-dim(pics_d)
-
-##---- Aggregate pictures per WEEK 
-pics_w <- pics %>% 
-  group_by(week = lubridate::week(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-hist(pics_w$n_wolves)
-dim(pics_w)
-
-##---- Aggregate pictures per MONTH 
-pics_m <- pics %>% 
-  group_by(Month, id) %>% 
-  summarise(n_wolves = max(n_wolves))
-hist(pics_m$n_wolves)
-dim(pics_m)
+# pics_d <- pics %>% 
+#   group_by(day = lubridate::day(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# hist(pics_d$n_wolves)
+# dim(pics_d)
+# 
+# ##---- Aggregate pictures per WEEK 
+# pics_w <- pics %>% 
+#   group_by(week = lubridate::week(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# hist(pics_w$n_wolves)
+# dim(pics_w)
+# 
+# ##---- Aggregate pictures per MONTH 
+# pics_m <- pics %>% 
+#   group_by(Month, id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# hist(pics_m$n_wolves)
+# dim(pics_m)
 
 
 ##---- Number of pics per CT 
-numDetsPerCT <- table(pics$id)
-hist(numDetsPerCT)
-
-##---- Number of camera traps with at least one detection
-length(numDetsPerCT)
-
-##---- Mean number of detections per CT
-mean(numDetsPerCT)
-
-##---- Number of CT with > 1 detection
-sum(numDetsPerCT > 1)
-max(numDetsPerCT)
-
-##---- Maximum number of individuals per CT
-maxDetsPerCT <- pics %>% group_by(id) %>%
-  slice_max(n_wolves, with_ties = FALSE) %>%
-  ungroup() %>%
-  select(id, n_wolves) %>%
-  group_by(id) %>%
-  summarise(n_wolves = sum(n_wolves))
-# Plot
-hist(maxDetsPerCT$n_wolves)
+# numDetsPerCT <- table(pics$id)
+# hist(numDetsPerCT)
+# 
+# ##---- Number of camera traps with at least one detection
+# length(numDetsPerCT)
+# 
+# ##---- Mean number of detections per CT
+# mean(numDetsPerCT)
+# 
+# ##---- Number of CT with > 1 detection
+# sum(numDetsPerCT > 1)
+# max(numDetsPerCT)
+# 
+# ##---- Maximum number of individuals per CT
+# maxDetsPerCT <- pics %>% group_by(id) %>%
+#   slice_max(n_wolves, with_ties = FALSE) %>%
+#   ungroup() %>%
+#   select(id, n_wolves) %>%
+#   group_by(id) %>%
+#   summarise(n_wolves = sum(n_wolves))
+# # Plot
+# hist(maxDetsPerCT$n_wolves)
 
 
 ##---- mean number of individual detections by CT
-MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
-hist(MeanDet)
+# MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
+# hist(MeanDet)
 
 ##---- DATA WRANGLING -----
 ##---- Extract number of wolves detected per visit
@@ -240,6 +240,7 @@ numWolfPerVisit <- pics[ ,c("id","geometry","n_wolves")] %>%
   ungroup() %>%
   pivot_wider( names_from = "index",
                values_from = "n_wolves")
+numWolfPerVisit[is.na(numWolfPerVisit)]<- 0
 
 ##---- Extract total number of wolves detected per trap
 ##---- (including repeated visits of same wolves)
@@ -247,8 +248,10 @@ numWolfTotal <- pics %>%
   group_by(id) %>%
   summarise(tot_wolves = sum(n_wolves),
             tot_visits = n())
+numWolfTotal[is.na(numWolfTotal)]<- 0
 
-
+plot(numWolfTotal$geometry)
+plot(numWolfPerVisit$geometry, col="red", add =TRUE)
 
 ##---- Plot check
 # plot(st_geometry(studyArea), col="steelblue")
@@ -266,12 +269,6 @@ detectors$coords <- st_coordinates(detectors)
 colnames(detectors$coords) = c("x", "y")
 dimnames(detectors$coords) <- list(1:nrow(detectors$coords),
                                c("x","y"))
-
-
-# plot(st_geometry(studyArea), col="steelblue")
-# # plot(st_geometry(countries), col = "gray80",add=T)
-# plot(detectors$geometry, col="red", add=T)
-# plot(st_geometry(pics), add = T, pch = 3)
 
 
 detectors$n.detectors <- 1:nrow(detectors)
@@ -350,8 +347,7 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 # plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
 # plot(ct_cl,add=T, col="red")
 
-## ------     2.2. HABITAT COVARIATES ------
-
+## ------       2.2. HABITAT COVARIATES ------
 ## ------       2.2.1. HUMAN POPULATION DENSITY -------
 ##---- Load human population density data
 POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
@@ -525,6 +521,7 @@ modelCode <- nimbleCode({
   
   ##-- Intensity of the AC distribution point process
   habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
+
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -632,7 +629,7 @@ area <- st_area(grid) %>%
   sum()
 
 nimData <- list( y = numWolfTotal$tot_wolves,
-                 habIntensity = rep(1,habitat$n.HabWindows),
+                 habIntensity = rep(NA,habitat$n.HabWindows),
                  area = area,
                  oper = detectors$tot_attivi,
                  habitatGrid = localObjects$habitatGrid,
@@ -732,6 +729,7 @@ for(c in 1:4){
                            data = nimData,
                            check = FALSE,
                            calculate = FALSE) 
+  
   nimModel$calculate()
   
   ##---- Compile the nimble model object to C++

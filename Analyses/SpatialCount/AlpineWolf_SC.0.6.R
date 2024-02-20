@@ -121,7 +121,7 @@ temp <- st_transform(temp, st_crs(studyArea))
 
 ## ------   2. CAMERA TRAPS DATA ------
 ##---- Load GPS of Camera Traps
-ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_231201.shp"))
+ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240213.shp"))
 
 ##---- Convert dates
 ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))
@@ -153,7 +153,7 @@ dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
 
 ## ------   3. PICTURES/SIGHTENING DATA ------
 ##---- Images from Camera Traps data
-pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
+pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240213.shp"))
 dim(pics_raw)
 # plot(studyArea, col="steelblue")
 # plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
@@ -612,8 +612,9 @@ graphics.off()
 
 ##---- Process and save MCMC samples
 res <- ProcessCodaOutput(nimOutput$samples)
-res_sxy <- ProcessCodaOutput(nimOutput$samples2)
-save(res, res_sxy, 
+# res_sxy <- ProcessCodaOutput(nimOutput$samples2)
+save(res, 
+     # res_sxy, 
      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 
