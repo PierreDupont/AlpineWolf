@@ -647,7 +647,7 @@ nimConstants <- list( M = M,
                       n.habCovs = ncol(nimData$hab.covs))
 
 ##---- Set parameters to track 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi", "theta", "rho", "betaHab")
+nimParams <- c("N", "D", "lambda0", "sigma", "psi", "betaHab")
 nimParams2 <- c("z", "s")
 
 
@@ -671,39 +671,16 @@ for (i in 1:M) {
 operInits <- rpois( n = nrow(detectors), mean(nimData$oper, na.rm = T))
 operInits[!is.na(nimData$oper)] <- NA
 
-# ##---- Create initial lambda
-# for(i in 1:nimConstants$M){
-#   nimModel$lambda[i,1:nimConstants$J] <- calculateLocalLambda(
-#     lambda0 = nimModel$lambda0,
-#     sigma = nimModel$sigma[nimModel$status[i],nimModel$sex[i]+1],
-#     s = nimModel$s[i,1:2],
-#     trapCoords = nimData$trapCoords,
-#     localTrapsIndices = nimData$localTrapsIndices,
-#     localTrapsNum = nimData$localTrapsNum,
-#     resizeFactor = 1,
-#     habitatGrid = nimData$habitatGrid,
-#     indicator = nimModel$z[i])
-# }#i 
-
 ##---- Create a list of random initial values (one set per chain)
 nimInits.list <- list()
 for(c in 1:4){
   nimInits.list[[c]] <- list( 
-    sigma = matrix(c(0.7334833, 0.4788753,
-                     0.5919603, 0.5573514,
-                     2.6903494, 5.9257740), byrow = T, nrow = 3),
+    sigma = 0.7,
     lambda0 = runif(1,0,2),
-    # lambda = lambdaInits,
     oper = operInits,
     s = sInits,
     lambda.oper = 1,
     z = rbinom(M,1,0.6),
-    rho = 0.5,
-    theta = matrix(c(0.2784087, 0.29532485,
-                     0.6189801, 0.61738292,
-                     0.1026112, 0.08729223), byrow = T, nrow = 3),
-    sex = rbinom(M,1,0.5),
-    status = rcat(n = M, prob = c(0.28,0.62,0.1)),
     psi = 0.6,
     betaHab = rep(0,nimConstants$n.habCovs),
     habIntensity = rep(1,habitat$n.HabWindows))

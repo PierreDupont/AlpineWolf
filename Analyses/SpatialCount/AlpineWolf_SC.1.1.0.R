@@ -435,51 +435,13 @@ modelCode <- nimbleCode({
   }#j
   
   ## Detection parameters priors
-  ## Here we use informative priors for the sex ratio in the population,
-  ## the proportion of individuals in each class and the corresponding sigm
-  ## values. For this we fit either a Beta (for probability parameters) or a
-  ## Gamma (for strictly positive parameters) to the posterior distributions of rho,
-  ## theta and sigma and use the estimated parameters to generate priors
-  
-  # estBetaParams <- function(mu, var) {
-  #   alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
-  #   beta <- alpha * (1 / mu - 1)
-  #   return(params = list(alpha = alpha, beta = beta))
-  # }
-  # estBetaParams(res$mean$rho, res$sd$rho^2)
-  # estBetaParams(res$mean$theta, res$sd$theta^2)
-  rho ~ dbeta(shape1 = 100.2002, shape2 = 97.04432)
-  
-  theta[1,1] ~ dbeta(shape1 = 35.47846, shape2 =  91.95455) 
-  theta[2,1] ~ dbeta(shape1 = 68.80703, shape2 =  42.35491) 
-  theta[3,1] ~ dbeta(shape1 = 15.16380, shape2 =  132.61544) 
-  theta[1,2] ~ dbeta(shape1 = 29.79081, shape2 =  71.08390) 
-  theta[2,2] ~ dbeta(shape1 = 56.68122, shape2 =  35.12763) 
-  theta[3,2] ~ dbeta(shape1 = 18.53917, shape2 =  193.84141) 
-  
-  # estGammaParams <- function(mu, var) {
-  #   shape <- mu^2 / var
-  #   scale <- var / mu
-  #   return(params = list(shape= shape, scale = scale))
-  # }
-  # estGammaParams(res$mean$sigma, res$sd$sigma^2)
-  sigma[1,1] ~ dgamma(shape = 258.99756, scale = 0.002832009) 
-  sigma[2,1] ~ dgamma(shape = 160.11667, scale = 0.003697056) 
-  sigma[3,1] ~ dgamma(shape = 57.1980, scale = 0.047035717) 
-  sigma[1,2] ~ dgamma(shape = 194.33520, scale = 0.002464172) 
-  sigma[2,2] ~ dgamma(shape = 99.95526, scale = 0.005576009) 
-  sigma[3,2] ~ dgamma(shape = 40.30348, scale = 0.147028831) 
-  
+  sigma ~ dunif(0,10)
   lambda0 ~ dunif(0,10)
   
   for(i in 1:M){ 
-    sex[i] ~ dbern(rho)
-    
-    status[i] ~ dcat(theta[1:3,sex[i]+1])
-    
     lambda[i,1:J] <- calculateLocalLambda(
       lambda0 = lambda0,
-      sigma = sigma[status[i],sex[i]+1],
+      sigma = sigma,
       s = s[i,1:2],
       trapCoords = trapCoords[1:J,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -529,9 +491,8 @@ nimConstants <- list( M = M,
                       x.max = dim(habitat$matrix)[2])
 
 ##---- Set parameters to track 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi", "theta", "rho")
+nimParams <- c("N", "D", "lambda0", "sigma", "psi")
 nimParams2 <- c("z", "s")
-
 
 
 
@@ -552,20 +513,6 @@ for (i in 1:M) {
 ##---- Generate initial number of days operated (only when NA)
 operInits <- rpois( n = nrow(detectors), mean(nimData$oper, na.rm = T))
 operInits[!is.na(nimData$oper)] <- NA
-
-# ##---- Create initial lambda
-# for(i in 1:nimConstants$M){
-#   nimModel$lambda[i,1:nimConstants$J] <- calculateLocalLambda(
-#     lambda0 = nimModel$lambda0,
-#     sigma = nimModel$sigma[nimModel$status[i],nimModel$sex[i]+1],
-#     s = nimModel$s[i,1:2],
-#     trapCoords = nimData$trapCoords,
-#     localTrapsIndices = nimData$localTrapsIndices,
-#     localTrapsNum = nimData$localTrapsNum,
-#     resizeFactor = 1,
-#     habitatGrid = nimData$habitatGrid,
-#     indicator = nimModel$z[i])
-# }#i 
 
 ##---- Create a list of random initial values (one set per chain)
 nimInits.list <- list()
