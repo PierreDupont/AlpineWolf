@@ -73,7 +73,9 @@ studyArea <- studyAreaGrid %>%
   st_union() 
 
 ##---- create raster with desired resolution
-grid.r <- st_as_stars(st_bbox(studyArea), dx = habitat$resolution, dy = habitat$resolution)
+grid.r <- st_as_stars(st_bbox(studyArea),
+                      dx = habitat$resolution,
+                      dy = habitat$resolution)
 ##---- mask and crop
 grid.r <- grid.r[studyArea, ] 
 ##---- convert from stars to sf objects
@@ -96,12 +98,10 @@ grid$centroids <- st_centroid(grid) %>%
 ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240213.shp"))
 sum(duplicated(ct[,c("coord_x","coord_y")]))
 
-
 ##---- Convert dates
 ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))
 ct$date_en <- parse_date_time(ct$date_en, orders = c('dmy'))
 ct$tot_attivi <- as.numeric(ct$tot_attivi) 
-
 
 ##---- Aggregate camera-traps with the same location 
 # ct <- ct %>% group_by(coord_x,coord_y) %>%
@@ -113,7 +113,6 @@ ct$tot_attivi <- as.numeric(ct$tot_attivi)
 
 ##---- Set-up new identifier for each camera-trap
 ct$id <- paste0("FT", 1:nrow(ct))
-head(ct)
 
 ##---- Plot check
 plot(studyArea, col = "steelblue")
@@ -407,83 +406,21 @@ localObjects <- getLocalObjects(
 
 
 ## ------   5. DETECTION DATA ------
-# ##---- Join pictures and camera-trap locations 
-# ##---- This operation filters out all pictures that are not linked to a verified camera-trap
-# pics_joined <- st_join(ct[ ,"id"], pics)
-# pics_joined <- pics_joined[!is.na(pics_joined$uniqueID), ]
-# plot(pics_joined$geometry, col = "green",add=T)
-# 
-# pics_to_check <- pics[!pics$uniqueID %in%pics_joined$uniqueID, ]
-# plot(pics_to_check$geometry, col = "red",add=T)
-# 
-# pics <- pics_joined
-# 
-# ##---- Number of pics per CT 
-# numDetsPerCT <- table(pics$id)
-# hist(numDetsPerCT)
-# 
-# ##---- Number of camera traps with at least one detection
-# length(numDetsPerCT)
-# 
-# ##---- Mean number of detections per CT
-# mean(numDetsPerCT)
-# 
-# ##---- Number of CT with > 1 detection
-# sum(numDetsPerCT > 1)
-# max(numDetsPerCT)
-# 
-# ##---- Maximum number of individuals per CT
-# maxDetsPerCT <- pics %>% group_by(id) %>%
-#   slice_max(n_wolves, with_ties = FALSE) %>%
-#   ungroup() %>%
-#   select(id, n_wolves) %>%
-#   group_by(id) %>%
-#   summarise(n_wolves = sum(n_wolves))
-# 
-# ##---- Plot
-# hist(maxDetsPerCT$n_wolves)
-# 
-# ##---- mean number of individual detections by CT
-# MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"),
-#                  2,
-#                  function(x)sum(x)/sum(x>0))
-# hist(MeanDet)
-# 
-# ##---- Extract number of wolves detected per visit
-# numWolfPerVisit <- pics[ ,c("id","geometry","n_wolves")] %>%
-#   group_by(id) %>%
-#   mutate(index = row_number()) %>%
-#   ungroup() %>%
-#   pivot_wider( names_from = "index",
-#                values_from = "n_wolves")
-# 
-# ##---- Extract total number of wolves detected per trap
-# ##---- (including repeated visits of same wolves)
-# numWolfTotal <- pics %>%
-#   group_by(id) %>%
-#   summarise(tot_wolves = sum(n_wolves),
-#             tot_visits = n())
-
-
-
 ## ------     5.1. ASSIGN PICTURES TO CAMERA-TRAPS ------
-##---- Calculate distance between detections and sub-detectors
+##---- Calculate distance between dpictures and camera-traps
 closest <- nn2( st_coordinates(detectors),
                 st_coordinates(pics),
                 k = 1,
                 searchtype = "radius",
                 radius = 30000)
-
+table(closest$nn.dists)
 
 ##---- Identify and plot pictures to check
-table(closest$nn.dists)
 toCheck <- pics[closest$nn.dists > 0, ]
-
 plot(studyArea, col = "steelblue")
 plot(ct$geometry, col = "blue", pch = 3, add = T)
 plot(pics$geometry, col = "black", add = T)
 plot(pics$geometry[toCheck], col = "red",pch=19, cex = 0.8, add = T)
-
 
 ##---- Assign each picture to a camera-trap based on minimum distance
 pics$CT_id <- detectors$id[closest$nn.idx] 
@@ -1165,7 +1102,7 @@ for(s in 1:length(sex)){
 
 
 
-# ## ------     2.2. DENSITY EFFECT PLOT ------
+## ------     2.2. DENSITY EFFECT PLOT ------
 # par(mfrow = c(2,2), mar = c(6,6,0,0))
 # covNames <- names(nimData$hab.covs)# c("alpine", "forest", "IUCN")
 # pred.hab.covs <- apply(nimData$hab.covs,
@@ -1620,148 +1557,3 @@ WA_Italy$summary
 
 
 ##------------------------------------------------------------------------------
-# ## EE
-# pdf(file = file.path(thisDir, paste0(modelName,"_ridge.pdf")),
-#     width = 30, height = 22)
-# ridgeMap( ital.R,
-#           line.col = "white",
-#           fill.col = "lightblue4",
-#           grid.col = "gray80",
-#           scale = 8,
-#           lwd = 2,
-#           plot.margin = unit(c(10,10,20,0),"pt"),
-#           caption = expression(paste(bold("Alpine Wolf ("),
-#                                      italic("Canis lupus"),
-#                                      bold(")"))),
-#           plot.caption = element_text( face = "bold.italic",
-#                                        size = 50,
-#                                        colour = "white",
-#                                        hjust = 0.02))
-# graphics.off()
-
-# g = st_graticule(countries)
-# plot(st_geometry(g), axes = TRUE)
-
-##------------------------------------------------------------------------------
-
-
-##---- PROCESS THE OUTPUT
-n.chains <- length(nimOutput$samples)
-n.iterations <- dim(nimOutput$samples[[1]])[1]
-covNames <- colnames(nimData$hab.covs)
-betas.wide <- data.table(res$sims.list$betaHab)
-dimnames(betas.wide) <- list(NULL, covNames)
-
-zRJ.wide <- data.table(res$sims.list$zRJ)
-dimnames(zRJ.wide) <- list(NULL, covNames)
-
-mods <- apply(zRJ.wide, 1, function(x) {
-  paste(covNames[x == 1], collapse = "+")
-})
-betas.wide$model <- zRJ.wide$model <-
-  gsub("\\(Intercept\\)\\+", "", mods)
-
-
-betas.wide$chain <- zRJ.wide$chain <- rep(1:n.chains, each = n.iterations)
-betas.wide$iteration <- zRJ.wide$iteration <- rep(1:n.iterations, n.chains)
-
-zRJ.df <- melt(zRJ.wide, id.vars = c("iteration", "chain", "model"))
-names(zRJ.df) <- c("iteration", "chain", "model", "variable", "value")
-
-betas.df <-  melt(betas.wide, id.vars = c("iteration", "chain", "model"))
-names(betas.df) <-  c("iteration", "chain", "model", "variable", "value")
-
-betas.df$value[zRJ.df$value == 0] <- NA
-
-betas.aggr <- betas.df %>%
-  group_by(variable) %>%
-  summarise(p.inclusion = mean(!is.na(value)))
-
-betas.df <- merge(betas.df, betas.aggr)
-
-included <- zRJ.df$value == 1
-
-betas.df <- betas.df[included, ]
-zRJ.df <- zRJ.df[included, ]
-
-betas.df <- betas.df[order(betas.df$variable, betas.df$model, betas.df$chain),]
-zRJ.df <- zRJ.df[order(zRJ.df$variable, zRJ.df$model, zRJ.df$chain),]
-
-myfun1 <- function(x) 1:length(x)
-
-temp <- betas.df %>% group_by(variable, model, chain) %>%
-  summarize(iteration.model = myfun1(value))
-
-betas.df$iteration.model <- temp$iteration.model
-
-aggr <- data.frame(table(betas.df$model) / length(betas.df$model))
-names(aggr) <- c("model", "weight")
-
-betas.df <- merge(betas.df, aggr)
-
-
-
-
-##---- MODEL TALLY
-aggr <- aggr[order(aggr$weight, decreasing = TRUE),]
-aggr$model <- factor(aggr$model, levels = aggr$model)
-ggplot(data = aggr,
-       mapping =  aes(x = model, y = weight, alpha = weight)) +
-  
-  geom_col(fill =
-             "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
-             )) + ylab("Weight") + xlab("Models")
-
-
-
-
-##---- COEFFICIENT TRACE PLOTS (OVERALL)
-ggplot(data = betas.df, aes(
-  x = iteration,
-  y = value,
-  color = factor(chain)
-)) +
-  geom_line() +
-  facet_wrap(~ variable, scales = "free") +
-  xlab("Iteration") +  theme(legend.position = "none")
-
-
-
-
-##---- COEFFICIENT TRACE PLOTS (MODEL-SPECIFIC)
-ggplot(data = betas.df, aes(
-  x = iteration.model,
-  y = value,
-  color = factor(chain)
-)) +
-  geom_line() +
-  facet_grid(variable ~ model, margins = FALSE, scales = "free") +
-  xlab("Iteration") +  theme(legend.position = "none")
-
-
-
-
-##---- PLOT COEFFICIENT ESTIMATES (OVERALL)
-ggplot(betas.df, aes(value, variable, alpha = p.inclusion)) +
-  geom_violin(
-    draw_quantiles = c(0.025, 0.5, 0.975),
-    fill = "turquoise",
-    color = grey(1)
-  ) +
-  geom_vline(xintercept = 0)
-
-
-
-
-##---- PLOT COEFFICIENT ESTIMATES (MODEL-SPECIFIC)
-ggplot(betas.df, aes(value, variable, alpha = weight)) +
-  geom_violin(
-    draw_quantiles = c(0.025, 0.5, 0.975),
-    fill = "magenta",
-    color = grey(1)
-  ) +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~ model)
