@@ -1,6 +1,7 @@
-## -------------------------------------------------------------------------- ##
+## ------------------------------------------------------------------------- ##
 ## ----------------------- ALPINE WOLF SC ---------------------------------- ##
-## -------------------------------------------------------------------------- ##
+## -------------- Alessandria province with COVARIATES---------------------- ##
+## ------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
@@ -45,7 +46,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.SC.0.6"
+modelName = "AlpineWolf.SC_prov_0.2"
 thisDir <- file.path(analysisDir, modelName)
 
 
@@ -57,7 +58,10 @@ if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "out
 
 ## HABITAT SPECIFICATIONS
 habitat = list( resolution = 5000, 
-                buffer = 30000)
+                buffer = 3000,
+                prov = "AL")
+
+
 
 # ## DETECTORS SPECIFICATIONS
 # detectors = list( resolution = 5000,
@@ -69,7 +73,8 @@ habitat = list( resolution = 5000,
 ## ------   1. STUDY AREA ------
 ##---- Polygon of Italy and neighbouring countries
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
-
+##--- Study area load Provinces
+provinces <- read_sf(file.path(dataDir,"GISData/Output_layout/northern_provinces.shp"))
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
 studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
@@ -78,13 +83,21 @@ studyArea <- studyAreaGrid %>%
   st_union() 
 
 
-##---- create raster with desired resolution
-grid.r <- st_as_stars(st_bbox(studyArea), dx = habitat$resolution, dy = habitat$resolution)
+
+##--- Filter AL Province
+prov_shp <- filter(provinces,SIGLA == habitat$prov) 
+prov_shp <- prov_shp$geometry
+
+plot(prov_shp)
+
+##---- create raster with desired resolution for AL
+grid.r <- st_as_stars(st_bbox(prov_shp), dx = habitat$resolution, dy = habitat$resolution)
 ##---- mask and crop
-grid.r <- grid.r[studyArea, ] 
+grid.r <- grid.r[prov_shp, ] 
+plot(grid.r)
 ##---- convert from stars to sf objects
 grid <- st_as_sf(grid.r)
-grid <- grid[studyArea, ] 
+plot(grid)
 ##---- give an ID to each grid cell 
 grid$id <- 1:nrow(grid)
 ##---- Remove the "values" column
@@ -93,30 +106,6 @@ grid <- grid[-1]
 ##---- create centroids 
 grid$centroids <- st_centroid(grid) %>% 
   st_geometry() # since you want the centroids in a second geometry col
-# plot(studyAreaGrid["SCR"], add = T)
-
-count <- read_sf(file.path(dataDir,
-                           "GISData/Countries/Countries_WGS84.shp"))
-temp <- count[count$CNTRY_NAME %in% c("Albania",
-                                      "Austria",
-                                      "Bosnia and Herzegovina",
-                                      "Bulgaria",
-                                      #"Czech Republic",
-                                      "France",
-                                      "Germany",
-                                      "Greece",
-                                      "Croatia",
-                                      "Hungary",
-                                      "Macedonia",
-                                      "Malta",
-                                      "Montenegro",
-                                      "Serbia",
-                                      #"Romania",
-                                      "Slovenia",
-                                      "San Marino",
-                                      "Switzerland"), ]
-# plot(st_geometry(temp),col="gray60")
-temp <- st_transform(temp, st_crs(studyArea))
 
 
 ## ------   2. CAMERA TRAPS DATA ------
@@ -141,23 +130,34 @@ ct$tot_attivi <- as.numeric(ct$tot_attivi)
 ##---- Number of pics per CT
 # hist(ct$tot_attivi)
 
-ct_cl <- ct[,c(1,6)]
-ct_cl$id <- paste0("FT", 1:nrow(ct_cl))
+ct_filter <- st_intersects(prov_shp, ct)
+ct_filter <- unlist(ct_filter)
+ct_prov <- ct[ct_filter,]
 
-ct_cl$coords <- st_coordinates(ct_cl)
-colnames(ct_cl$coords) = c("x", "y")
+##---- Plot check
+plot(prov_shp)
+plot(ct_prov, col = "red", pch=16, add=T)
 
 
-dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
-                               c("x","y"))
+ct_prov <- ct_prov[,c(1,6)]
+
+ct_prov$id <- paste0("FT", 1:nrow(ct_prov))
+
+ct_prov$coords <- st_coordinates(ct_prov)
+colnames(ct_prov$coords) = c("x", "y")
+
+
+dimnames(ct_prov$coords) <- list(1:nrow(ct_prov$coords),
+                                 c("x","y"))
+
+
 
 ## ------   3. PICTURES/SIGHTENING DATA ------
 ##---- Images from Camera Traps data
-pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
+pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240117.shp"))
 dim(pics_raw)
 # plot(studyArea, col="steelblue")
 # plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
-
 
 ##---- Use lubridate to clean dates
 # The orders argument is a character vector containing the possible date-time parsing 
@@ -178,82 +178,95 @@ dim(pics_t)
 pics_t <- filter(pics_t,C1 %in% 'C1')  
 dim(pics_t)
 
-pics_t <- st_join(ct_cl, pics_t)
+# plot(pics_t$geometry)
 
 
-##---- Aggregate pictures per DAY ----
-pics_d <- pics_t %>% 
-  group_by(day = lubridate::day(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_d$n_wolves)
-dim(pics_d)
 
+# FILTER ONLY PICS TAKEN IN ALESSANDRIA
+pics_filter <- st_intersects(prov_shp, pics_t)
+pics_filter <- unlist(pics_filter)
+pics_prov <- pics_t[pics_filter,]
 
-##---- Aggregate pictures per WEEK ----
-pics_w <- pics_t %>% 
-  group_by(week = lubridate::week(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_w$n_wolves)
-dim(pics_w)
+plot(pics_prov$geometry, col = "blue", pch=16, add=T)
 
+pics_prov <- pics_prov[,c(1,2,3,14)]
 
-##---- Aggregate pictures per MONTH ----
-pics_m <- pics_t %>% 
-  group_by(Month, id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_m$n_wolves)
-dim(pics_m)
+pics_ct <- st_join(ct_prov, pics_prov)
+
+# ##---- Aggregate pictures per DAY ----
+# pics_d <- pics_t %>% 
+#   group_by(day = lubridate::day(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# # hist(pics_d$n_wolves)
+# dim(pics_d)
+# 
+# 
+# ##---- Aggregate pictures per WEEK ----
+# pics_w <- pics_t %>% 
+#   group_by(week = lubridate::week(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# # hist(pics_w$n_wolves)
+# dim(pics_w)
+# 
+# 
+# ##---- Aggregate pictures per MONTH ----
+# pics_m <- pics_t %>% 
+#   group_by(Month, id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# # hist(pics_m$n_wolves)
+# dim(pics_m)
 
 
 
 ##---- Number of pics per CT 
 # pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
-pics <- pics_t
+pics <- pics_ct
 
 # same info 
-numDetsPerCT <- table(pics$id)
-# which(is.na(as.numeric(pics_t$id_ct)))
-hist(numDetsPerCT)
-
-##---- Number of at least one detection
-length(numDetsPerCT)
-
-##---- Mean number of detections per CT
-mean(numDetsPerCT)
-
-##---- Number of CT with > 1 detection
-sum(numDetsPerCT > 1)
-max(numDetsPerCT)
-
-
-##---- Maximum number of individuals per CT
-maxDetsPerCT <- pics %>% group_by(id) %>%
-  slice_max(n_wolves, with_ties = FALSE) %>%
-  ungroup() %>%
-  select(id, n_wolves) %>%
-  group_by(id) %>%
-  summarise(n_wolves = sum(n_wolves))
-# Plot
-hist(maxDetsPerCT$n_wolves)
+# numDetsPerCT <- table(pics$id)
+# # which(is.na(as.numeric(pics_t$id_ct)))
+# hist(numDetsPerCT)
+# 
+# ##---- Number of at least one detection
+# length(numDetsPerCT)
+# 
+# ##---- Mean number of detections per CT
+# mean(numDetsPerCT)
+# 
+# ##---- Number of CT with > 1 detection
+# sum(numDetsPerCT > 1)
+# max(numDetsPerCT)
+# 
+# 
+# ##---- Maximum number of individuals per CT
+# maxDetsPerCT <- pics %>% group_by(id) %>% 
+#   slice_max(n_wolves, with_ties = FALSE) %>% 
+#   ungroup() %>% 
+#   select(id, n_wolves) %>% 
+#   group_by(id) %>% 
+#   summarise(n_wolves = sum(n_wolves))
+# # Plot
+# hist(maxDetsPerCT$n_wolves)
 
 
 #plot(maxDetsPerCT)
 
 ##---- mean number of individual detections by CT
-MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
-hist(MeanDet)
+# MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
+# hist(MeanDet)
 
 ##---- DATA WRANGLING -----
 # Filter out pics with no camera trap ID
-pics_l <- subset(pics, trimws(id) !="")
+pics_l <- subset(pics, trimws(id) !=" ")
 
-# Keep only ct_it, and number of wolves detected
-pics_l <- pics_l[, c(2,4,19)]
+# Keep only ct_id, and number of wolves detected
+pics_l <- pics_l[, c(4,2,9,5)]
 # Give index based on detections per CT
 pics_l2 <- pics_l %>%
   group_by(id) %>%
   mutate(index = row_number()) %>%
-  ungroup()
+  ungroup() %>%
+  st_drop_geometry()
 
 det_w <- pics_l2 %>%
   pivot_wider(names_from = "index", values_from = "n_wolves")
@@ -263,7 +276,8 @@ det_w <- det_w %>%
   mutate(tot_wolves = rowSums(pick(4:68), na.rm = TRUE),
          tot_detections = rowSums(!is.na(pick(4:68))))
 
-det_w <- det_w[,c(2,1,69:70,4:68,3)]
+det_w <- det_w[,c(1:2,69:70,4:68,3)]
+
 
 ##---- Plot check
 # plot(st_geometry(studyArea), col="steelblue")
@@ -276,8 +290,7 @@ det_w <- det_w[,c(2,1,69:70,4:68,3)]
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
 # Define detectors
-detectors <- ct_cl[,c(4,2,5)]
-
+detectors <- det_w[,c(1:4,70)]
 
 # plot(st_geometry(studyArea), col="steelblue")
 # # plot(st_geometry(countries), col = "gray80",add=T)
@@ -286,6 +299,7 @@ detectors <- ct_cl[,c(4,2,5)]
 
 
 detectors$n.detectors <- 1:nrow(detectors)
+
 # st_crs(detectors$buffer) <- st_crs(studyArea)
 
 
@@ -304,6 +318,7 @@ habitat$polygon <- st_intersection( st_union(countries),
 ##---- (the huge buffer is used to make sure all models have comparable rasters)
 habitat$raster <- raster(extent(st_bbox(st_buffer(st_union(studyAreaGrid),
                                                   100000))))
+
 
 ##---- Trick to get % of habitat
 res(habitat$raster) <- habitat$resolution/10
@@ -361,6 +376,151 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 # plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
 # plot(ct_cl,add=T, col="red")
 
+## ------     2.2. HABITAT COVARIATES ------
+## ------       2.2.1. HUMAN POPULATION DENSITY -------
+##---- Load human population density data
+POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
+plot(POP_raw)
+## Aggregate to the detector resolution
+POP <- raster::aggregate( x = POP_raw ,
+                          fact = habitat$resolution/res(POP_raw ),
+                          fun = mean)
+POP <- raster::focal(x = POP,
+                     w = matrix(1,3,3),
+                     fun = mean,
+                     na.rm = T)
+plot(POP)
+plot(st_geometry(grid), add = T)
+
+## Extract scaled human pop density
+habitat$grid$pop <- POP %>%
+  raster::extract(y = habitat$sp) %>%
+  scale()
+
+## Extract log(human pop density + 1)
+log_POP <- POP
+log_POP[ ] <- log(POP[]+1)
+
+par(mfrow=c(1,2))
+plot(POP)
+plot(st_geometry(countries),add=T)
+plot(log_POP)
+plot(st_geometry(countries),add=T)
+
+habitat$grid$log_pop <- log_POP %>%
+  raster::extract(y = habitat$sp) %>%
+  scale()
+
+
+## ------       2.2.2. CORINE LAND COVER ------
+##---- Load Corine Land Cover data
+CLC <- raster(file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/corine32Ncrop_reclassed.tif"))
+
+## Legend :
+## 1	= developed; 2 = agriculture; 3 = forest; 4 = herbaceous; 5 =	bare rock;
+## 6 = sea features; 7 = inland water; 9 = perpetual snow
+layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
+                 "sea features","inland water","NA","perpetual snow")
+layer.index <- c(1,2,3,4,5,9)
+par(mfrow = c(1,2))
+
+CLC.df <- as.data.frame(matrix(NA, habitat$n.HabWindows, length(layer.index)))
+names(CLC.df) <- layer.names[layer.index]
+CLC.df$id <- 1:habitat$n.HabWindows
+
+COV <- list()
+for(l in 1:length(layer.index)){
+  temp <- CLC
+  temp[!temp[] %in% layer.index[l]] <- 0
+  temp[temp[] %in% layer.index[l]] <- 1
+  plot(temp)
+  plot(st_geometry(habitat$grid), add = T)
+  
+  COV[[l]] <- raster::aggregate( x = temp,
+                                 fact = habitat$resolution/res(temp),
+                                 fun = mean)
+  
+  COV[[l]] <- raster::focal(x = COV[[l]],
+                            w = matrix(1,3,3),
+                            fun = mean,
+                            na.rm = T)
+  
+  plot(COV[[l]])
+  plot(st_geometry(habitat$grid), add = T)
+  CLC.df[ ,l] <- raster::extract( x = COV[[l]],
+                                  y = habitat$sp)
+  print(layer.index[l])
+}#c
+
+## Store in habitat grid
+habitat$grid <- left_join(habitat$grid, CLC.df, by = "id")
+
+
+
+## ------       2.2.3. IUCN PRESENCE ------
+##---- Load IUCN presence data
+list.files(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid"))
+iucn_2012_1 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_permanent.shp"))
+iucn_2012_1$SPOIS <- 3
+iucn_2012_1 <- st_transform(iucn_2012_1, st_crs(studyArea))
+plot(st_geometry(studyArea))
+plot(st_geometry(iucn_2012_1), add = T, col = "lightskyblue4")
+
+iucn_2012_2 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_sporadic.shp"))
+iucn_2012_2$SPOIS <- 1
+iucn_2012_2 <- st_transform(iucn_2012_2, st_crs(studyArea))
+plot(st_geometry(iucn_2012_2), add = T, col = "lightskyblue2")
+
+iucn_2018 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/2018_06_06_Wolf_IUCN_Redlist.shp"))
+iucn_2018 <- st_transform(iucn_2018, st_crs(studyArea))
+plot(st_geometry(studyArea))
+plot(iucn_2018[ ,"SPOIS"], add = T)
+## Code back to numeric
+iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
+
+## Extract LCIE wolf permanent presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(IUCN = sum(iucn*SPOIS)/2.5e+07)
+
+habitat$grid <- habitat$grid %>%
+  left_join(intersection, by = "id")
+habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
+plot(habitat$grid[,"IUCN"])
+
+## Extract LCIE wolf sporadic presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07)
+
+tmp <- habitat$grid %>%
+  left_join(intersection, by = "id")
+tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
+habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
+plot(habitat$grid[,"IUCN"])
+
+## Extract LCIE wolf presence in each habitat grid cell
+intersection <- st_intersection(habitat$grid, iucn_2018) %>%
+  mutate(iucn = st_area(.)) %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(iucn_2 = sum(iucn*SPOIS)/2.5e+07)
+
+tmp <- habitat$grid %>%
+  left_join(intersection, by = "id")
+tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
+habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
+plot(habitat$grid[,"IUCN"])
+
+habitat$grid$IUCN <- scale(habitat$grid$IUCN)
+
+
+
+
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
 ##---- Rescale habitat and detector coordinates
@@ -386,12 +546,12 @@ localObjects <- getLocalObjects(
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
-  # for(c in 1:n.habCovs){
-  #   betaHab[c] ~ dnorm(0.0,0.01)
-  # }#c
+  for(c in 1:n.habCovs){
+    betaHab[c] ~ dnorm(0.0,0.01)
+  }#c
   
   ##-- Intensity of the AC distribution point process
-  # habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
+  habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -456,9 +616,10 @@ modelCode <- nimbleCode({
 
 
 
+
 ## ------   2. BUNDLE DATA ------
 ##---- Set model constants, data & parameter simulated values (==inits)
-M <- 3000
+M <- 800
 
 area <- st_area(grid) %>%
   drop_units() %>%
@@ -473,14 +634,13 @@ nimData <- list( y = det_w$tot_wolves,
                  localTrapsNum = localObjects$numLocalIndices,
                  trapCoords = detectors$scaledCoords,
                  lowerHabCoords = habitat$loScaledCoords, 
-                 upperHabCoords = habitat$upScaledCoords
-                 #,
-                 # hab.covs = cbind.data.frame(
-                 #   "bare rock" = habitat$grid$`bare rock`,
-                 #   "herbaceous" = habitat$grid$`herbaceous`,
-                 #   "forest" = habitat$grid$`forest`,
-                 #   "pop" = habitat$grid$pop,
-                 #   "IUCN" = habitat$grid$`IUCN`)
+                 upperHabCoords = habitat$upScaledCoords,
+                 hab.covs = cbind.data.frame(
+                   "bare rock" = habitat$grid$`bare rock`,
+                   "herbaceous" = habitat$grid$`herbaceous`,
+                   "forest" = habitat$grid$`forest`,
+                   "pop" = habitat$grid$pop,
+                   "IUCN" = habitat$grid$`IUCN`)
 )
 
 
@@ -489,9 +649,8 @@ nimConstants <- list( M = M,
                       n.habWindows = habitat$n.HabWindows,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
-                      x.max = dim(habitat$matrix)[2]
-                      #,
-                      #n.habCovs = ncol(nimData$hab.covs)
+                      x.max = dim(habitat$matrix)[2],
+                      n.habCovs = ncol(nimData$hab.covs)
 ) 
 
 
@@ -525,13 +684,11 @@ for(c in 1:4){
     s = sInits,
     lambda.oper = 1,
     z = rbinom(M,1,0.6),
-    psi = 0.6
-    #,
-    #betaHab = rep(0,nimConstants$n.habCovs),
-  )
+    psi = 0.6,
+    betaHab = rep(0,nimConstants$n.habCovs))
 }
 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi")#, betaHab)
+nimParams <- c("N", "D", "lambda0", "sigma", "psi", "betaHab")
 nimParams2 <- c("z", "s")
 
 
@@ -586,10 +743,10 @@ for(c in 1:4){
   ##---- Run nimble MCMC in multiple bites
   mcmcRuntime <- system.time(
     runMCMCbites( mcmc = Cmcmc,
-                  model = Cmodel,
-                  bite.size = 100,
-                  bite.number = 1,
-                  path = file.path(thisDir, "output", modelName, "_", c),
+                  model = nimModel,
+                  bite.size = 1000,
+                  bite.number = 100,
+                  path = file.path(thisDir,"output", paste0(modelName, "_", c, ".RData")),
                   save.rds = TRUE))  
   
   print(mcmcRuntime)
@@ -606,14 +763,15 @@ nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput)
+plot(nimOutput$samples)
 graphics.off()
 
 
 ##---- Process and save MCMC samples
 res <- ProcessCodaOutput(nimOutput$samples)
-res_sxy <- ProcessCodaOutput(nimOutput$samples2)
-save(res, res_sxy, 
+res_xy <- ProcessCodaOutput(nimOutput$samples2)
+
+save(res, res_xy,
      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 
@@ -1065,9 +1223,9 @@ ggplot(data = aggr,
        mapping =  aes(x = model, y = weight, alpha = weight)) +
   geom_col(fill =
              "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
+           angle = 45,
+           vjust = 1,
+           hjust = 1
              )) + ylab("Weight") + xlab("Models")
 
 
@@ -1492,9 +1650,9 @@ ggplot(data = aggr,
   
   geom_col(fill =
              "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
+           angle = 45,
+           vjust = 1,
+           hjust = 1
              )) + ylab("Weight") + xlab("Models")
 
 

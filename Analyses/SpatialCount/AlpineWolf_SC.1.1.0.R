@@ -1,5 +1,5 @@
 ## -------------------------------------------------------------------------- ##
-## ----------------------- ALPINE WOLF SC ---------------------------------- ##
+## ------------------------ ALPINE WOLF SC ---------------------------------- ##
 ## -------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
@@ -44,25 +44,20 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
-## MODEL NAME 
-modelName = "AlpineWolf.SC.0.6"
+modelName = "AlpineWolf.SC.1.1.0"
 thisDir <- file.path(analysisDir, modelName)
-
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
 if(!dir.exists(file.path(thisDir, "input"))){dir.create(file.path(thisDir, "input"))}
 if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "output"))}
 
-
 ## HABITAT SPECIFICATIONS
 habitat = list( resolution = 5000, 
-                buffer = 30000)
+                buffer = 30000,
+                dOK = 100, 
+                dmax = 25)
 
-# ## DETECTORS SPECIFICATIONS
-# detectors = list( resolution = 5000,
-#                   detSubResolution = 1000,
-#                   samplingMonths = c(10:12,1:4))
 
 ## -----------------------------------------------------------------------------
 ## ------ I. LOAD & CLEAN DATA ------
@@ -77,9 +72,10 @@ studyArea <- studyAreaGrid %>%
   st_snap(x = ., y = ., tolerance = 0.0001) %>%
   st_union() 
 
-
 ##---- create raster with desired resolution
-grid.r <- st_as_stars(st_bbox(studyArea), dx = habitat$resolution, dy = habitat$resolution)
+grid.r <- st_as_stars(st_bbox(studyArea),
+                      dx = habitat$resolution,
+                      dy = habitat$resolution)
 ##---- mask and crop
 grid.r <- grid.r[studyArea, ] 
 ##---- convert from stars to sf objects
@@ -92,72 +88,42 @@ grid <- grid[-1]
 
 ##---- create centroids 
 grid$centroids <- st_centroid(grid) %>% 
-  st_geometry() # since you want the centroids in a second geometry col
-# plot(studyAreaGrid["SCR"], add = T)
-
-count <- read_sf(file.path(dataDir,
-                           "GISData/Countries/Countries_WGS84.shp"))
-temp <- count[count$CNTRY_NAME %in% c("Albania",
-                                      "Austria",
-                                      "Bosnia and Herzegovina",
-                                      "Bulgaria",
-                                      #"Czech Republic",
-                                      "France",
-                                      "Germany",
-                                      "Greece",
-                                      "Croatia",
-                                      "Hungary",
-                                      "Macedonia",
-                                      "Malta",
-                                      "Montenegro",
-                                      "Serbia",
-                                      #"Romania",
-                                      "Slovenia",
-                                      "San Marino",
-                                      "Switzerland"), ]
-# plot(st_geometry(temp),col="gray60")
-temp <- st_transform(temp, st_crs(studyArea))
+  st_geometry() 
 
 
-## ------   2. CAMERA TRAPS DATA ------
-##---- Load GPS of Camera Traps
-ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_231201.shp"))
+
+
+## ------   2. CAMERA TRAPS ------
+##---- Load GPS positions of Camera Traps
+ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240213.shp"))
+sum(duplicated(ct[,c("coord_x","coord_y")]))
 
 ##---- Convert dates
 ct$date_st <- parse_date_time(ct$date_st, orders = c('dmy'))
 ct$date_en <- parse_date_time(ct$date_en, orders = c('dmy'))
-
-
-ct$year_st <- as.numeric(format(ct$date_st,"%y"))
-ct$month_st <- as.numeric(format(ct$date_st,"%m"))
-ct$year_en <- as.numeric(format(ct$date_en,"%y"))
-ct$month_en <- as.numeric(format(ct$date_en,"%m"))
 ct$tot_attivi <- as.numeric(ct$tot_attivi) 
 
+##---- Aggregate camera-traps with the same location 
+# ct <- ct %>% group_by(coord_x,coord_y) %>%
+#   summarize(date_st = min(date_st,na.rm = T),
+#             date_en = max(date_en,na.rm = T),
+#             non_workin = sum(`non-workin`, na.rm = T),
+#             tot_attivi = sum(tot_attivi, na.rm = T) 
+#   )
+
+##---- Set-up new identifier for each camera-trap
+ct$id <- paste0("FT", 1:nrow(ct))
+
 ##---- Plot check
-# plot(studyArea, col="steelblue")
-# plot(ct$geometry, col = "red", pch=16, add=T)
-
-##---- Number of pics per CT
-# hist(ct$tot_attivi)
-
-ct_cl <- ct[,c(1,6)]
-ct_cl$id <- paste0("FT", 1:nrow(ct_cl))
-
-ct_cl$coords <- st_coordinates(ct_cl)
-colnames(ct_cl$coords) = c("x", "y")
+plot(studyArea, col = "steelblue")
+plot(ct$geometry, col = "blue", pch = 3, add = T)
 
 
-dimnames(ct_cl$coords) <- list(1:nrow(ct_cl$coords),
-                               c("x","y"))
 
-## ------   3. PICTURES/SIGHTENING DATA ------
-##---- Images from Camera Traps data
-pics_raw <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
-dim(pics_raw)
-# plot(studyArea, col="steelblue")
-# plot(pics_raw$geometry,  col = "blue", pch=16, add=T)
-
+## ------   3. PICTURES/SIGHTNG DATA ------
+##---- Load all images available
+pics <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240213.shp"))
+dim(pics)
 
 ##---- Use lubridate to clean dates
 # The orders argument is a character vector containing the possible date-time parsing 
@@ -165,128 +131,38 @@ dim(pics_raw)
 # will try to parse all strings as Day, Month, Year format. If it can't do that 
 # successfully (for example, the date 2021-03-18 won't work as there is no 2021th day), 
 # it will try the next in the list until all strings are parsed, or all orders exhausted.
-pics_raw$date <- parse_date_time(pics_raw$date, orders = c('dmy','mdy','ymd'))
-pics_raw$Year <- as.numeric(format(pics_raw$date,"%Y"))
-pics_raw$Month <- as.numeric(format(pics_raw$date,"%m"))
-pics_raw$n_lupi <- as.numeric(pics_raw$n_wolves)
+pics$date <- parse_date_time(pics$date, orders = c('dmy','mdy','ymd'))
+pics$Year <- as.numeric(format(pics$date,"%Y"))
+pics$Month <- as.numeric(format(pics$date,"%m"))
+pics$n_wolves <- as.numeric(pics$n_wolves)
 
 ##---- Filter out samples outside the monitoring period
-pics_1 <- filter(pics_raw,Month %in% c(1,2,3,4,10,11,12)) 
-pics_na <- pics_raw[is.na(pics_raw$Month),]
-pics_t <- rbind(pics_1,pics_na)
-dim(pics_t)
-pics_t <- filter(pics_t,C1 %in% 'C1')  
-dim(pics_t)
+##---- Keep NAs (mostly from Val d'Aosta with weird format)
+pics <- filter(pics, Month %in% c(1,2,3,4,10,11,12) | is.na(Month)) 
+dim(pics)
 
-pics_t <- st_join(ct_cl, pics_t)
+##-- Filter out pictures of poor quality
+pics <- filter(pics, C1 %in% 'C1')  
+dim(pics)
 
-
-##---- Aggregate pictures per DAY ----
-pics_d <- pics_t %>% 
-  group_by(day = lubridate::day(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_d$n_wolves)
-dim(pics_d)
-
-
-##---- Aggregate pictures per WEEK ----
-pics_w <- pics_t %>% 
-  group_by(week = lubridate::week(date), id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_w$n_wolves)
-dim(pics_w)
-
-
-##---- Aggregate pictures per MONTH ----
-pics_m <- pics_t %>% 
-  group_by(Month, id) %>% 
-  summarise(n_wolves = max(n_wolves))
-# hist(pics_m$n_wolves)
-dim(pics_m)
-
-
-
-##---- Number of pics per CT 
-# pick whatever dataset you want to use between the aggregations above (months, week, day, raw)
-pics <- pics_t
-
-# same info 
-numDetsPerCT <- table(pics$id)
-# which(is.na(as.numeric(pics_t$id_ct)))
-hist(numDetsPerCT)
-
-##---- Number of at least one detection
-length(numDetsPerCT)
-
-##---- Mean number of detections per CT
-mean(numDetsPerCT)
-
-##---- Number of CT with > 1 detection
-sum(numDetsPerCT > 1)
-max(numDetsPerCT)
-
-
-##---- Maximum number of individuals per CT
-maxDetsPerCT <- pics %>% group_by(id) %>%
-  slice_max(n_wolves, with_ties = FALSE) %>%
-  ungroup() %>%
-  select(id, n_wolves) %>%
-  group_by(id) %>%
-  summarise(n_wolves = sum(n_wolves))
-# Plot
-hist(maxDetsPerCT$n_wolves)
-
-
-#plot(maxDetsPerCT)
-
-##---- mean number of individual detections by CT
-MeanDet <- apply(table(pics$n_wolves, pics$id, useNA = "always"), 2, function(x)sum(x)/sum(x>0))
-hist(MeanDet)
-
-##---- DATA WRANGLING -----
-# Filter out pics with no camera trap ID
-pics_l <- subset(pics, trimws(id) !="")
-
-# Keep only ct_it, and number of wolves detected
-pics_l <- pics_l[, c(2,4,19)]
-# Give index based on detections per CT
-pics_l2 <- pics_l %>%
-  group_by(id) %>%
-  mutate(index = row_number()) %>%
-  ungroup()
-
-det_w <- pics_l2 %>%
-  pivot_wider(names_from = "index", values_from = "n_wolves")
-
-
-det_w <- det_w %>%
-  mutate(tot_wolves = rowSums(pick(4:68), na.rm = TRUE),
-         tot_detections = rowSums(!is.na(pick(4:68))))
-
-det_w <- det_w[,c(2,1,69:70,4:68,3)]
+##---- Create unique picture ID
+pics$uniqueID <- 1:nrow(pics)
 
 ##---- Plot check
-# plot(st_geometry(studyArea), col="steelblue")
-# # plot(st_geometry(countries), col = "gray80",add=T)
-# plot(st_geometry(ct), col = "red", add = T)
-# plot(st_geometry(pics), add = T, pch = 3)
+plot(pics$geometry, col = "black", add = T)
+
+
 
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
 ## ------   1. DETECTORS ------
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
-# Define detectors
-detectors <- ct_cl[,c(4,2,5)]
+detectors <- ct[ ,c("id","tot_attivi")]
+detectors$coords <- st_coordinates(detectors)
+dimnames(detectors$coords) <- list(1:nrow(detectors$coords),
+                                   c("x","y"))
+n.detectors <- nrow(detectors)
 
-
-# plot(st_geometry(studyArea), col="steelblue")
-# # plot(st_geometry(countries), col = "gray80",add=T)
-# plot(detectors$geometry, col="red", add=T)
-# plot(st_geometry(pics), add = T, pch = 3)
-
-
-detectors$n.detectors <- 1:nrow(detectors)
-# st_crs(detectors$buffer) <- st_crs(studyArea)
 
 
 ## ------   2. HABITAT ------
@@ -356,10 +232,11 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 
 
 ##---- Visual plotting to check if everything is right
-# plot(habitat$raster)
-# plot(st_geometry(countries), add = T)
-# plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
-# plot(ct_cl,add=T, col="red")
+plot(habitat$raster)
+plot(st_geometry(countries), add = T)
+plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
+plot(ct,add=T, col="red")
+
 
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
@@ -373,11 +250,89 @@ habitat$scaledCoords <- scaledCoords$coordsHabitatGridCenterScaled
 habitat$loScaledCoords <- habitat$scaledCoords - 0.5
 habitat$upScaledCoords <- habitat$scaledCoords + 0.5
 
-##---- Identify local detectors
+
+
+## ------   4. IDENTIFY LOCAL CAMERA-TRAPS ------
 localObjects <- getLocalObjects(
   habitatMask = habitat$binary,
-  coords = scaledCoords$coordsDataScaled[ ,1:2],
-  dmax = 25)
+  coords = scaledCoords$coordsDataScaled,
+  dmax = habitat$dmax)
+
+
+
+## ------   5. DETECTION DATA ------
+## ------     5.1. ASSIGN PICTURES TO CAMERA-TRAPS ------
+##---- Calculate distance between detections and sub-detectors
+closest <- nn2( st_coordinates(detectors),
+                st_coordinates(pics),
+                k = 1,
+                searchtype = "radius",
+                radius = 30000)
+
+
+##---- Identify and plot pictures to check
+table(closest$nn.dists)
+toCheck <- pics[closest$nn.dists > 0, ]
+
+plot(studyArea, col = "steelblue")
+plot(ct$geometry, col = "blue", pch = 3, add = T)
+plot(pics$geometry, col = "black", add = T)
+plot(pics$geometry[toCheck], col = "red",pch=19, cex = 0.8, add = T)
+
+
+##---- Assign each picture to a camera-trap based on minimum distance
+pics$CT_id <- detectors$id[closest$nn.idx] 
+
+##---- Remove pictures further than 'dOK' from a registered camera trap
+pics <- pics[closest$nn.dists <= habitat$dOK, ]
+
+
+
+
+## ------     5.2. AGGREGATE DATA (NOT FOR NOW) ------
+# ##---- Aggregate pictures per DAY 
+# pics_d <- pics %>% 
+#   group_by(day = lubridate::day(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# hist(pics_d$n_wolves)
+# dim(pics_d)
+# 
+# ##---- Aggregate pictures per WEEK 
+# pics_w <- pics %>% 
+#   group_by(week = lubridate::week(date), id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# hist(pics_w$n_wolves)
+# dim(pics_w)
+# 
+# ##---- Aggregate pictures per MONTH 
+# pics_m <- pics %>% 
+#   group_by(Month, id) %>% 
+#   summarise(n_wolves = max(n_wolves))
+# hist(pics_m$n_wolves)
+# dim(pics_m)
+
+
+
+
+## ------     5.3. DETECTION VECTOR : y ------
+##-- Create a vector of camera-trap specific observations
+y <- y.visits <- rep(0, n.detectors)
+
+##-- Loop over camera-traps
+for(j in 1:nrow(detectors)){
+  ##-- Identify this detector
+  thisCT <- detectors$id[j]
+  ##-- Subset pictures to this camera-trap
+  thesePics <- filter(pics, CT_id == thisCT)
+  if(nrow(thesePics)>0){
+    ##-- Calculate total number of wolves detected at this camera-trap
+    y[j] <- sum(thesePics$n_wolves)
+    ##-- Calculate total number of pictures (=events) at this camera-trap
+    y.visits[j] <- nrow(thesePics)
+  }#if
+}#j
+
+
 
 
 
@@ -386,12 +341,7 @@ localObjects <- getLocalObjects(
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
-  # for(c in 1:n.habCovs){
-  #   betaHab[c] ~ dnorm(0.0,0.01)
-  # }#c
-  
   ##-- Intensity of the AC distribution point process
-  # habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -411,11 +361,10 @@ modelCode <- nimbleCode({
   
   ##---- DEMOGRAPHIC PROCESS  
   psi ~ dunif(0,1)
- 
-  for(i in 1:n.individuals){ 
+  
+  for(i in 1:M){ 
     z[i] ~ dbern(psi)
   }#i 								
-  
   
   
   ##---- DETECTION PROCESS 
@@ -426,51 +375,13 @@ modelCode <- nimbleCode({
   }#j
   
   ## Detection parameters priors
-  ## Here we use informative priors for the sex ratio in the population,
-  ## the proportion of individuals in each class and the corresponding sigm
-  ## values. For this we fit either a Beta (for probability parameters) or a
-  ## Gamma (for strictly positive parameters) to the posterior distributions of rho,
-  ## theta and sigma and use the estimated parameters to generate priors
-  
-  # estBetaParams <- function(mu, var) {
-  #   alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
-  #   beta <- alpha * (1 / mu - 1)
-  #   return(params = list(alpha = alpha, beta = beta))
-  # }
-  # estBetaParams(res$mean$rho, res$sd$rho^2)
-  # estBetaParams(res$mean$theta, res$sd$theta^2)
-  rho ~ dbeta(shape1 = 100.2002, shape2 = 97.04432)
-  
-  theta[1,1] ~ dbeta(shape1 = 35.47846, shape2 =  91.95455) 
-  theta[2,1] ~ dbeta(shape1 = 68.80703, shape2 =  42.35491) 
-  theta[3,1] ~ dbeta(shape1 = 15.16380, shape2 =  132.61544) 
-  theta[1,2] ~ dbeta(shape1 = 29.79081, shape2 =  71.08390) 
-  theta[2,2] ~ dbeta(shape1 = 56.68122, shape2 =  35.12763) 
-  theta[3,2] ~ dbeta(shape1 = 18.53917, shape2 =  193.84141) 
-  
-  # estGammaParams <- function(mu, var) {
-  #   shape <- mu^2 / var
-  #   scale <- var / mu
-  #   return(params = list(shape= shape, scale = scale))
-  # }
-  # estGammaParams(res$mean$sigma, res$sd$sigma^2)
-  sigma[1,1] ~ dgamma(shape = 258.99756, scale = 0.002832009) 
-  sigma[2,1] ~ dgamma(shape = 160.11667, scale = 0.003697056) 
-  sigma[3,1] ~ dgamma(shape = 57.1980, scale = 0.047035717) 
-  sigma[1,2] ~ dgamma(shape = 194.33520, scale = 0.002464172) 
-  sigma[2,2] ~ dgamma(shape = 99.95526, scale = 0.005576009) 
-  sigma[3,2] ~ dgamma(shape = 40.30348, scale = 0.147028831) 
-  
+  sigma ~ dunif(0,10)
   lambda0 ~ dunif(0,10)
   
   for(i in 1:M){ 
-    sex[i] ~ dbern(rho)
-    
-    status[i] ~ dcat(theta[1:3,sex[i]+1])
-    
     lambda[i,1:J] <- calculateLocalLambda(
       lambda0 = lambda0,
-      sigma = sigma[status[i],sex[i]+1],
+      sigma = sigma,
       s = s[i,1:2],
       trapCoords = trapCoords[1:J,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -493,90 +404,69 @@ modelCode <- nimbleCode({
 
 
 ## ------   2. BUNDLE DATA ------
-##---- Set model constants, data & parameter simulated values (==inits)
-M <- 3000
-
+##---- Set model data
 area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
-nimData <- list( y = det_w$tot_wolves,
-                 habIntensity = rep(1,habitat$n.HabWindows),
+M <- 3000
+
+nimData <- list( y = y,
                  area = area,
-                 oper = det_w$tot_attivi,
+                 habIntensity = rep(1,habitat$n.HabWindows),
+                 oper = detectors$tot_attivi,
                  habitatGrid = localObjects$habitatGrid,
                  localTrapsIndices = localObjects$localIndices,
                  localTrapsNum = localObjects$numLocalIndices,
                  trapCoords = detectors$scaledCoords,
                  lowerHabCoords = habitat$loScaledCoords, 
-                 upperHabCoords = habitat$upScaledCoords
-                 #,
-                 # hab.covs = cbind.data.frame(
-                 #   "bare rock" = habitat$grid$`bare rock`,
-                 #   "herbaceous" = habitat$grid$`herbaceous`,
-                 #   "forest" = habitat$grid$`forest`,
-                 #   "pop" = habitat$grid$pop,
-                 #   "IUCN" = habitat$grid$`IUCN`)
-)
+                 upperHabCoords = habitat$upScaledCoords)
 
-
+##---- Set model constants
 nimConstants <- list( M = M,
-                      J = nrow(det_w),
+                      J = length(y),
                       n.habWindows = habitat$n.HabWindows,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
-                      x.max = dim(habitat$matrix)[2]
-                      #,
-                      #n.habCovs = ncol(nimData$hab.covs)
-) 
+                      x.max = dim(habitat$matrix)[2])
 
+##---- Set parameters to track 
+nimParams <- c("N", "D", "lambda0", "sigma", "psi")
+nimParams2 <- c("z", "s")
 
 
 
 ## ------   3. NIMBLE INITIAL VALUES ------
-## Create initial individual AC locations
+##---- Generate initial individual AC locations
 sInits <- matrix(NA, nrow = M, ncol = 2)
 for (i in 1:M) {
   sInits[i, ] <- rbernppAC( n = 1,
                             lowerCoords = nimData$lowerHabCoords,
                             upperCoords = nimData$upperHabCoords,
-                            logIntensities = log(nimData$habIntensity),
-                            logSumIntensity = log(sum(nimData$habIntensity)),
+                            logIntensities = log(rep(1,habitat$n.HabWindows)),
+                            logSumIntensity = log(habitat$n.HabWindows),
                             habitatGrid = nimData$habitatGrid,
                             numGridRows = nimConstants$y.max,
                             numGridCols = nimConstants$x.max)
-}
+}#i
 
-## Create initial number of days operated (only when NA)
-operInits <- rpois( n = nrow(det_w), mean(nimData$oper, na.rm = T))
+##---- Generate initial number of days operated (only when NA)
+operInits <- rpois( n = nrow(detectors), mean(nimData$oper, na.rm = T))
 operInits[!is.na(nimData$oper)] <- NA
 
-## Create a list of random initial values (one set per chain)
+##---- Create a list of random initial values (one set per chain)
 nimInits.list <- list()
 for(c in 1:4){
   nimInits.list[[c]] <- list( 
-    sigma = matrix(c(0.7334833, 0.4788753,
-                     0.5919603, 0.5573514,
-                     2.6903494, 5.9257740), byrow = T, nrow = 3),
+    sigma = 0.6,
     lambda0 = runif(1,0,2),
     oper = operInits,
     s = sInits,
     lambda.oper = 1,
     z = rbinom(M,1,0.6),
-    rho = 0.5,
-    theta = matrix(c(0.2784087, 0.29532485,
-                     0.6189801, 0.61738292,
-                     0.1026112, 0.08729223), byrow = T, nrow = 3),
-    sex = rbinom(M,1,0.5),
-    status = rcat(n = M, prob = c(0.28,0.62,0.1)),
-    psi = 0.6
-    #,
-    #betaHab = rep(0,nimConstants$n.habCovs),
-  )
-}
+    psi = 0.6)
+}#c
 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi", "theta", "rho")#, betaHab)
-nimParams2 <- c("z", "s")
 
 
 
@@ -595,6 +485,7 @@ for(c in 1:4){
 
 
 
+
 ## -----------------------------------------------------------------------------
 ## ------ IV. FIT NIMBLE MODEL -----
 for(c in 1:4){
@@ -608,6 +499,9 @@ for(c in 1:4){
                            check = FALSE,
                            calculate = FALSE) 
   nimModel$calculate()
+  
+  
+  
   
   ##---- Compile the nimble model object to C++
   CsimModel <- compileNimble(nimModel)
@@ -991,7 +885,7 @@ for(s in 1:length(sex)){
 
 
 
-# ## ------     2.2. DENSITY EFFECT PLOT ------
+## ------     2.2. DENSITY EFFECT PLOT ------
 # par(mfrow = c(2,2), mar = c(6,6,0,0))
 # covNames <- names(nimData$hab.covs)# c("alpine", "forest", "IUCN")
 # pred.hab.covs <- apply(nimData$hab.covs,
@@ -1446,148 +1340,3 @@ WA_Italy$summary
 
 
 ##------------------------------------------------------------------------------
-# ## EE
-# pdf(file = file.path(thisDir, paste0(modelName,"_ridge.pdf")),
-#     width = 30, height = 22)
-# ridgeMap( ital.R,
-#           line.col = "white",
-#           fill.col = "lightblue4",
-#           grid.col = "gray80",
-#           scale = 8,
-#           lwd = 2,
-#           plot.margin = unit(c(10,10,20,0),"pt"),
-#           caption = expression(paste(bold("Alpine Wolf ("),
-#                                      italic("Canis lupus"),
-#                                      bold(")"))),
-#           plot.caption = element_text( face = "bold.italic",
-#                                        size = 50,
-#                                        colour = "white",
-#                                        hjust = 0.02))
-# graphics.off()
-
-# g = st_graticule(countries)
-# plot(st_geometry(g), axes = TRUE)
-
-##------------------------------------------------------------------------------
-
-
-##---- PROCESS THE OUTPUT
-n.chains <- length(nimOutput$samples)
-n.iterations <- dim(nimOutput$samples[[1]])[1]
-covNames <- colnames(nimData$hab.covs)
-betas.wide <- data.table(res$sims.list$betaHab)
-dimnames(betas.wide) <- list(NULL, covNames)
-
-zRJ.wide <- data.table(res$sims.list$zRJ)
-dimnames(zRJ.wide) <- list(NULL, covNames)
-
-mods <- apply(zRJ.wide, 1, function(x) {
-  paste(covNames[x == 1], collapse = "+")
-})
-betas.wide$model <- zRJ.wide$model <-
-  gsub("\\(Intercept\\)\\+", "", mods)
-
-
-betas.wide$chain <- zRJ.wide$chain <- rep(1:n.chains, each = n.iterations)
-betas.wide$iteration <- zRJ.wide$iteration <- rep(1:n.iterations, n.chains)
-
-zRJ.df <- melt(zRJ.wide, id.vars = c("iteration", "chain", "model"))
-names(zRJ.df) <- c("iteration", "chain", "model", "variable", "value")
-
-betas.df <-  melt(betas.wide, id.vars = c("iteration", "chain", "model"))
-names(betas.df) <-  c("iteration", "chain", "model", "variable", "value")
-
-betas.df$value[zRJ.df$value == 0] <- NA
-
-betas.aggr <- betas.df %>%
-  group_by(variable) %>%
-  summarise(p.inclusion = mean(!is.na(value)))
-
-betas.df <- merge(betas.df, betas.aggr)
-
-included <- zRJ.df$value == 1
-
-betas.df <- betas.df[included, ]
-zRJ.df <- zRJ.df[included, ]
-
-betas.df <- betas.df[order(betas.df$variable, betas.df$model, betas.df$chain),]
-zRJ.df <- zRJ.df[order(zRJ.df$variable, zRJ.df$model, zRJ.df$chain),]
-
-myfun1 <- function(x) 1:length(x)
-
-temp <- betas.df %>% group_by(variable, model, chain) %>%
-  summarize(iteration.model = myfun1(value))
-
-betas.df$iteration.model <- temp$iteration.model
-
-aggr <- data.frame(table(betas.df$model) / length(betas.df$model))
-names(aggr) <- c("model", "weight")
-
-betas.df <- merge(betas.df, aggr)
-
-
-
-
-##---- MODEL TALLY
-aggr <- aggr[order(aggr$weight, decreasing = TRUE),]
-aggr$model <- factor(aggr$model, levels = aggr$model)
-ggplot(data = aggr,
-       mapping =  aes(x = model, y = weight, alpha = weight)) +
-  
-  geom_col(fill =
-             "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
-             )) + ylab("Weight") + xlab("Models")
-
-
-
-
-##---- COEFFICIENT TRACE PLOTS (OVERALL)
-ggplot(data = betas.df, aes(
-  x = iteration,
-  y = value,
-  color = factor(chain)
-)) +
-  geom_line() +
-  facet_wrap(~ variable, scales = "free") +
-  xlab("Iteration") +  theme(legend.position = "none")
-
-
-
-
-##---- COEFFICIENT TRACE PLOTS (MODEL-SPECIFIC)
-ggplot(data = betas.df, aes(
-  x = iteration.model,
-  y = value,
-  color = factor(chain)
-)) +
-  geom_line() +
-  facet_grid(variable ~ model, margins = FALSE, scales = "free") +
-  xlab("Iteration") +  theme(legend.position = "none")
-
-
-
-
-##---- PLOT COEFFICIENT ESTIMATES (OVERALL)
-ggplot(betas.df, aes(value, variable, alpha = p.inclusion)) +
-  geom_violin(
-    draw_quantiles = c(0.025, 0.5, 0.975),
-    fill = "turquoise",
-    color = grey(1)
-  ) +
-  geom_vline(xintercept = 0)
-
-
-
-
-##---- PLOT COEFFICIENT ESTIMATES (MODEL-SPECIFIC)
-ggplot(betas.df, aes(value, variable, alpha = weight)) +
-  geom_violin(
-    draw_quantiles = c(0.025, 0.5, 0.975),
-    fill = "magenta",
-    color = grey(1)
-  ) +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~ model)
