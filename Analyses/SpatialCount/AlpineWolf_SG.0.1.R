@@ -131,7 +131,7 @@ plot(ct$geometry, col = "blue", pch = 3, add = T)
 
 
 
-## ------   3. PICTURES/SIGHTENING DATA ------
+## ------   3. PICTURES DATA ------
 ##---- Load all images available
 pics <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_231201.shp"))
 dim(pics)
@@ -150,26 +150,25 @@ pics$Year <- as.numeric(format(pics$date,"%Y"))
 pics$Month <- as.numeric(format(pics$date,"%m"))
 pics$n_wolves <- as.numeric(pics$n_wolves)
 
-##---- Filter out samples outside the monitoring period
-##---- Keep NAs (mostly from val d'aosta with weird format)
+##---- Filter out pictures outside the monitoring period
+##---- Keep NAs (mostly from Val d'Aosta with weird format)
 pics <- filter(pics, Month %in% c(1,2,3,4,10,11,12) | is.na(Month)) 
-dim(pics)
 
 ##-- Filter out pictures of poor quality
 pics <- filter(pics, C1 %in% 'C1')  
-dim(pics)
 
 ##---- Create unique picture ID
 pics$uniqueID <- 1:nrow(pics)
 
-##---- Join pictures and camera-trap locations (using a 10m buffer)
-##---- This operation filters out all pictures that are not linked to a verified camera-trap
+##---- Join pictures and camera-trap locations 
+##---- This operation filters out all pictures that are not linked to a verified
+##---- camera-trap
 pics_joined <- st_join(ct[ ,"id"], pics)
 pics_joined <- pics_joined[!is.na(pics_joined$uniqueID), ]
-plot(pics_joined$geometry, col = "green",add=T,pch=19)
+plot(pics_joined$geometry, col = "green", add = T, pch = 19)
 
 pics_to_check <- pics[!pics$uniqueID %in%pics_joined$uniqueID, ]
-plot(pics_to_check$geometry, col = "red",add=T,pch = 19)
+plot(pics_to_check$geometry, col = "red", add = T, pch = 19)
 
 
 pics <- pics_joined
