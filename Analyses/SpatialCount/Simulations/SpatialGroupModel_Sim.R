@@ -163,6 +163,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
   ##-- Output
   return(list( "Y" = Y,
                "n.groups" = n.groups,
+               "N" = sum(GS),
                "n.traps" = n.traps,
                "n.occasions" = n.occasions,
                "groupSize" = GS, 
@@ -176,17 +177,17 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
 
 
 ## -----   1.2. SIMULATE DATA ------
-testSim <- sim.SGM( n.groups = 12,         ## Number of groups
+testSim <- sim.SGM( n.groups = 15,         ## Number of groups
                     n.occasions = 6,       ## Number of detection occasions
                     p0 = 0.75,             ## Baseline probability of visit 
                     sigma = 1.5,           ## Scale parameter
-                    lambda = 3,            ## Mean group size in the population
+                    lambda = 7,            ## Mean group size in the population
                     alpha = 0.85,          ## Cohesion of the group (probability to detect X ids together)
-                    traps_dim = c(10,10))
+                    traps_dim = c(8,10))
 
 
-sum(testSim$groupSize)
-
+testSim$N
+testSim$groupSize
 
 
 ## -----   1.3. BUNDLE DATA ------

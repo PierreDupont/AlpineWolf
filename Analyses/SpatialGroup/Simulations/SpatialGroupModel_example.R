@@ -157,7 +157,7 @@ hist(apply(testSim$visits,1,sum),breaks = seq(-0.5,20.5,1))
 
 
 ## ----------------------------------------------------------------------------
-## ----- 2. NIMBLE MODEL ------
+## ----- 2. SPATIAL GROUP MODEL ------
 ## -----   2.1. CUSTOM NIMBLE FUNCTIONS -----
 ## This function calculates the probability of detection of a group using a half-normal detection function
 ## It uses an indicator to make calculation faster (skips calculations for augmented groups)
@@ -250,7 +250,7 @@ dgroupDet <- nimbleFunction(
 
 
 
-## -----   2.2. SPATIAL GROUP MODEL DEFINITION  -----
+## -----   2.2. MODEL DEFINITION  -----
 modelCode <- nimbleCode({
   ##---- SPATIAL PROCESS  
   for(g in 1:G){
@@ -354,6 +354,116 @@ system.time(nimOutput <- runMCMC(CmodelMCMC,
                             nchains = 1,
                             nburnin = 0,
                             samplesAsCodaMCMC = T))
+plot(nimOutput)
+
+
+
+## ----------------------------------------------------------------------------
+## ----- 3. SPATIAL COUNT MODEL ------
+## -----   2.2. MODEL DEFINITION  -----
+modelCode <- nimbleCode({
+  ##---- SPATIAL PROCESS  
+  for(g in 1:G){
+    s[g,1] ~ dunif(xlim[1], xlim[2])
+    s[g,2] ~ dunif(ylim[1], ylim[2])
+  }#g
+  
+  
+  ##---- DEMOGRAPHIC PROCESS 
+  psi ~ dunif(0,1)
+  lambda ~ dunif(0,10)
+  
+  for(g in 1:G){
+    z[g] ~ dbern(psi)
+    groupSize[g] ~ T(dpois(lambda),1,20 )
+  }#g
+  
+  
+  ##---- DETECTION PROCESS
+  sigma ~ dunif(0,10)
+  p0 ~ dunif(0,1)
+  alpha ~ dunif(0,1) ## cohesion parameter (proportion of the group detected together)
+  
+  ##-- Calculate individual detection prob. at all traps
+  for(i in 1:G){ 
+    p[i,1:J] <- calculateP(
+      p0 = p0,
+      sigma = sigma,
+      s = s[i,1:2],
+      trapCoords = trapCoords[1:J,1:2],
+      indicator = z[i])
+  }#i
+  
+  ##-- Detection probability of one group (= probability of visit for now)
+  for(j in 1:J){
+    for(k in 1:K){
+      y[j,k] ~ dgroupDet( 
+        size = groupSize[1:G],        
+        p = p[1:G,j],
+        alpha = alpha,
+        indicator = z[1:G])
+    }#k
+  }#j
+  
+  
+  ##-- DERIVED PARAMETERS 
+  n.groups <- sum(z[1:G])
+  N <- sum(z[1:G]*groupSize[1:G])
+})
+
+
+
+## -----   2.3. BUNDLE DATA ------
+##-- Nimble data
+nimData <- list( y = testSim$Y)
+
+##-- Nimble constants
+nimConstants <- list( G = testSim$n.groups*2,
+                      J = testSim$n.traps,
+                      K = testSim$n.occasions,
+                      trapCoords = as.matrix(testSim$trapCoords),
+                      xlim = testSim$habitatBoundaries$x,
+                      ylim = testSim$habitatBoundaries$y)
+
+
+##-- Nimble inits
+s.init <- rbind(testSim$S,
+                testSim$S)
+z.init <- c(rep(1,testSim$n.groups),
+            rep(0,testSim$n.groups))
+groupSize.init <- c(testSim$groupSize,
+                    testSim$groupSize)
+nimInits <- list( p0 = runif(1,0,1),
+                  p = matrix(0.05,
+                             nrow = nimConstants$G,
+                             ncol = nimConstants$J),
+                  psi = 0.5,
+                  sigma = 0.5,           
+                  lambda = 3,            
+                  alpha = 0.75,
+                  groupSize = groupSize.init,
+                  z = z.init,
+                  s = s.init)
+
+
+
+## -----   2.4. FIT MODEL ------
+model <- nimbleModel( code = modelCode,
+                      constants = nimConstants,
+                      data = nimData,
+                      inits = nimInits)
+Cmodel <- compileNimble(model)
+Cmodel$calculate()
+modelConf <- configureMCMC( model,
+                            monitors = c( "N", "n.groups", "lambda",
+                                          "psi", "p0", "sigma", "alpha"))
+modelMCMC <- buildMCMC(modelConf)
+CmodelMCMC <- compileNimble(modelMCMC, project = model)
+system.time(nimOutput <- runMCMC(CmodelMCMC,
+                                 niter = 1000,
+                                 nchains = 1,
+                                 nburnin = 0,
+                                 samplesAsCodaMCMC = T))
 plot(nimOutput)
 
 
