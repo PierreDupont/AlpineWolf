@@ -167,6 +167,7 @@ sim.SGM <- function(n.groups = 10,                ## Number of groups
                "n.occasions" = n.occasions,
                "groupSize" = GS, 
                "S" = S,
+               "Density" = Dens,
                "trapCoords" = trapCoords,
                "habitatBoundaries" = list("x" = c(Xl,Xu),
                                           "y" = c(Yl,Yu)),
@@ -615,4 +616,4 @@ plot(out2)
 
 
 
-## ----------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
