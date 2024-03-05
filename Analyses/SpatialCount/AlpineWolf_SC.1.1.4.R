@@ -44,7 +44,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
-modelName = "AlpineWolf.SC.1.1.3"
+modelName = "AlpineWolf.SC.1.1.4"
 thisDir <- file.path(analysisDir, modelName)
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
@@ -407,20 +407,23 @@ localObjects <- getLocalObjects(
 
 ## ------   5. DETECTION DATA ------
 ## ------     5.1. ASSIGN PICTURES TO CAMERA-TRAPS ------
-##---- Calculate distance between dpictures and camera-traps
+##---- Calculate distance between detections and sub-detectors
 closest <- nn2( st_coordinates(detectors),
                 st_coordinates(pics),
                 k = 1,
                 searchtype = "radius",
                 radius = 30000)
-table(closest$nn.dists)
+
 
 ##---- Identify and plot pictures to check
+table(closest$nn.dists)
 toCheck <- pics[closest$nn.dists > 0, ]
+
 plot(studyArea, col = "steelblue")
 plot(ct$geometry, col = "blue", pch = 3, add = T)
 plot(pics$geometry, col = "black", add = T)
 plot(pics$geometry[toCheck], col = "red",pch=19, cex = 0.8, add = T)
+
 
 ##---- Assign each picture to a camera-trap based on minimum distance
 pics$CT_id <- detectors$id[closest$nn.idx] 
@@ -482,10 +485,18 @@ for(j in 1:nrow(detectors)){
 ## ------ III. NIMBLE ------- 
 ## ------   1. MODEL ------
 modelCode <- nimbleCode({
-  ##---- SPATIAL PROCESS  
-  for(c in 1:n.habCovs){
-    betaHab[c] ~ dnorm(0.0,0.01)
-  }#c
+  ##---- SPATIAL PROCESS 
+  
+  ## Detection parameters priors
+  ## Here we use informative priors for the density coefficients in the population,
+  ## For this, we use the posteriror distributions from SCR model 5.2 
+  ## and assume a normal distribution for all parameters:
+  betaHab[1] ~ dnorm(mean = -0.4474160 ,sd = 0.5159668)
+  betaHab[2] ~ dnorm(mean = 2.3557671, sd = 0.6724122)
+  betaHab[3] ~ dnorm(mean = 0.4860105, sd = 0.4137646)
+  betaHab[4] ~ dnorm(mean = -0.6651538, sd = 0.3062847)
+  betaHab[5] ~ dnorm(mean = 0.6320824, sd = 0.0582289)
+  
   
   ##-- Intensity of the AC distribution point process
   habIntensity[1:n.habWindows] <- exp( hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHab[1:n.habCovs])
@@ -521,52 +532,16 @@ modelCode <- nimbleCode({
     oper[j] ~ T(dpois(lambda.oper),1, )
   }#j
   
-  ## Detection parameters priors
-  ## Here we use informative priors for the sex ratio in the population,
-  ## the proportion of individuals in each class and the corresponding sigm
-  ## values. For this we fit either a Beta (for probability parameters) or a
-  ## Gamma (for strictly positive parameters) to the posterior distributions of rho,
-  ## theta and sigma and use the estimated parameters to generate priors
-  
-  # estBetaParams <- function(mu, var) {
-  #   alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
-  #   beta <- alpha * (1 / mu - 1)
-  #   return(params = list(alpha = alpha, beta = beta))
-  # }
-  # estBetaParams(res$mean$rho, res$sd$rho^2)
-  # estBetaParams(res$mean$theta, res$sd$theta^2)
-  rho ~ dbeta(shape1 = 100.2002, shape2 = 97.04432)
-  
-  theta[1,1] ~ dbeta(shape1 = 35.47846, shape2 =  91.95455) 
-  theta[2,1] ~ dbeta(shape1 = 68.80703, shape2 =  42.35491) 
-  theta[3,1] ~ dbeta(shape1 = 15.16380, shape2 =  132.61544) 
-  theta[1,2] ~ dbeta(shape1 = 29.79081, shape2 =  71.08390) 
-  theta[2,2] ~ dbeta(shape1 = 56.68122, shape2 =  35.12763) 
-  theta[3,2] ~ dbeta(shape1 = 18.53917, shape2 =  193.84141) 
-  
-  # estGammaParams <- function(mu, var) {
-  #   shape <- mu^2 / var
-  #   scale <- var / mu
-  #   return(params = list(shape= shape, scale = scale))
-  # }
-  # estGammaParams(res$mean$sigma, res$sd$sigma^2)
-  sigma[1,1] ~ dgamma(shape = 258.99756, scale = 0.002832009) 
-  sigma[2,1] ~ dgamma(shape = 160.11667, scale = 0.003697056) 
-  sigma[3,1] ~ dgamma(shape = 57.1980, scale = 0.047035717) 
-  sigma[1,2] ~ dgamma(shape = 194.33520, scale = 0.002464172) 
-  sigma[2,2] ~ dgamma(shape = 99.95526, scale = 0.005576009) 
-  sigma[3,2] ~ dgamma(shape = 40.30348, scale = 0.147028831) 
-  
+  ## Use informative prior distribution for sigma
+  ## Shape and scale of the gamma distribution derived from the population average of the SCR
+  sigma ~ dgamma( shape = 1.053087,
+                  scale = 1.926761)
   lambda0 ~ dunif(0,10)
   
   for(i in 1:M){ 
-    sex[i] ~ dbern(rho)
-    
-    status[i] ~ dcat(theta[1:3,sex[i]+1])
-    
     lambda[i,1:J] <- calculateLocalLambda(
       lambda0 = lambda0,
-      sigma = sigma[status[i],sex[i]+1],
+      sigma = sigma,
       s = s[i,1:2],
       trapCoords = trapCoords[1:J,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -622,7 +597,7 @@ nimConstants <- list( M = M,
                       n.habCovs = ncol(nimData$hab.covs))
 
 ##---- Set parameters to track 
-nimParams <- c("N", "D", "lambda0", "sigma", "psi", "theta", "rho", "betaHab")
+nimParams <- c("N", "D", "lambda0", "sigma", "psi", "betaHab")
 nimParams2 <- c("z", "s")
 
 
@@ -646,39 +621,16 @@ for (i in 1:M) {
 operInits <- rpois( n = nrow(detectors), mean(nimData$oper, na.rm = T))
 operInits[!is.na(nimData$oper)] <- NA
 
-# ##---- Create initial lambda
-# for(i in 1:nimConstants$M){
-#   nimModel$lambda[i,1:nimConstants$J] <- calculateLocalLambda(
-#     lambda0 = nimModel$lambda0,
-#     sigma = nimModel$sigma[nimModel$status[i],nimModel$sex[i]+1],
-#     s = nimModel$s[i,1:2],
-#     trapCoords = nimData$trapCoords,
-#     localTrapsIndices = nimData$localTrapsIndices,
-#     localTrapsNum = nimData$localTrapsNum,
-#     resizeFactor = 1,
-#     habitatGrid = nimData$habitatGrid,
-#     indicator = nimModel$z[i])
-# }#i 
-
 ##---- Create a list of random initial values (one set per chain)
 nimInits.list <- list()
 for(c in 1:4){
   nimInits.list[[c]] <- list( 
-    sigma = matrix(c(0.7334833, 0.4788753,
-                     0.5919603, 0.5573514,
-                     2.6903494, 5.9257740), byrow = T, nrow = 3),
+    sigma = 0.734833,
     lambda0 = runif(1,0,2),
-    # lambda = lambdaInits,
     oper = operInits,
     s = sInits,
     lambda.oper = 1,
     z = rbinom(M,1,0.6),
-    rho = 0.5,
-    theta = matrix(c(0.2784087, 0.29532485,
-                     0.6189801, 0.61738292,
-                     0.1026112, 0.08729223), byrow = T, nrow = 3),
-    sex = rbinom(M,1,0.5),
-    status = rcat(n = M, prob = c(0.28,0.62,0.1)),
     psi = 0.6,
     betaHab = rep(0,nimConstants$n.habCovs),
     habIntensity = rep(1,habitat$n.HabWindows))
@@ -761,7 +713,7 @@ nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-traceplot(nimOutput)
+plot(nimOutput)
 graphics.off()
 
 
