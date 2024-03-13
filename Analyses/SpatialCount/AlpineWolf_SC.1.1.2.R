@@ -705,7 +705,7 @@ nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput)
+plot(nimOutput$samples)
 graphics.off()
 
 
