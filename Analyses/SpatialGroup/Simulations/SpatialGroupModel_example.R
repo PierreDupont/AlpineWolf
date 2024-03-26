@@ -1,6 +1,6 @@
 
 ## The goal is to further develop the spatial count model (AKA the unmarked SCR) 
-## based on camera trap data fro group-living species. The general idea is to 
+## based on camera trap data for group-living species. The general idea is to 
 ## leverage the information contained in camera-trap pictures when multiple 
 ## individuals are detected together.
 
