@@ -27,8 +27,8 @@ outPath <- file.path("output")     ## Directory to store processed output files
 
 
 ## ------ III. FIT NIMBLE MODEL -----
-for(c in 1:4){
-  load( file.path(thisDir, "input", paste0(modelName,"_", c ,".RData")))
+
+load( file.path(inPath, paste0(modelName, "_", c_value, ".RData")))
   
   ##---- Create the nimble model object
   nimModel <- nimbleModel( code = modelCode,
@@ -71,6 +71,6 @@ for(c in 1:4){
                   save.rds = TRUE))  
   
   print(mcmcRuntime)
-}#c 
+
 
 
