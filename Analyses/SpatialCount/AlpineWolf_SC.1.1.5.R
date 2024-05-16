@@ -64,6 +64,7 @@ habitat = list( resolution = 5000,
 ## ------   1. STUDY AREA ------
 ##---- Polygon of Italy and neighbouring countries
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
+regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
 
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
@@ -766,7 +767,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
+                               burnin = 20)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
@@ -800,6 +801,11 @@ habitat.id <- matrix( data = 1:ncell(habitat.r),
                       ncol = dim(habitat.r)[2],
                       byrow = TRUE)
 
+##---- Create "ITALY" habitat raster (for density estimates)
+habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
+habitat$Italia[habitat$Italia == 0] <- NA
+
+
 ##---- Create a matrix of admin units binary indicators
 ##---- (rows == regions ; columns == habitat raster cells)
 hab.rgmx <- rbind(habitat$raster[] == 1)
@@ -819,6 +825,7 @@ WA_Density <- GetDensity(
 
 ##---- Create a matrix of italy 
 ##---- (rows == regions ; columns == habitat raster cells)
+regions$ID <- as.double(1:8)
 regions.r <- fasterize(sf = st_as_sf(regions),
                        raster = habitat.r,
                        field = "ID",
@@ -832,15 +839,15 @@ regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] ==
 regions.rgmx[is.na(regions.rgmx)] <- 0
 row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
 
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$Italia - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
+# alps.r <- fasterize(sf = st_as_sf(alps),
+#                     raster = habitat.r,
+#                     background = 0)
+# alps.r <- alps.r + habitat$Italia - 1
+# plot(alps.r)
+# table(alps.r[], useNA = "always")
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
 
 
 ##---- Calculate overall density
@@ -852,6 +859,10 @@ WA_Italy <- GetDensity(
   aliveStates = 1,
   returnPosteriorCells = T,
   regionID = regions.rgmx)
+
+save(WA_Italy, 
+     file = file.path(thisDir, paste0(modelName,"_posterior.RData")))
+
 
 WA_status <- list()
 for(s in 0:1){
@@ -889,30 +900,7 @@ WA_Comp <- GetDensity(
   regionID = comp.rgmx)
 
 
-##---- Create a matrix of Wolf Presence grid 
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = 0)
-regions.r <- regions.r + habitat$extraction - 1
-plot(regions.r)
-table(regions.r[], useNA = "always")
 
-regions.unique <- na.omit(unique(regions.r[]))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$extraction - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Calculate density
 WA_Extract <- GetDensity(
@@ -974,6 +962,7 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
                      round(WA_Italy$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
+dev.off()
 
 ##---- Plot density raster for comparison between models
 comp.R <- habitat.r

@@ -593,6 +593,7 @@ WA_Density <- GetDensity(
 
 ##---- Create a matrix of italy 
 ##---- (rows == regions ; columns == habitat raster cells)
+regions$ID <- as.double(1:8)
 regions.r <- fasterize(sf = st_as_sf(regions),
                        raster = habitat.r,
                        field = "ID",
@@ -606,15 +607,15 @@ regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] ==
 regions.rgmx[is.na(regions.rgmx)] <- 0
 row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
 
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$Italia - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
+# alps.r <- fasterize(sf = st_as_sf(alps),
+#                     raster = habitat.r,
+#                     background = 0)
+# alps.r <- alps.r + habitat$Italia - 1
+# plot(alps.r)
+# table(alps.r[], useNA = "always")
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
 
 
 ##---- Calculate overall density
@@ -627,66 +628,46 @@ WA_Italy <- GetDensity(
   returnPosteriorCells = T,
   regionID = regions.rgmx)
 
-WA_status <- list()
-for(s in 0:1){
-  WA_status[[s+1]] <- list()
-  for(ss in 1:3){
-    status <- (res_sxy$sims.list$z == 1) &
-      (res_sxy$sims.list$sex == s) &
-      (res_sxy$sims.list$status == ss)
-    
-    WA_status[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[ , ,1],
-      sy = res_sxy$sims.list$s[ , ,2],
-      z = status,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = T,
-      regionID = regions.rgmx)
-  }
-}
+save(WA_Italy, 
+     file = file.path(thisDir, paste0(modelName,"_posterior.RData")))
 
-##---- Create a matrix of admin units binary indicators
-##---- (rows == regions ; columns == habitat raster cells)
-comp.rgmx <- rbind(habitat$comparison[] == 1)
-comp.rgmx[is.na(comp.rgmx)] <- 0
-row.names(comp.rgmx) <- "comparison"
+# # WA_status <- list()
+# # for(s in 0:1){
+# #   WA_status[[s+1]] <- list()
+# #   for(ss in 1:3){
+# #     status <- (res_sxy$sims.list$z == 1) &
+# #       (res_sxy$sims.list$sex == s) &
+# #       (res_sxy$sims.list$status == ss)
+# #     
+# #     WA_status[[s+1]][[ss]] <- GetDensity(
+# #       sx = res_sxy$sims.list$s[ , ,1],
+# #       sy = res_sxy$sims.list$s[ , ,2],
+# #       z = status,
+# #       IDmx = habitat.id,
+# #       aliveStates = 1,
+# #       returnPosteriorCells = T,
+# #       regionID = regions.rgmx)
+# #   }
+# # }
+# 
+# ##---- Create a matrix of admin units binary indicators
+# ##---- (rows == regions ; columns == habitat raster cells)
+# comp.rgmx <- rbind(habitat$comparison[] == 1)
+# comp.rgmx[is.na(comp.rgmx)] <- 0
+# row.names(comp.rgmx) <- "comparison"
+# 
+# ##---- Calculate density
+# WA_Comp <- GetDensity(
+#   sx = res_sxy$sims.list$s[ , ,1],
+#   sy = res_sxy$sims.list$s[ , ,2],
+#   z = res_sxy$sims.list$z,
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = T,
+#   regionID = comp.rgmx)
 
-##---- Calculate density
-WA_Comp <- GetDensity(
-  sx = res_sxy$sims.list$s[ , ,1],
-  sy = res_sxy$sims.list$s[ , ,2],
-  z = res_sxy$sims.list$z,
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = T,
-  regionID = comp.rgmx)
 
 
-##---- Create a matrix of Wolf Presence grid 
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = 0)
-regions.r <- regions.r + habitat$extraction - 1
-plot(regions.r)
-table(regions.r[], useNA = "always")
-
-regions.unique <- na.omit(unique(regions.r[]))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$extraction - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Calculate density
 WA_Extract <- GetDensity(
@@ -747,7 +728,6 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
                      " [", round(WA_Italy$summary["Total",4],1), " ; ",
                      round(WA_Italy$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
-
 
 ##---- Plot density raster for comparison between models
 comp.R <- habitat.r

@@ -762,6 +762,7 @@ WA_Density <- GetDensity(
 
 ##---- Create a matrix of italy 
 ##---- (rows == regions ; columns == habitat raster cells)
+regions$ID <- as.double(1:8)
 regions.r <- fasterize(sf = st_as_sf(regions),
                        raster = habitat.r,
                        field = "ID",
@@ -774,16 +775,16 @@ regions.unique <- na.omit(unique(regions.r[]))
 regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
 regions.rgmx[is.na(regions.rgmx)] <- 0
 row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$Italia - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
+# 
+# alps.r <- fasterize(sf = st_as_sf(alps),
+#                     raster = habitat.r,
+#                     background = 0)
+# alps.r <- alps.r + habitat$Italia - 1
+# plot(alps.r)
+# table(alps.r[], useNA = "always")
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
 
 
 ##---- Calculate overall density
@@ -795,6 +796,10 @@ WA_Italy <- GetDensity(
   aliveStates = 1,
   returnPosteriorCells = T,
   regionID = regions.rgmx)
+
+save(WA_Italy, 
+     file = file.path(thisDir, paste0(modelName,"_posterior.RData")))
+
 
 WA_status <- list()
 for(s in 0:1){
@@ -832,30 +837,6 @@ WA_Comp <- GetDensity(
   regionID = comp.rgmx)
 
 
-##---- Create a matrix of Wolf Presence grid 
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = 0)
-regions.r <- regions.r + habitat$extraction - 1
-plot(regions.r)
-table(regions.r[], useNA = "always")
-
-regions.unique <- na.omit(unique(regions.r[]))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$extraction - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Calculate density
 WA_Extract <- GetDensity(
@@ -917,6 +898,8 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
                      round(WA_Italy$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
+dev.off()
+writeRaster(ital.R, "SC.1.1.4.tif")
 
 ##---- Plot density raster for comparison between models
 comp.R <- habitat.r
