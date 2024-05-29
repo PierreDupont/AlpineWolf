@@ -757,7 +757,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
+                               burnin = 20)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
@@ -810,6 +810,7 @@ WA_Density <- GetDensity(
 
 ##---- Create a matrix of italy 
 ##---- (rows == regions ; columns == habitat raster cells)
+regions$ID <- as.double(1:8)
 regions.r <- fasterize(sf = st_as_sf(regions),
                        raster = habitat.r,
                        field = "ID",
@@ -881,29 +882,29 @@ WA_Comp <- GetDensity(
 
 
 ##---- Create a matrix of Wolf Presence grid 
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = 0)
-regions.r <- regions.r + habitat$extraction - 1
-plot(regions.r)
-table(regions.r[], useNA = "always")
-
-regions.unique <- na.omit(unique(regions.r[]))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$extraction - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
+# ##---- (rows == regions ; columns == habitat raster cells)
+# regions.r <- fasterize(sf = st_as_sf(regions),
+#                        raster = habitat.r,
+#                        field = "ID",
+#                        background = 0)
+# regions.r <- regions.r + habitat$extraction - 1
+# plot(regions.r)
+# table(regions.r[], useNA = "always")
+# 
+# regions.unique <- na.omit(unique(regions.r[]))
+# regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
+# regions.rgmx[is.na(regions.rgmx)] <- 0
+# row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
+# 
+# alps.r <- fasterize(sf = st_as_sf(alps),
+#                     raster = habitat.r,
+#                     background = 0)
+# alps.r <- alps.r + habitat$extraction - 1
+# plot(alps.r)
+# table(alps.r[], useNA = "always")
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Calculate density
 WA_Extract <- GetDensity(
@@ -965,7 +966,7 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
                      round(WA_Italy$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
-
+dev.off()
 ##---- Plot density raster for comparison between models
 comp.R <- habitat.r
 comp.R[ ] <- WA_Comp$MeanCell
@@ -1001,7 +1002,7 @@ mtext( text = paste( "N = ", round(WA_Extract$summary["Total",1],1),
                      round(WA_Extract$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
-
+dev.off()
 ## ------  REALIZED vs. PREDICTED DENSITY  
 ##-- Calculate relative density
 relativeDens.r <- meanDensity.R

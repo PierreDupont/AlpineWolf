@@ -184,7 +184,7 @@ for (frac in sim_names){
     transectsToKeep <- trans %>%
       mutate(ID = row_number()) %>%  #Applying row_number function and obtaining the indexes
       group_by(trans$PROVINCIA)%>%  # Grouping for provinces
-      slice_sample(prop = frac)    # subsampling given proportions of dataset                       
+      slice_sample(prop = 0.75)    # subsampling given proportions of dataset                       
    
     pathsToKeep <- filter(transects, transect_i %in% transectsToKeep$ID_APP)
     
@@ -194,7 +194,7 @@ for (frac in sim_names){
     
       trans3 <- pathsToKeep %>% 
       group_by(transect_i) %>%
-      slice(sample(1:n(), pmin(num, n()))) 
+      slice(sample(1:n(), pmin(3, n()))) 
       
     trans3_b <- filter(trans_buf, path_id %in% trans3$path_id)
     # trans3_b <- st_buffer(trans3, dist = 500)
