@@ -115,8 +115,9 @@ ct$tot_attivi <- as.numeric(ct$tot_attivi)
 ct$id <- paste0("FT", 1:nrow(ct))
 
 ##---- Plot check
-plot(studyArea, col = "steelblue")
-plot(ct$geometry, col = "blue", pch = 3, add = T)
+plot(studyArea, col = "lightcyan3", border = F)
+# dodgerblue3
+plot(ct$geometry, col = "cornflowerblue", pch = 20, add = T)
 
 
 
@@ -149,8 +150,8 @@ dim(pics)
 pics$uniqueID <- 1:nrow(pics)
 
 ##---- Plot check
-plot(pics$geometry, col = "black", add = T)
-
+plot(pics$geometry, col = "palegreen1", pch = '*',  add = T)
+# lightskyblue3
 
 
 ## -----------------------------------------------------------------------------
