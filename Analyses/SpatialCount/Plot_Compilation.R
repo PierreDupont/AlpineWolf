@@ -56,7 +56,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res00 <- WA_Italy
 N00 <- res00$PosteriorAllRegions
 N_00 <- data.frame(N = N00,
-                   model = "A.W.0")
+                   model = "AW1")
 
 modelName = "AlpineWolf.SC.1.1.1"
 thisDir <- file.path(analysisDir, modelName)
@@ -64,7 +64,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res01 <- WA_Italy
 N01 <- res01$PosteriorAllRegions
 N_01 <- data.frame(N = N01,
-                   model = "A.W.1")
+                   model = "AW2")
 
 modelName = "AlpineWolf.SC.1.1.2"
 thisDir <- file.path(analysisDir, modelName)
@@ -72,7 +72,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res02 <- WA_Italy
 N02 <- res02$PosteriorAllRegions
 N_02 <- data.frame(N = N02,
-                   model = "A.W.2")
+                   model = "AW3")
 
 modelName = "AlpineWolf.SC.1.1.4"
 thisDir <- file.path(analysisDir, modelName)
@@ -80,7 +80,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res03 <- WA_Italy
 N03 <- res03$PosteriorAllRegions
 N_03 <- data.frame(N = N03,
-                   model = "A.W.3")
+                   model = "AW4")
 
 modelName = "AlpineWolf.SC.1.1.5"
 thisDir <- file.path(analysisDir, modelName)
@@ -88,7 +88,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res04 <- WA_Italy
 N04 <- res04$PosteriorAllRegions
 N_04 <- data.frame(N = N04,
-                   model = "A.W.4")
+                   model = "AW5")
 
 
 N_all <- rbind(N_00, N_01, N_02, N_03, N_04)

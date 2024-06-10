@@ -29,6 +29,7 @@ if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "out
 library(nimble)
 library(R.utils)
 library(coda)
+library(ggplot2)
 # library(nimbleSCR)
 sourceDirectory(file.path(gitDir,"Source"), modifiedOnly=FALSE)
 
@@ -474,5 +475,15 @@ ggplot(data = output.df,
        aes(x = as.factor(lambda) ,
            y = RB.N,
            fill = as.character(model))) +
-  geom_violin() +
+  geom_hline(aes(yintercept=0),  linetype ="solid", color = "red", size=1) +
+  geom_violin(trim = FALSE, linewidth =0) +
+  stat_summary(fun = mean, geom = "point", color = "white", size = 0.5,
+               position = position_dodge(0.9)) +
   facet_wrap(output.df$n.groups) 
+
+
+
+
+
+
+
