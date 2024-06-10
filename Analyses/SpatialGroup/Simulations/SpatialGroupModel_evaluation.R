@@ -28,6 +28,7 @@ if(!dir.exists(file.path(thisDir, "output"))){dir.create(file.path(thisDir, "out
 ## ------ IMPORT REQUIRED LIBRARIES & FUNCTIONS ------
 library(nimble)
 library(R.utils)
+library(coda)
 # library(nimbleSCR)
 sourceDirectory(file.path(gitDir,"Source"), modifiedOnly=FALSE)
 
@@ -397,7 +398,81 @@ system.time(nimOutput <- runMCMC( CmodelMCMC,
                                niter = 100,
                                nchains = 2,
                                samplesAsCodaMCMC = T))
-
 plot(nimOutput)
 
+
+
 ## -----------------------------------------------------------------------------
+## ------ IV. PROCESSING MODEL OUTPUTS ------
+
+##-- List all input files
+inFiles <- list.files( path = file.path(thisDir, "input"))
+
+##-- Create a dataframe to store the results
+output.df <- do.call( rbind,
+                      lapply(inFiles,
+                             function(x){
+                               load(file.path(thisDir, "input", x))
+                               cbind( "model" = ifelse(length(grep(pattern = "SpatialGroup",x = x)) > 0,
+                                                       "SpatialGroup",
+                                                       "SpatialCount"),
+                                      paramspace,
+                                      "N.sim" = testSim$N,
+                                      "lambda.sim" = mean(testSim$groupSize),
+                                      "mean.N" = NA,
+                                      "sd.N" = NA,
+                                      "mean.n.groups" = NA,
+                                      "sd.n.groups" = NA,
+                                      "mean.lambda" = NA,
+                                      "sd.lambda" = NA,
+                                      "mean.psi" = NA,
+                                      "sd.psi" = NA,
+                                      "mean.p0" = NA,
+                                      "sd.p0" = NA,
+                                      "mean.sigma" = NA,
+                                      "sd.sigma" = NA,
+                                      "mean.alpha" = NA,
+                                      "sd.alpha" = NA,
+                                      "mean.lambda0" = NA,
+                                      "sd.lambda0" = NA)
+                             }))
+
+
+
+##-- List all output files
+outFiles <- list.files(path = file.path(thisDir, "output"))
+
+##-- Loop over inFiles
+for(i in 1:length(inFiles)){
+  ##-- check if the corresponding output exists
+  thisFile <- paste0("NimOutput_", inFiles[i])
+  
+  ##-- if the output exists, process it and store results
+  if(thisFile %in% outFiles){
+    load(file.path(thisDir, "output", thisFile))
+    out <- ProcessCodaOutput(nimOutput$samples)
+
+    output.df$mean.N[i] <- out$mean$N
+    output.df$sd.N[i] <- out$sd$N
+    output.df$mean.sigma[i] <- out$mean$sigma
+    output.df$sd.sigma[i] <- out$sd$sigma
+    
+    # if(output.df$model == "SpatialGroup"){
+    #   output.df$mean.N <- out$mean$N
+    #   out$mean$sigma
+    # } else {
+    #   output.df$mean.N <- out$mean$N
+    #   
+    # }
+  }
+}#i
+output.df$RB.N <- (output.df$N.sim-output.df$mean.N)/output.df$N.sim
+
+
+##-- VL violin plots
+ggplot(data = output.df,
+       aes(x = as.factor(lambda) ,
+           y = RB.N,
+           fill = as.character(model))) +
+  geom_violin() +
+  facet_wrap(output.df$n.groups) 
