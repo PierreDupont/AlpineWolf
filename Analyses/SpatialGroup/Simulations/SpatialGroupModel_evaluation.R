@@ -163,7 +163,7 @@ param.space <- MakeParameterSpace(
                      "p0" = 0.2,
                      "sigma" = 1,
                      "alpha" = 0.85),
-  n.rep = 1)
+  n.rep = 20)
 
 
 
@@ -200,11 +200,11 @@ for(r in 1:dim(param.space)[1]){
     
     ##---- DEMOGRAPHIC PROCESS 
     psi ~ dunif(0,1)
-    lambda ~ dunif(0,10)
+    lambda ~ dgamma(1,1)
     
     for(g in 1:G){
       z[g] ~ dbern(psi)
-      groupSize[g] ~ T(dpois(lambda),1,20)
+      groupSize[g] ~ T(dpois(lambda),1,)
     }#g
     
     
@@ -312,7 +312,7 @@ for(r in 1:dim(param.space)[1]){
     
     ##---- DETECTION PROCESS 
     sigma ~ dunif(0,10)
-    lambda0 ~ dunif(0,10)
+    lambda0 ~ dgamma(1,1)
     
     y[1:J] ~ dpoisSC_normal(
       lambda0 = lambda0,
