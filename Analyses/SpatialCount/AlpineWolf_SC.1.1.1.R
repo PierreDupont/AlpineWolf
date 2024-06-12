@@ -560,7 +560,7 @@ area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
-M <- 4000
+M <- 6000
 
 nimData <- list( y = y,
                  area = area,
@@ -649,7 +649,7 @@ for(c in 1:4){
 ## -----------------------------------------------------------------------------
 ## ------ IV. FIT NIMBLE MODEL -----
 for(c in 1:4){
-  load( file.path(thisDir, "input", paste0(modelName,"_", c ,".RData")))
+  load( file.path(thisDir, "input", paste0(modelName,"_1.RData")))
   
   ##---- Create the nimble model object
   nimModel <- nimbleModel( code = modelCode,

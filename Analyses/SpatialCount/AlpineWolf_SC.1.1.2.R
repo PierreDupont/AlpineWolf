@@ -562,7 +562,7 @@ area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
-M <- 4000
+M <- 6000
 
 nimData <- list( y = y,
                  area = area,

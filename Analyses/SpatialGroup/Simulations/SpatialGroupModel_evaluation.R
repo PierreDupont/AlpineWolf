@@ -475,11 +475,11 @@ ggplot(data = output.df,
        aes(x = as.factor(lambda) ,
            y = RB.N,
            fill = as.character(model))) +
-  geom_hline(aes(yintercept=0),  linetype ="solid", color = "red", size=1) +
+  geom_hline(aes(yintercept=0),  linetype ="solid", color = "red", linewidth=1) +
   geom_violin(trim = FALSE, linewidth =0) +
   stat_summary(fun = mean, geom = "point", color = "white", size = 0.5,
                position = position_dodge(0.9)) +
-  facet_wrap(output.df$n.groups) 
+  facet_grid(output.df$n.groups ~ output.df$n.occasions) 
 
 
 
