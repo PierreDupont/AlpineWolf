@@ -108,6 +108,7 @@ res_bias_ntot_plot <- N_all %>%
                     # , name = "Spatial Subsampling",labels=c('25%', '50%', '75%', '100%')
                     ) +
   labs(y = "Population size", x = "") +
+  theme_ipsum() + 
   theme(legend.position = "right",
         legend.title = element_text(size=10),
         legend.text = element_text(size=8),

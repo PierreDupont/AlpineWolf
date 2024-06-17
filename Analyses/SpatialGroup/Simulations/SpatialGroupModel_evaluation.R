@@ -30,6 +30,8 @@ library(nimble)
 library(R.utils)
 library(coda)
 library(ggplot2)
+library(hrbrthemes)
+
 # library(nimbleSCR)
 sourceDirectory(file.path(gitDir,"Source"), modifiedOnly=FALSE)
 
@@ -469,8 +471,8 @@ for(i in 1:length(inFiles)){
 }#i
 output.df$RB.N <- (output.df$N.sim-output.df$mean.N)/output.df$N.sim
 
-
 ##-- VL violin plots
+
 ggplot(data = output.df,
        aes(x = as.factor(lambda) ,
            y = RB.N,
@@ -479,7 +481,21 @@ ggplot(data = output.df,
   geom_violin(trim = FALSE, linewidth =0) +
   stat_summary(fun = mean, geom = "point", color = "white", size = 0.5,
                position = position_dodge(0.9)) +
-  facet_grid(output.df$n.groups ~ output.df$n.occasions) 
+  facet_grid(output.df$n.groups ~ output.df$n.occasions) +
+  labs(title=" ", fill ="Model Comparison", y = "Relative Bias", x = "Mean number of individuals per group") +
+  theme_ipsum() + 
+  theme(plot.title = element_text(size=12),
+        axis.text.x = element_text(size=12,angle=0,hjust=1),
+        # axis.title.x = element_text(size=12,angle=0,hjust=1),
+        axis.text.y = element_text(size=12),
+        # axis.title.y = element_text(size=12,angle=0,hjust=1),
+        legend.title = element_text(size=12),
+        legend.text = element_text(size=12),
+        legend.position="bottom", legend.box = "horizontal") 
+
+# ggsave("modelSCSG.png", width = 25, height = 15, units = "cm")
+
+
 
 
 
