@@ -6,9 +6,7 @@ rm(list=ls())
 
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
-library(rgdal)
 library(raster)
-library(coda)
 library(nimble)
 library(nimbleSCR)
 library(stringr)
@@ -20,9 +18,9 @@ library(dplyr)
 library(lubridate)
 library(stars)
 library(RANN)
-library(Rcpp)
-library(RcppArmadillo)
-library(RcppProgress)
+# library(Rcpp)
+# library(RcppArmadillo)
+# library(RcppProgress)
 library(gridExtra)
 library(MetBrewer)
 library(data.table)
@@ -43,7 +41,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.6.1_RJMCMC"
+modelName = "AlpineWolf.6.2_RJMCMC"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -1109,7 +1107,7 @@ status.aug <- MakeAugmentation( y = status,
   ##-- Study area polygon 
   png(
     file = "C:/Users/pidu/OneDrive - Norwegian University of Life Sciences/PROJECTS/ROVQUANT/TALKS/Wolves Across Borders_May_2023/Full_map_ngs.png",
-      width = 2000,height = 1200, bg = "transparent")
+    width = 2000,height = 1200, bg = "transparent")
   plot(studyArea, col = adjustcolor("gray60", alpha.f = 0.5), border = F)
   #mtext( text = "Raw data", side = 1, font = 2)
   ##-- GPS search tracks 
@@ -1477,8 +1475,8 @@ modelCode <- nimbleCode({
   
   for(c in 1:n.habCovs){
     betaHabDens.raw[c] ~ dnorm(0.0,0.01)
-    zRJ.dens[c] ~ dbern(psiRJ)
-    betaHabDens[c] <- betaHabDens.raw[c] * zRJ.dens[c]
+    zRJ.habDens[c] ~ dbern(psiRJ)
+    betaHabDens[c] <- betaHabDens.raw[c] * zRJ.habDens[c]
   }#c
   
   habIntensity[1:n.habWindows] <- exp(
@@ -1503,9 +1501,9 @@ modelCode <- nimbleCode({
   psi ~ dunif(0,1)
   rho ~ dunif(0,1)
   
-  for(ss in 1:2){
-    theta[1:n.states,ss] ~ ddirch(alpha[1:n.states,ss])
-  }#ss
+  for(sx in 1:2){
+    theta[1:n.states,sx] ~ ddirch(alpha[1:n.states,sx])
+  }#sx
   
   for(i in 1:n.individuals){ 
     sex[i] ~ dbern(rho)
@@ -1516,24 +1514,28 @@ modelCode <- nimbleCode({
   
   
   ##---- DETECTION PROCESS 
-  for(c in 1:n.detCovs){
-    betaDet[c] ~ dnorm(0.0,0.1)
-  }#c
-  
   for(c in 1:n.habCovs){
     betaHabDet.raw[c] ~ dnorm(0.0,0.01)
     zRJ.det[c] ~ dbern(psiRJ)
     betaHabDet[c] <- betaHabDet.raw[c] * zRJ.det[c]
   }#c
   
-  for(s in 1:n.states){
-    for(ss in 1:2){
-      p0[s,ss] ~ dunif(0,1)
-      sigma0[s,ss] ~ dunif(0,2)
-      logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
+  betaSigma.raw ~ dnorm(0.0,0.01)
+  zRJ.sigma ~ dbern(psiRJ)
+  betaSigma <- betaSigma.raw * zRJ.sigma
+ 
+   for(c in 1:n.detCovs){
+    betaDet[c] ~ dnorm(0.0,0.1)
+  }#c
+  
+  for(st in 1:n.states){
+    for(sx in 1:2){
+      p0[st,sx] ~ dunif(0,1)
+      sigma0[st,sx] ~ dunif(0,2)
+      logit(p0Traps[st,sx,1:n.detectors]) <- logit(p0[st,sx]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
-    }#ss
-  }#s
+    }#sx
+  }#st
   
   
   for(i in 1:n.individuals){
@@ -1542,8 +1544,8 @@ modelCode <- nimbleCode({
       size = size[1:n.detectors],
       p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
       sigma0 = sigma0[status[i],sex[i]+1],
-      densCov = dens.cov[1:n.habWindows],
-      betaDens = 0,
+      densCov = densCov[1:n.habWindows],
+      betaDens = betaSigma,
       habCovs = hab.covs[1:n.habWindows,1:n.habCovs],
       betaHab = betaHabDet[1:n.habCovs],
       s = s[i,1:2],
@@ -1562,16 +1564,14 @@ modelCode <- nimbleCode({
   N <- sum(z[1:n.individuals])
   
   ##-- DENSITY
-  dens[1:n.habWindows] <- calculateDensity(
+  density[1:n.habWindows] <- calculateDensity(
     s = s[1:n.individuals,1:2],
     habitatGrid = habitatGrid2[1:y.max,1:x.max],
     indicator = z[1:n.individuals],
-    numWindows = n.habWindows,
-    nIndividuals = n.individuals)
-  dens1[1:n.habWindows] <- log(dens[1:n.habWindows]+1) - 0.8 ## offset
+    numWindows = n.habWindows)
+  densCov[1:n.habWindows] <- log(density[1:n.habWindows]+1) - 0.8 ## offset
   
 })
-
 
 
 
@@ -1597,14 +1597,15 @@ nimData <- list( y = yCombined.aug,
                    "snow_fall" = detectors$grid$`snow_fall`,
                    "zone" = detectors$grid$`zone`,
                    "log_pop" = detectors$grid$`log_pop`),
-                 dens.cov = rep(1,habitat$n.HabWindows),
+                 #dens.cov = rep(1,habitat$n.HabWindows),
                  size = detectors$size,
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,
                  localTrapsNum = localObjects$numLocalIndices,
                  habitatGrid2 = habitat$matrix,
                  habitatGrid = localObjects$habitatGrid)
-
+nimData$y[410, ] <- c(3, 1  , 2  , 1,-1,-1,-1,-1,-1,-1,-1,
+                         625,627,696,-1,-1,-1,-1,-1,-1,-1) 
 
 nimConstants <- list( n.individuals = nrow(nimData$y),
                       n.maxDets = ncol(nimData$y),
@@ -1617,9 +1618,12 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2])
 
-nimParams <- c("N", "p0", "sigma0", "psi","zRJ.dens", "zRJ.det","psiRJ",
+nimParams <- c("N", "p0", "sigma0", "psi",
+               "zRJ.habDens", "zRJ.sigma", "zRJ.det","psiRJ",
                "betaHabDens", "betaHabDens.raw",
-               "betaDet", "betaHabDet", "betaHabDet.raw", "theta", "rho")
+               "betaDet", "betaHabDet", "betaHabDet.raw",
+               "betaSigma", "betaSigma.raw",
+               "theta", "rho")
 
 nimParams2 <-  c("z", "s", "status", "sex")
 
@@ -1669,10 +1673,18 @@ for(c in 1:8){
                                     c(0.5,0.3,0.2)),
                     "betaDet" = rep(0,nimConstants$n.detCovs),
                     "psiRJ" = 0.2,
-                    "zRJ.dens" = rep(0,nimConstants$n.habCovs),
+                    "zRJ.habDens" = rep(0,nimConstants$n.habCovs),
                     "zRJ.det" = rep(0,nimConstants$n.habCovs),
+                    "zRJ.sigma" = 0,
+                    
                     "betaHabDens.raw" = rep(0,nimConstants$n.habCovs),
                     "betaHabDet.raw" = rep(0,nimConstants$n.habCovs),
+                    "betaSigma.raw" = 0,
+                    
+                    "betaHabDens" = rep(0,nimConstants$n.habCovs),
+                    "betaHabDet" = rep(0,nimConstants$n.habCovs),
+                    "betaSigma" = 0,
+                    
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),
                     "sigma0" = cbind(c(0.5,0.5,1),

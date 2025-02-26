@@ -239,7 +239,7 @@ dbinomLocal_normal_SEM <- nimbleFunction(
           if(log == 0) return(0.0)
           else return(-Inf)
         }
-      }
+      }#r
     }
     
     ## Calculate the log-probability of the vector of detections
