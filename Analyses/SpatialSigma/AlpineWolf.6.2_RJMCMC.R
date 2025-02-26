@@ -33,8 +33,8 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
+# sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+# sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 
 
@@ -1706,6 +1706,9 @@ for(c in 1:8){
 
 
 ## ------   4. FIT MODEL -----
+
+load( file.path(thisDir, "input", paste0(modelName, "_1.RData")))
+
 ##---- Create the nimble model object
 nimModel <- nimbleModel( code = modelCode,
                          constants = nimInput$constants,
@@ -1728,8 +1731,8 @@ conf <- configureMCMC( model = nimModel,
 
 ##---- Configure reversible jump
 configureRJ( conf =  conf,
-             targetNodes = 'betaHab.raw',
-             indicatorNodes = 'zRJ',
+             targetNodes = c('betaHabDens.raw','betaHabDet.raw','betaSigma.raw'),
+             indicatorNodes = c('zRJ.habDens','zRJ.det','zRJ.sigma'),
              control = list(mean = 0, scale = .2))
 
 Rmcmc <- buildMCMC(conf)
@@ -1738,11 +1741,11 @@ Cmodel <- compiledList$model
 Cmcmc <- compiledList$mcmc
 
 ##---- Run nimble MCMC in multiple bites
-for(c in 1:1){
+for(c in 1:3){
   print(system.time(
     runMCMCbites( mcmc = Cmcmc,
-                  bite.size = 50,
-                  bite.number = 2,
+                  bite.size = 1000,
+                  bite.number = 5,
                   path = file.path(thisDir, paste0("output/chain",c)))
   ))
 }
