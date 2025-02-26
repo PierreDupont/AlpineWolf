@@ -14,9 +14,12 @@ rm(list=ls())
 
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
-library(nimble)
-# library(nimbleSCR)
+source("workingDirectories.R")
 
+library(nimble)
+library(R.utils)
+# library(nimbleSCR)
+sourceDirectory(file.path(gitDir,"Source"), modifiedOnly=FALSE)
 
 
 
@@ -139,7 +142,7 @@ sim.SGM <- function( n.groups = 10,        ## Number of groups in the population
 }
 
 
-testSim <- sim.SGM( n.groups = 15,         ## Number of groups
+testSim <- sim.SGM( n.groups = 20,         ## Number of groups
                     n.occasions = 30,      ## Number of detection occasions
                     p0 = 0.1,              ## Baseline probability of visit 
                     sigma = 0.8,           ## Scale parameter
@@ -156,102 +159,10 @@ hist(apply(testSim$visits,1,sum),breaks = seq(-0.5,20.5,1))
 
 
 
-## ----------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 ## ----- 2. SPATIAL GROUP MODEL ------
-## -----   2.1. CUSTOM NIMBLE FUNCTIONS -----
-## This function calculates the probability of detection of a group using a half-normal detection function
-## It uses an indicator to make calculation faster (skips calculations for augmented groups)
-calculateP <- nimbleFunction(
-  run = function( p0 = double(0),
-                  sigma = double(0),
-                  s = double(1),
-                  trapCoords = double(2),
-                  indicator = double(0)){
-    ## Specify return type
-    returnType(double(1))
-    
-    ## Identify dimensions
-    numTraps <- nimDim(trapCoords)[1]
-    
-    ## Calculate trap-specific detection rates
-    p <- nimNumeric(length = numTraps)
-    
-    ## Shortcut if individual is not available for detection
-    if (indicator < 1){return(p)}
-    
-    ## Initialize objects
-    alpha <- -1.0 / (2.0 * sigma * sigma)
-    
-    ## Loop over traps
-    for(j in 1:numTraps){
-      d2 <- pow(trapCoords[j,1] - s[1], 2) + pow(trapCoords[j,2] - s[2], 2)
-      p[j] <- p0 * exp(alpha * d2)
-    }#j
-    return(p)
-  })
-
-
-## This custom distribution is an attempt to represent the detection process of
-## wolf packs at a given camera trap.
-## 1 - if x = 0; it returns the probability to detect 0 groups given the group-specific probabilities
-## 2-  if x > 0; it returns the probability to detect x individuals out of a group of size[g] for the different groups
-## using a truncated binomial x ~ T(dbinom( ))
-dgroupDet <- nimbleFunction(
-  run = function( x = double(0),           ## data: Number of wolves detected together 
-                  size = double(1),        ## Group sizes
-                  p = double(1),           ## Group-specific detection probabilities
-                  alpha = double(0),       ## Cohesion (i.e. prob of detection given visit)
-                  indicator = double(1),   ## Group-specific augmentation indicator
-                  log = integer(0, default = 0)
-  ){
-    ##-- Return type
-    returnType(double(0))
-    
-    ##-- Derive probability of 0 visit:
-    numGroups <- length(p)
-    sumP <- sum(p[1:numGroups])
-    pNULL<- exp(-sumP)
-    risk <- 1 - pNULL
-    
-    ##-- if n = 0, return probability of 0 visit :
-    if(x == 0){
-      if(log == 0){return(pNULL)}else{return(log(pNULL))}
-    }
-    
-    ##-- If x > 0; loop over groups and calculate the probability
-    ##-- to detect X individuals simultaneously given the group size 
-    ##-- and group-specific probability of visit :
-    totalProb <- 0
-    for(g in 1:numGroups){
-      if(indicator[g] > 0){
-        if(x <= size[g]){
-          ##-- Probability of visit by group[g]
-          probThisGroup <- risk * p[g]/sumP
-          ##-- Probability of x wolves from group[g] detected together 
-          logNormCst <- pbinom(q = 0,
-                               size = size[g],
-                               prob = alpha,
-                               lower.tail = 0,
-                               log.p = 1)
-          
-          logProbThisNum <- dbinom(x = x,
-                                   size = size[g],
-                                   prob = alpha,
-                                   log = 1) -  logNormCst
-          
-          ##-- Probability of the data
-          totalProb <- totalProb + probThisGroup * exp(logProbThisNum)
-        }#if
-      }
-    }#g
-    if(log) return(log(totalProb)) else return(totalProb)
-  })
-
-
-
-
-## -----   2.2. MODEL DEFINITION  -----
-modelCode <- nimbleCode({
+## -----   2.2. MODEL DEFINITION -----
+SG_model <- nimbleCode({
   ##---- SPATIAL PROCESS  
   for(g in 1:G){
     s[g,1] ~ dunif(xlim[1], xlim[2])
@@ -265,7 +176,7 @@ modelCode <- nimbleCode({
   
   for(g in 1:G){
     z[g] ~ dbern(psi)
-    groupSize[g] ~ T(dpois(lambda),1,20 )
+    groupSize[g] ~ T(dpois(lambda),1,20)
   }#g
   
   
@@ -275,13 +186,13 @@ modelCode <- nimbleCode({
   alpha ~ dunif(0,1) ## cohesion parameter (proportion of the group detected together)
   
   ##-- Calculate individual detection prob. at all traps
-  for(i in 1:G){ 
-    p[i,1:J] <- calculateP(
+  for(g in 1:G){ 
+    p[g,1:J] <- calculateP(
       p0 = p0,
       sigma = sigma,
-      s = s[i,1:2],
+      s = s[g,1:2],
       trapCoords = trapCoords[1:J,1:2],
-      indicator = z[i])
+      indicator = z[g])
   }#i
   
   ##-- Detection probability of one group (= probability of visit for now)
@@ -303,12 +214,13 @@ modelCode <- nimbleCode({
 
 
 
+
 ## -----   2.3. BUNDLE DATA ------
 ##-- Nimble data
 nimData <- list( y = testSim$Y)
 
 ##-- Nimble constants
-nimConstants <- list( G = testSim$n.groups*2,
+nimConstants <- list( G = testSim$n.groups * 2,
                       J = testSim$n.traps,
                       K = testSim$n.occasions,
                       trapCoords = as.matrix(testSim$trapCoords),
@@ -338,134 +250,113 @@ nimInits <- list( p0 = runif(1,0,1),
 
 
 ## -----   2.4. FIT MODEL ------
-model <- nimbleModel( code = modelCode,
-                      constants = nimConstants,
-                      data = nimData,
-                      inits = nimInits)
-Cmodel <- compileNimble(model)
-Cmodel$calculate()
-modelConf <- configureMCMC( model,
-                            monitors = c( "N", "n.groups", "lambda",
-                                               "psi", "p0", "sigma", "alpha"))
-modelMCMC <- buildMCMC(modelConf)
-CmodelMCMC <- compileNimble(modelMCMC, project = model)
-system.time(nimOutput <- runMCMC(CmodelMCMC,
-                            niter = 1000,
-                            nchains = 1,
-                            nburnin = 0,
-                            samplesAsCodaMCMC = T))
-plot(nimOutput)
+model_SG <- nimbleModel( code = SG_model,
+                         constants = nimConstants,
+                         data = nimData,
+                         inits = nimInits)
+Cmodel_SG <- compileNimble(model_SG)
+Cmodel_SG$calculate()
+modelConf_SG <- configureMCMC( model_SG,
+                               monitors = c( "N", "n.groups", "lambda",
+                                             "psi", "p0", "sigma", "alpha"))
+modelMCMC_SG <- buildMCMC(modelConf_SG)
+CmodelMCMC_SG <- compileNimble( modelMCMC_SG,
+                                project = model_SG)
+system.time(nimOutput_SG <- runMCMC( CmodelMCMC_SG,
+                                     niter = 100,
+                                     nchains = 2,
+                                     nburnin = 0,
+                                     samplesAsCodaMCMC = T))
+plot(nimOutput_SG)
 
 
 
 ## ----------------------------------------------------------------------------
 ## ----- 3. SPATIAL COUNT MODEL ------
-## -----   2.2. MODEL DEFINITION  -----
-modelCode <- nimbleCode({
-  ##---- SPATIAL PROCESS  
-  for(g in 1:G){
-    s[g,1] ~ dunif(xlim[1], xlim[2])
-    s[g,2] ~ dunif(ylim[1], ylim[2])
+## -----   3.1. MODEL DEFINITION -----
+SC_model <- nimbleCode({
+  ##---- SPATIAL PROCESS 
+  for(i in 1:M){ 
+    s[i,1] ~ dunif(xlim[1], xlim[2])
+    s[i,2] ~ dunif(ylim[1], ylim[2])
   }#g
   
-  
-  ##---- DEMOGRAPHIC PROCESS 
+  ##---- DEMOGRAPHIC PROCESS  
   psi ~ dunif(0,1)
-  lambda ~ dunif(0,10)
+  for(i in 1:M){ 
+    z[i] ~ dbern(psi)
+  }#i 								
   
-  for(g in 1:G){
-    z[g] ~ dbern(psi)
-    groupSize[g] ~ T(dpois(lambda),1,20 )
-  }#g
-  
-  
-  ##---- DETECTION PROCESS
+  ##---- DETECTION PROCESS 
   sigma ~ dunif(0,10)
-  p0 ~ dunif(0,1)
-  alpha ~ dunif(0,1) ## cohesion parameter (proportion of the group detected together)
+  lambda0 ~ dunif(0,10)
   
-  ##-- Calculate individual detection prob. at all traps
-  for(i in 1:G){ 
-    p[i,1:J] <- calculateP(
-      p0 = p0,
-      sigma = sigma,
-      s = s[i,1:2],
-      trapCoords = trapCoords[1:J,1:2],
-      indicator = z[i])
-  }#i
-  
-  ##-- Detection probability of one group (= probability of visit for now)
-  for(j in 1:J){
-    for(k in 1:K){
-      y[j,k] ~ dgroupDet( 
-        size = groupSize[1:G],        
-        p = p[1:G,j],
-        alpha = alpha,
-        indicator = z[1:G])
-    }#k
-  }#j
+  y[1:J] ~ dpoisSC_normal(
+    lambda0 = lambda0,
+    sigma = sigma,
+    s = s[1:M,1:2],
+    oper = oper[1:J],
+    trapCoords = trapCoords[1:J,1:2],
+    indicator = z[1:M])
   
   
   ##-- DERIVED PARAMETERS 
-  n.groups <- sum(z[1:G])
-  N <- sum(z[1:G]*groupSize[1:G])
+  N <- sum(z[1:M])
 })
 
 
 
-## -----   2.3. BUNDLE DATA ------
+
+## -----   3.2. BUNDLE DATA ------
 ##-- Nimble data
-nimData <- list( y = testSim$Y)
+nimData <- list( y = rowSums(testSim$Y))
 
 ##-- Nimble constants
-nimConstants <- list( G = testSim$n.groups*2,
+nimConstants <- list( M = testSim$N * 2,
                       J = testSim$n.traps,
-                      K = testSim$n.occasions,
+                      oper = rep(testSim$n.occasions, testSim$n.traps),
                       trapCoords = as.matrix(testSim$trapCoords),
                       xlim = testSim$habitatBoundaries$x,
                       ylim = testSim$habitatBoundaries$y)
 
-
 ##-- Nimble inits
-s.init <- rbind(testSim$S,
-                testSim$S)
-z.init <- c(rep(1,testSim$n.groups),
-            rep(0,testSim$n.groups))
-groupSize.init <- c(testSim$groupSize,
-                    testSim$groupSize)
-nimInits <- list( p0 = runif(1,0,1),
-                  p = matrix(0.05,
-                             nrow = nimConstants$G,
-                             ncol = nimConstants$J),
+s.init <- cbind( runif( n = nimConstants$M,
+                        min = nimConstants$xlim[1], 
+                        max = nimConstants$xlim[2]),
+                 runif( n = nimConstants$M,
+                        min = nimConstants$ylim[1], 
+                        max = nimConstants$ylim[2]))
+
+z.init <- c(rep(1,testSim$N),
+            rep(0,testSim$N))
+
+nimInits <- list( lambda0 = runif(1,0,10),
                   psi = 0.5,
                   sigma = 0.5,           
-                  lambda = 3,            
-                  alpha = 0.75,
-                  groupSize = groupSize.init,
                   z = z.init,
                   s = s.init)
 
 
 
-## -----   2.4. FIT MODEL ------
-model <- nimbleModel( code = modelCode,
-                      constants = nimConstants,
-                      data = nimData,
-                      inits = nimInits)
-Cmodel <- compileNimble(model)
-Cmodel$calculate()
-modelConf <- configureMCMC( model,
-                            monitors = c( "N", "n.groups", "lambda",
-                                          "psi", "p0", "sigma", "alpha"))
-modelMCMC <- buildMCMC(modelConf)
-CmodelMCMC <- compileNimble(modelMCMC, project = model)
-system.time(nimOutput <- runMCMC(CmodelMCMC,
-                                 niter = 1000,
-                                 nchains = 1,
-                                 nburnin = 0,
-                                 samplesAsCodaMCMC = T))
-plot(nimOutput)
+## -----   3.3. FIT MODEL ------
+model_SC <- nimbleModel( code = SC_model,
+                         constants = nimConstants,
+                         data = nimData,
+                         inits = nimInits)
+Cmodel_SC <- compileNimble(model_SC)
+Cmodel_SC$calculate()
+modelConf_SC <- configureMCMC(model_SC,
+                              monitors = c("N","lambda0","psi","sigma"))
+modelMCMC_SC <- buildMCMC(modelConf_SC)
+CmodelMCMC_SC <- compileNimble( modelMCMC_SC,
+                                project = model_SC)
+system.time(out_SC <- runMCMC( CmodelMCMC_SC,
+                               niter = 100,
+                               nchains = 2,
+                               samplesAsCodaMCMC = T))
+
+plot(out_SC)
 
 
 
-## ----------------------------------------------------------------------------
+## -----------------------------------------------------------------------------

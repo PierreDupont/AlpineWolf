@@ -64,6 +64,7 @@ habitat = list( resolution = 5000,
 ## ------   1. STUDY AREA ------
 ##---- Polygon of Italy and neighbouring countries
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
+regions <- read_sf(file.path(dataDir,"GISData/Output_layout/Alpine_Regions.shp"))
 
 ##--- Study area grid
 studyAreaGrid <- read_sf(file.path(dataDir,"GISData/shape_studyarea_ALPS/Studyarea_ALPS_2020_2021.shp"))
@@ -561,7 +562,7 @@ area <- st_area(grid) %>%
   drop_units() %>%
   sum()
 
-M <- 4000
+M <- 6000
 
 nimData <- list( y = y,
                  area = area,
@@ -741,6 +742,10 @@ hab.rgmx <- rbind(habitat$raster[] == 1)
 hab.rgmx[is.na(hab.rgmx)] <- 0
 row.names(hab.rgmx) <- "habitat"
 
+##---- Create "ITALY" habitat raster (for density estimates)
+habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
+habitat$Italia[habitat$Italia == 0] <- NA
+
 ##---- Calculate density
 WA_Density <- GetDensity(
   sx = res_sxy$sims.list$s[ , ,1],
@@ -754,6 +759,7 @@ WA_Density <- GetDensity(
 
 ##---- Create a matrix of italy 
 ##---- (rows == regions ; columns == habitat raster cells)
+regions$ID <- as.double(1:8)
 regions.r <- fasterize(sf = st_as_sf(regions),
                        raster = habitat.r,
                        field = "ID",
@@ -767,15 +773,15 @@ regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] ==
 regions.rgmx[is.na(regions.rgmx)] <- 0
 row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
 
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$Italia - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
+# alps.r <- fasterize(sf = st_as_sf(alps),
+#                     raster = habitat.r,
+#                     background = 0)
+# alps.r <- alps.r + habitat$Italia - 1
+# plot(alps.r)
+# table(alps.r[], useNA = "always")
+# alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
+# alps.rgmx[is.na(alps.rgmx)] <- 0
+# row.names(alps.rgmx) <- "Italian Alps"
 
 
 ##---- Calculate overall density
@@ -788,66 +794,45 @@ WA_Italy <- GetDensity(
   returnPosteriorCells = T,
   regionID = regions.rgmx)
 
-WA_status <- list()
-for(s in 0:1){
-  WA_status[[s+1]] <- list()
-  for(ss in 1:3){
-    status <- (res_sxy$sims.list$z == 1) &
-      (res_sxy$sims.list$sex == s) &
-      (res_sxy$sims.list$status == ss)
-    
-    WA_status[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[ , ,1],
-      sy = res_sxy$sims.list$s[ , ,2],
-      z = status,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = T,
-      regionID = regions.rgmx)
-  }
-}
+save(WA_Italy, 
+     file = file.path(thisDir, paste0(modelName,"_posterior.RData")))
+
+# WA_status <- list()
+# for(s in 0:1){
+#   WA_status[[s+1]] <- list()
+#   for(ss in 1:3){
+#     status <- (res_sxy$sims.list$z == 1) &
+#       (res_sxy$sims.list$sex == s) &
+#       (res_sxy$sims.list$status == ss)
+#     
+#     WA_status[[s+1]][[ss]] <- GetDensity(
+#       sx = res_sxy$sims.list$s[ , ,1],
+#       sy = res_sxy$sims.list$s[ , ,2],
+#       z = status,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = T,
+#       regionID = regions.rgmx)
+#   }
+# }
 
 ##---- Create a matrix of admin units binary indicators
 ##---- (rows == regions ; columns == habitat raster cells)
-comp.rgmx <- rbind(habitat$comparison[] == 1)
-comp.rgmx[is.na(comp.rgmx)] <- 0
-row.names(comp.rgmx) <- "comparison"
+# comp.rgmx <- rbind(habitat$comparison[] == 1)
+# comp.rgmx[is.na(comp.rgmx)] <- 0
+# row.names(comp.rgmx) <- "comparison"
+# 
+# ##---- Calculate density
+# WA_Comp <- GetDensity(
+#   sx = res_sxy$sims.list$s[ , ,1],
+#   sy = res_sxy$sims.list$s[ , ,2],
+#   z = res_sxy$sims.list$z,
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = T,
+#   regionID = comp.rgmx)
 
-##---- Calculate density
-WA_Comp <- GetDensity(
-  sx = res_sxy$sims.list$s[ , ,1],
-  sy = res_sxy$sims.list$s[ , ,2],
-  z = res_sxy$sims.list$z,
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = T,
-  regionID = comp.rgmx)
 
-
-##---- Create a matrix of Wolf Presence grid 
-##---- (rows == regions ; columns == habitat raster cells)
-regions.r <- fasterize(sf = st_as_sf(regions),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = 0)
-regions.r <- regions.r + habitat$extraction - 1
-plot(regions.r)
-table(regions.r[], useNA = "always")
-
-regions.unique <- na.omit(unique(regions.r[]))
-regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
-regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions$DEN_UTS[regions.unique] 
-
-alps.r <- fasterize(sf = st_as_sf(alps),
-                    raster = habitat.r,
-                    background = 0)
-alps.r <- alps.r + habitat$extraction - 1
-plot(alps.r)
-table(alps.r[], useNA = "always")
-alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
-alps.rgmx[is.na(alps.rgmx)] <- 0
-row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Calculate density
 WA_Extract <- GetDensity(
@@ -1100,114 +1085,6 @@ for(s in 1:length(sex)){
 # 
 # 
 # 
-## ------     2.2. RJ-MCMC PLOTS ------
-
-##---- Get model features
-n.chains <- length(nimOutput$samples)
-n.iterations <- dim(nimOutput$samples[[1]])[1]
-
-##---- Get target covariates
-covNames <- colnames(nimData$hab.covs)
-
-zRJ.wide <- data.table(res$sims.list$zRJ)
-dimnames(zRJ.wide) <- list(NULL, covNames)
-
-betas.wide <- data.table(res$sims.list$betaHab)
-dimnames(betas.wide) <- list(NULL, covNames)
-
-
-##---- List model combinations
-mods <- apply(zRJ.wide, 1, function(x){paste(covNames[x == 1], collapse = "+")})
-
-betas.wide$model <- zRJ.wide$model <- gsub("\\(Intercept\\)\\+", "", mods)
-betas.wide$chain <- zRJ.wide$chain <- rep(1:n.chains, each = n.iterations)
-betas.wide$iteration <- zRJ.wide$iteration <- rep(1:n.iterations, n.chains)
-
-zRJ.df <- melt(zRJ.wide, id.vars = c("iteration", "chain", "model"))
-names(zRJ.df) <- c("iteration", "chain", "model", "variable", "value")
-
-betas.df <-  melt(betas.wide, id.vars = c("iteration", "chain", "model"))
-names(betas.df) <-  c("iteration", "chain", "model", "variable", "value")
-
-betas.df$value[zRJ.df$value == 0] <- NA
-
-betas.aggr <- betas.df %>%
-  group_by(variable) %>%
-  summarise(p.inclusion = mean(!is.na(value)))
-
-betas.df <- merge(betas.df, betas.aggr)
-
-included <- zRJ.df$value == 1
-
-betas.df <- betas.df[included, ]
-zRJ.df <- zRJ.df[included, ]
-
-betas.df <- betas.df[order(betas.df$variable, betas.df$model, betas.df$chain), ]
-zRJ.df <- zRJ.df[order(zRJ.df$variable, zRJ.df$model, zRJ.df$chain), ]
-
-myfun1 <- function(x) 1:length(x)
-
-temp <- betas.df %>% group_by(variable, model, chain) %>%
-  summarize(iteration.model = myfun1(value))
-
-betas.df$iteration.model <- temp$iteration.model
-
-aggr <- data.frame(table(betas.df$model) / length(betas.df$model))
-names(aggr) <- c("model", "weight")
-betas.df <- merge(betas.df, aggr)
-
-
-##---- MODEL TALLY
-aggr <- aggr[order(aggr$weight, decreasing = TRUE),]
-aggr$model <- factor(aggr$model, levels = aggr$model)
-ggplot(data = aggr,
-       mapping =  aes(x = model, y = weight, alpha = weight)) +
-  geom_col(fill =
-             "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
-             )) + ylab("Weight") + xlab("Models")
-
-
-##---- COEFFICIENT TRACE PLOTS (OVERALL)
-ggplot(data = betas.df, aes(
-  x = iteration,
-  y = value,
-  color = factor(chain))) +
-  geom_line() +
-  facet_wrap(~ variable, scales = "free") +
-  xlab("Iteration") +  theme(legend.position = "none")
-
-
-##---- COEFFICIENT TRACE PLOTS (MODEL-SPECIFIC)
-ggplot(data = betas.df, aes(
-  x = iteration.model,
-  y = value,
-  color = factor(chain))) +
-  geom_line() +
-  facet_grid(variable ~ model, margins = FALSE, scales = "free") +
-  xlab("Iteration") +  theme(legend.position = "none")
-
-
-##---- PLOT COEFFICIENT ESTIMATES (OVERALL)
-ggplot(betas.df, aes(value, variable, alpha = p.inclusion)) +
-  geom_violin(
-    draw_quantiles = c(0.025, 0.5, 0.975),
-    fill = "turquoise",
-    color = grey(1)) +
-  geom_vline(xintercept = 0)
-
-
-##---- PLOT COEFFICIENT ESTIMATES (MODEL-SPECIFIC)
-ggplot(betas.df, aes(value, variable, alpha = weight)) +
-  geom_violin(
-    draw_quantiles = c(0.025, 0.5, 0.975),
-    fill = "magenta",
-    color = grey(1)) +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~ model)
-
 
 
 
@@ -1277,7 +1154,6 @@ for(b in 1:ncol(res$sims.list$betaHab)){
   #}# m
 }# b
 graphics.off()
-
 
 
 

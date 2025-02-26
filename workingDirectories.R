@@ -1,5 +1,5 @@
 if(Sys.info()['user'] == 'pidu') { ## Pierre
-  gitDir <- 'C:/myDocuments/AlpineWolf'
+  gitDir <- 'C:/My_documents/AlpineWolf'
   dataDir <- 'C:/Users/pidu/AQEG Dropbox/AQEG Team Folder/AlpineWolf/01_Data'  
   analysisDir <- 'C:/Users/pidu/AQEG Dropbox/AQEG Team Folder/AlpineWolf/02_Analysis'
   simDir <- 'C:/Users/pidu/AQEG Dropbox/AQEG Team Folder/AlpineWolf/03_Simulations'

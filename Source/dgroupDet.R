@@ -1,41 +1,20 @@
 #' Spatial Group detection process 
 #'
-#' The \code{dspatialGroup} distribution is a NIMBLE custom distribution which can be used to model 
-#' and simulate Poisson observations (x) of multiple individuals over a set of traps defined by their coordinates \emph{trapCoords}
-#' the distribution assumes that an individual’s detection rate at any trap follows a half-normal function of the distance between 
-#' the individual's activity center (s) and the trap location. 
-#' All coordinates (\code{s} and \code{trapCoords}) should be scaled to the habitat (see \code{\link{scaleCoordsToHabitatGrid}})
+#' The \code{dgroupDet} distribution is a NIMBLE custom distribution which can be
+#' used to model and simulate observations (x) of multiple individuals from the 
+#' same group over a set of traps defined by their coordinates \emph{trapCoords}.
+#' The distribution assumes that all individuals detected together belong to the
+#' same group. 
 #' 
-#' The \code{dpoisLocalSC_normal} distribution incorporates two features to increase computation efficiency (see Turek et al., 2021 <doi.org/10.1002/ecs2.3385>  for more details):
-#' \enumerate{
-#' \item A local evaluation of the individual detection rates calculation (see Milleret et al., 2019 <doi:10.1002/ece3.4751> for more details)
-#' \item An indicator (\emph{indicator}) to shortcut calculations for individuals unavailable for detection.
-#' }
 #' 
-#' The \code{dpoisLocalSC_normal} distribution requires x- and y- detector coordinates (\emph{trapCoords}) and activity centers coordinates (\emph{s}) to be scaled to the habitat grid (\emph{habitatGrid}) using the (\code{\link{scaleCoordsToHabitatGrid}} function.)
-
-#' 
-#' @name dpoisLocalSC_normal 
+#' @name dgroupDet
 #'
 #' @param x Vector of trap-specific detection frequencies. 
 #' @param n Integer specifying the number of realizations to generate.  Only n = 1 is supported.
-#' @param detIndices Vector of indices of traps where the detections in \emph{x} were recorded; from the \emph{detIndices} object returned by the \code{\link{getSparseY}} function. 
-#' This argument should not be specified when x is provided as the  \emph{yCombined} object (returned by \code{\link{getSparseY}} ) and when detection data are simulated.
-#' @param detNums Number of traps with at least one detection recorded in \emph{x}; from the \emph{detNums} object returned by the \code{\link{getSparseY}} function. 
-#' This argument should not be specified when the \emph{yCombined} object (returned by \code{\link{getSparseY}}) is provided as \emph{x} and when detection data are simulated.
 #' @param size Vector of the number of trials (zero or more) for each trap (\emph{trapCoords}).
-#' @param p0 Baseline detection probability (scalar) used in the half-normal detection function. For trap-specific baseline detection probabilities use argument \emph{p0Traps} (vector) instead.
-#' @param p0Traps Vector of baseline detection probabilities for each trap used in the half-normal detection function. When \emph{p0Traps} is used, \emph{p0} should not be provided. 
-#' @param sigma Scale parameter of the half-normal detection function.
-#' @param s Individual activity center x- and y-coordinates scaled to the habitat (see (\code{\link{scaleCoordsToHabitatGrid}}).
-#' @param trapCoords Matrix of x- and y-coordinates of all traps scaled to the habitat (see (\code{\link{scaleCoordsToHabitatGrid}}).
-#' @param localTrapsIndices Matrix of indices of local traps around each habitat grid cell, as returned by the \code{\link{getLocalObjects}} function.
-#' @param localTrapsNum  Vector of numbers of local traps around all habitat grid cells, as returned by the \code{\link{getLocalObjects}} function.
-#' @param resizeFactor Aggregation factor used in the \code{\link{getLocalObjects}} function to reduce the number of habitat grid cells to retrieve local traps for.
-#' @param habitatGrid Matrix of local habitat grid cell indices, from \emph{habitatGrid} returned by the \code{\link{getLocalObjects}} function. 
-#' @param indicator Binary argument specifying whether the individual is available for detection (indicator = 1) or not (indicator = 0).
-#' @param lengthYCombined The length of the x argument when the (\emph{yCombined}) format of the detection data is provided;  from the \emph{lengthYCombined} object returned by \code{\link{getSparseY}}
-#' 
+#' @param p Baseline detection probability (scalar) used in the half-normal detection function. For trap-specific baseline detection probabilities use argument \emph{p0Traps} (vector) instead.
+#' @param alpha Number of traps with at least one detection recorded in \emph{x}; from the \emph{detNums} object returned by the \code{\link{getSparseY}} function. 
+#' @param indicator Binary argument specifying whether each group is available for detection (indicator = 1) or not (indicator = 0).
 #' @param log Logical argument, specifying whether to return the log-probability of the distribution.
 #'
 #' @return The log-likelihood value associated with the vector of detections, given the location of the activity center (s),
@@ -44,7 +23,7 @@
 #' @author Pierre Dupont
 #'
 #' @import nimble
-#' @importFrom stats dbinom rbinom pbinom
+#' @importFrom stats dbinom rbinom pbinom 
 #'
 #' @examples
 #' ## Create habitat grid cell coordinates
@@ -137,7 +116,7 @@
 #' @export
 NULL
 
-#' @rdname dspatialGroup
+#' @rdname dgroupDet
 #' @export
 dgroupDet <- nimbleFunction(
   run = function( x = double(0),           ## data: Number of wolves detected together 
@@ -153,7 +132,7 @@ dgroupDet <- nimbleFunction(
     ##-- Derive probability of 0 visit:
     numGroups <- length(p)
     sumP <- sum(p[1:numGroups])
-    pNULL<- exp(-sumP)
+    pNULL <- exp(-sumP)
     risk <- 1 - pNULL
     
     ##-- if n = 0, return probability of 0 visit :
@@ -192,15 +171,18 @@ dgroupDet <- nimbleFunction(
     if(log) return(log(totalProb)) else return(totalProb)
   })
 
+    
 
-#' @rdname dspatialGroup
+
+
+#' @rdname dgroupDet
 #' @export
 rgroupDet <- nimbleFunction(
   run = function( n = double(0, default = 1),   
-                  size = double(1),        ## Group sizes
-                  p = double(1),           ## Group-specific detection probabilities
-                  alpha = double(0),       ## Cohesion (i.e. prob of detection given visit)
-                  indicator = double(1)    ## Group-specific augmentation indicator
+                  size = double(1),        
+                  p = double(1),         
+                  alpha = double(0),       
+                  indicator = double(1)    
   ){
     ##-- Return type
     returnType(double(0))
@@ -224,5 +206,21 @@ rgroupDet <- nimbleFunction(
                    size = size[whichGroup],
                    prob = alpha)
     
- return(out)
+    return(out)
   })
+
+
+## dbinomLocal_normal_SEM
+registerDistributions(
+  list(
+    dgroupDet = list(
+      BUGSdist ='dgroupDet(size, p, alpha, indicator)',
+      Rdist = c('dgroupDet(size, p, alpha, indicator)'),
+      types = c('value = double(0)',
+                'size = double(1)', 'p = double(1)',
+                'alpha = double(0)', 'indicator = double(1)'),
+      discrete = TRUE,
+      mixedSizes = TRUE,
+      pqAvail = FALSE)
+  ), verbose = F)
+
