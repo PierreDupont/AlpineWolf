@@ -38,8 +38,8 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-# sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
-# sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 
 ## -----------------------------------------------------------------------------
@@ -61,6 +61,7 @@ detectors = list( resolution = 5000,
 data = list( sex = c("F","M"),
              status = c("alpha","pup","other"),
              aug.factor = 12) 
+# maybe reduce a bit next time 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -94,10 +95,10 @@ regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
 # plot(regions)
 
 
-# presence <- read_sf(file.path(dataDir,"GISData/presence_2324/Grid_Alpi_presenzaRAlpine_ITA_2023_2024_LWAEU.shp"))
-# presence <- st_transform(x = presence, crs = st_crs(countries))
-# presence <- presence[presence$`2023_2024` %in% 1, ]
-# presence <- st_intersection(presence, regions)
+presence <- read_sf(file.path(dataDir,"GISData/presence_2324/Grid_Alpi_presenzaRAlpine_ITA_2023_2024_LWAEU.shp"))
+presence <- st_transform(x = presence, crs = st_crs(countries))
+presence <- presence[presence$`2023_2024` %in% 1, ]
+presence <- st_intersection(presence, regions)
 
 ##--- Alps
 alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
@@ -1888,23 +1889,31 @@ save(res, res_sxy,
 load(file.path(thisDir, paste0(modelName, "_mcmc.RData")))
 load(file.path(thisDir, "input", paste0(modelName, "_1.RData")))
 
-##----  Extract the habitat raster
-habitat.r <- habitat$raster
 
-##---- Set cells outside the habitat to NA
-habitat.r[habitat.r == 0] <- NA
+##---- Disaggregate habitat raster to a 1x1km resolution
+habitat.r <- disaggregate(x = habitat$raster, fact = 5)
+italia.r <- disaggregate(x = habitat$Italia, fact = 5)
 
-##---- Create a matrix of raster cellsIDs
+##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
 habitat.id <- matrix( data = 1:ncell(habitat.r),
-                      nrow = dim(habitat.r)[1],
-                      ncol = dim(habitat.r)[2],
+                      nrow = nrow(habitat.r),
+                      ncol = ncol(habitat.r),
                       byrow = TRUE)
 
-##---- Create a matrix of admin units binary indicators
-##---- (rows == regions ; columns == habitat raster cells)
-hab.rgmx <- rbind(habitat$raster[] == 1)
-hab.rgmx[is.na(hab.rgmx)] <- 0
-row.names(hab.rgmx) <- "habitat"
+##---- Rescale sxy coords to original projection and reproject to the new raster
+dimnames(res_sxy$sims.list$s) <- list(1:dim(res_sxy$sims.list$s)[1],
+                                      1:dim(res_sxy$sims.list$s)[2],
+                                      c("x","y"))
+s.original <- scaleCoordsToHabitatGrid(
+  coordsData = res_sxy$sims.list$s,
+  coordsHabitatGridCenter = coordinates(habitat$raster),
+  scaleToGrid = F)$coordsDataScaled
+
+##---- ... and reproject to the new raster
+s.rescaled <- scaleCoordsToHabitatGrid(
+  coordsData = s.original,
+  coordsHabitatGridCenter = coordinates(habitat.r),
+  scaleToGrid = T)$coordsDataScaled
 
 
 ##---- Create a matrix of Italian regions
@@ -1995,13 +2004,13 @@ alps.rgmx[is.na(alps.rgmx)] <- 0
 row.names(alps.rgmx) <- "Italian Alps"
 
 
-iter <- seq(1,dim(res$sims.list$z)[1],length.out = 2000)
+iter <- seq(1,dim(res_sxy$sims.list$z)[1],length.out = 1000)
 
 ##---- Calculate density
 WA_Density <- GetDensity(
-  sx = res$sims.list$s[iter , ,1],
-  sy = res$sims.list$s[iter , ,2],
-  z = res$sims.list$z[iter, ],
+  sx = s.rescaled[iter, ,1],
+  sy = s.rescaled[iter, ,2],
+  z = res_sxy$sims.list$z[iter, ],
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = F,
@@ -2012,9 +2021,9 @@ WA_status <- list()
 for(s in 0:1){
   WA_status[[s+1]] <- list()
   for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
+    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+      (res_sxy$sims.list$sex[iter, ] == s) &
+      (res_sxy$sims.list$status[iter, ] == ss)
     
     WA_status[[s+1]][[ss]] <- GetDensity(
       sx = s.rescaled[iter, ,1],
@@ -2042,9 +2051,9 @@ WA_status_reg_NoLig <- list()
 for(s in 0:1){
   WA_status_reg_NoLig[[s+1]] <- list()
   for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
+    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+      (res_sxy$sims.list$sex[iter, ] == s) &
+      (res_sxy$sims.list$status[iter, ] == ss)
     
     WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
       sx = s.rescaled[iter, ,1],
@@ -2060,8 +2069,8 @@ for(s in 0:1){
 
 # ##---- Calculate overall density
 WA_presence <- GetDensity(
-  sx = res$sims.list$s[iter , ,1],
-  sy = res$sims.list$s[iter, ,2],
+  sx = s.rescaled[iter, ,1],
+  sy = s.rescaled[iter, ,2],
   z = res$sims.list$z[iter, ],
   IDmx = habitat.id,
   aliveStates = 1,
@@ -2146,8 +2155,8 @@ for(s in 0:1){
       (res_sxy$sims.list$status == ss)
     
     WA_status_noLig[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[iter, ,1],
-      sy = res_sxy$sims.list$s[iter, ,2],
+      sx = s.rescaled[iter, ,1],
+      sy = s.rescaled[iter, ,2],
       z = thisStatus,
       IDmx = habitat.id,
       aliveStates = 1,
@@ -2181,6 +2190,33 @@ save(WA_Density,
       file = file.path(thisDir, paste0(modelName, "_densities_2.RData")))
 
 load(file.path(thisDir, paste0(modelName, "_densities_2.RData")))
+
+
+##---- Plot overall density raster
+par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "white")
+meanDensity.R <- regions.r
+meanDensity.R[ ] <- WA_Density$MeanCell
+meanDensity.R[is.na(regions.r[])] <- NA
+plot(meanDensity.R)
+
+
+##---- Smooth using a moving window 
+f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T)) 
+MovingWindowSize <-  matrix(1,5,5)
+meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+plot(meanDensity.R)
+
+# writeRaster(x = meanDensity.R, overwrite = TRUE,
+#              filename = file.path(thisDir, paste0(modelName, "regions_raster.tif")))
+
+
+
+##---- Plot 1
+##---- Set color scale
+maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+cuts <- seq(0, maxDens, length.out = 100)   
+
+
 ## ------   2. DENSITY ------
 pdf(file = file.path(thisDir, paste0(modelName,"_2_Density.pdf")),
     width = 20, height = 15)
