@@ -1,11 +1,14 @@
 ## -------------------------------------------------------------------------- ##
 ## ------------------------ ALPINE WOLF SG ---------------------------------- ##
 ## -------------------------------------------------------------------------- ##
+
 ## ------ CLEAN THE WORK ENVIRONMENT ------
+
 rm(list=ls())
 
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
+
 library(raster)
 library(coda)
 library(nimble)
@@ -30,20 +33,24 @@ library(data.table)
 library(ggplot2)
 
 
-
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
+
 source("workingDirectories.R")
 
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
-sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
-sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
+sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
+#sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+#sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
+source("C:/My_documents/RovQuant/Temp/PD/SpatialGroupModel/dgroupDet2.R")
+source("C:/My_documents/RovQuant/Temp/PD/SpatialGroupModel/calculateP2.R")
 
 
 ## -----------------------------------------------------------------------------
+
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
+
 modelName = "AlpineWolf.SG.0.1"
 thisDir <- file.path(analysisDir, modelName)
 
@@ -60,8 +67,11 @@ habitat = list( resolution = 5000,
 
 
 ## -----------------------------------------------------------------------------
+
 ## ------ I. LOAD & CLEAN DATA ------
+
 ## ------   1. STUDY AREA ------
+
 ##---- Polygon of Italy and neighbouring countries
 countries <- read_sf(file.path(dataDir,"GISData/Italy_borders/Italy_andBorderCountries_splitFrance.shp"))
 
@@ -92,8 +102,8 @@ grid$centroids <- st_centroid(grid) %>%
 
 
 
-
 ## ------   2. CAMERA TRAPS ------
+
 ##---- Load GPS positions of Camera Traps
 ct <- read_sf(file.path(dataDir,"GISData/CameraTraps/Ctraps/ct_alpi_240213.shp"))
 sum(duplicated(ct[,c("coord_x","coord_y")]))
@@ -121,6 +131,7 @@ plot(ct$geometry, col = "blue", pch = 3, add = T)
 
 
 ## ------   3. PICTURES/SIGHTNG DATA ------
+
 ##---- Load all images available
 pics <- read_sf(file.path(dataDir,"GISData/CameraTraps/photos/ft_alpi_photos_240213.shp"))
 dim(pics)
@@ -154,16 +165,18 @@ plot(pics$geometry, col = "black", add = T)
 
 
 ## -----------------------------------------------------------------------------
+
 ## ------ II. PREPARE SCR DATA ------
+
 ## ------   1. DETECTORS ------
+
 ## ------     1.1. DETECTORS CHARACTERISTICS ------
+
 detectors <- ct
 detectors$coords <- st_coordinates(detectors)
 dimnames(detectors$coords) <- list(1:nrow(detectors$coords),
                                    c("x","y"))
-
 detectors$`non-workin`[is.na(detectors$`non-workin`)] <- 0
-
 n.detectors <- nrow(detectors)
 
 ## NEEDS TO FIGURE OUT HOW TO EXTRACT NUMBER OF DAYS, WEEKS AND MONTHS ACTIVE 
@@ -180,11 +193,14 @@ detectors$months_active <- trunc(detectors$tot_attivi/30)+1
 hist(detectors$months_active)
 
 
+
 ## ------   2. HABITAT ------
+
 ## ------     2.1. HABITAT CHARACTERISTICS ------
+
 ##---- Create Habitat polygon (detector grid + buffer)
-habitat$polygon <- st_buffer(st_union(grid),
-                             habitat$buffer)
+habitat$polygon <- st_buffer( st_union(grid),
+                              habitat$buffer)
 
 ##---- Remove un-suitable habitat (e.g. seas)
 habitat$polygon <- st_intersection( st_union(countries),
@@ -198,14 +214,11 @@ habitat$raster <- raster(extent(st_bbox(st_buffer(st_union(studyAreaGrid),
 
 ##---- Trick to get % of habitat
 res(habitat$raster) <- habitat$resolution/10
-habitat$raster <- fasterize( countries,
-                             habitat$raster, )
+habitat$raster <- fasterize( countries, habitat$raster)
 habitat$raster[is.na(habitat$raster)]<- 0
 habitat$raster <- aggregate(habitat$raster, fact = 10, sum, na.rm = TRUE)
 habitat$raster[habitat$raster[ ] < 50] <- NA
 habitat$raster[habitat$raster[ ] >= 50] <- 1
-# plot(habitat$raster)
-
 
 ##---- Mask and crop habitat to the buffer
 habitat$raster <- mask(habitat$raster, st_as_sf(habitat$polygon))
@@ -255,7 +268,9 @@ plot(ct,add=T, col="red")
 
 
 ## ------     2.2. HABITAT COVARIATES ------
+
 ## ------       2.2.1. HUMAN POPULATION DENSITY -------
+
 ##---- Load human population density data
 POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
 plot(POP_raw)
@@ -291,7 +306,9 @@ habitat$grid$log_pop <- log_POP %>%
   scale()
 
 
+
 ## ------       2.2.2. CORINE LAND COVER ------
+
 ##---- Load Corine Land Cover data
 CLC <- raster(file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/corine32Ncrop_reclassed.tif"))
 
@@ -337,6 +354,7 @@ habitat$grid <- left_join(habitat$grid, CLC.df, by = "id")
 
 
 ## ------       2.2.3. IUCN PRESENCE ------
+
 ##---- Load IUCN presence data
 list.files(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid"))
 iucn_2012_1 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_permanent.shp"))
@@ -400,6 +418,7 @@ habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
 
 ## ------   3. RESCALE HABITAT & DETECTORS ------
+
 ##---- Rescale habitat and detector coordinates
 scaledCoords <- scaleCoordsToHabitatGrid(
   coordsData = detectors$coords,
@@ -413,6 +432,7 @@ habitat$upScaledCoords <- habitat$scaledCoords + 0.5
 
 
 ## ------   4. IDENTIFY LOCAL CAMERA-TRAPS ------
+
 localObjects <- getLocalObjects(
   habitatMask = habitat$binary,
   coords = scaledCoords$coordsDataScaled,
@@ -421,7 +441,9 @@ localObjects <- getLocalObjects(
 
 
 ## ------   5. DETECTION DATA ------
+
 ## ------     5.1. ASSIGN PICTURES TO CAMERA-TRAPS ------
+
 ##---- Calculate distance between dpictures and camera-traps
 closest <- nn2( st_coordinates(detectors),
                 st_coordinates(pics),
@@ -445,8 +467,8 @@ pics <- pics[closest$nn.dists <= habitat$dOK, ]
 
 
 
-
 ## ------     5.2. AGGREGATE DATA (NOT FOR NOW) ------
+
 ##---- Aggregate pictures per DAY
 pics_d <- pics %>%
   group_by(day = lubridate::day(date), CT_id) %>%
@@ -476,8 +498,8 @@ hist(pics_m$n_wolves, breaks = seq(0.5,12.5,by = 1))
 
 
 
-
 ## ------     5.3. DETECTION VECTOR : y ------
+
 months <- sort(na.omit(unique(pics$Month)))
 n.months <- length(months)
 
@@ -486,11 +508,10 @@ y <- y.visits <- matrix(0, nrow = n.detectors, ncol = n.months)
 
 ##-- Loop over camera-traps
 for(j in 1:nrow(detectors)){
+  
   ##-- Identify this detector
   thisCT <- detectors$id[j]
-  
   theseMonths <- month(detectors$date_st[i])
-  
   
   for(m in 1:n.months){
     
@@ -500,7 +521,7 @@ for(j in 1:nrow(detectors)){
              CT_id == thisCT, 
              Month == months[m])
     
-    if(nrow(thesePics)>0){
+    if(nrow(thesePics) > 0){
       ##-- Calculate total number of wolves detected at this camera-trap
       y[j] <- max(thesePics$n_wolves)
       ##-- Calculate total number of pictures (=events) at this camera-trap
@@ -513,9 +534,13 @@ for(j in 1:nrow(detectors)){
 
 
 ## -----------------------------------------------------------------------------
+
 ## ------ III. NIMBLE ------- 
+
 ## ------   1. MODEL ------
+
 modelCode <- nimbleCode({
+  
   ##---- SPATIAL PROCESS  
   for(c in 1:n.habCovs){
     betaHab[c] ~ dnorm(0.0,0.01)
@@ -537,46 +562,67 @@ modelCode <- nimbleCode({
       habitatGrid = habitatGrid[1:y.max,1:x.max],
       numGridRows = y.max,
       numGridCols = x.max)
-  }#i
+  }#g
   
   
-  ##---- DEMOGRAPHIC PROCESS  
   ##---- DEMOGRAPHIC PROCESS 
   psi ~ dunif(0,1)
   lambda ~ dunif(0,10)
   
+  ## Loop over groups
   for(g in 1:G){
+    ## group inclusion probability
     z[g] ~ dbern(psi)
-    groupSize[g] ~ T(dpois(lambda),1,20 )
-  }#g	
+    ## Group size (use T() to ensure groups is composed of at least on individual)
+    groupSize[g] ~ T(dpois(lambda),1,20)
+  }#g
   
   
   ##---- DETECTION PROCESS
   sigma ~ dunif(0,10)
+  tau <- -0.5/(sigma * sigma)
   p0 ~ dunif(0,1)
   alpha ~ dunif(0,1) ## cohesion parameter (proportion of the group detected together)
   
   ##-- Calculate individual detection prob. at all traps
-  for(i in 1:G){ 
-    p[i,1:J] <- calculateP(
+  ##-- Follows the classic half-normal detection function
+  for(g in 1:G){ 
+    p[g,1:J] <- calculateP2(
       p0 = p0,
-      sigma = sigma,
-      s = s[i,1:2],
+      tau = tau,
+      s = s[g,1:2],
       trapCoords = trapCoords[1:J,1:2],
-      indicator = z[i])
-  }#i
+      nTraps = J,
+      indicator = z[g])
+  }#g
   
-  ##-- Detection probability of one group (= probability of visit for now)
+  ##-- Group detection data (= number of individuals from the same group detected together)
+  ##-- at each detector j and occasion k
+  logNormCst[1:G] <- pbinom(
+    q = 0,
+    size = groupSize[1:G],
+    prob = alpha,
+    lower.tail = 0,
+    log.p = 1)
+  
   for(j in 1:J){
-    for(k in 1:K[j]){
-      y[j,k] ~ dgroupDet( 
+    sumP[j] <- sum(p[1:G,j])
+    pNULL[j] <- exp(-sumP[j])
+    risk[j] <- 1 - pNULL[j]
+    
+    for(k in 1:K){
+      y[j,k] ~ dgroupDet2( 
         size = groupSize[1:G],        
         p = p[1:G,j],
         alpha = alpha,
-        indicator = z[1:G])
+        indicator = z[1:G],
+        nGroups = G,
+        sumP = sumP[j],
+        pNULL = pNULL[j],
+        risk = risk[j], 
+        logNormCst = logNormCst[1:G])
     }#k
   }#j
-  
   
   ##-- DERIVED PARAMETERS 
   n.groups <- sum(z[1:G])
@@ -586,11 +632,10 @@ modelCode <- nimbleCode({
 
 
 ## ------   2. BUNDLE DATA ------
+
 ##---- Set model data
 nimData <- list( y = y,
                  habitatGrid = localObjects$habitatGrid,
-                 localTrapsIndices = localObjects$localIndices,
-                 localTrapsNum = localObjects$numLocalIndices,
                  trapCoords = detectors$scaledCoords,
                  lowerHabCoords = habitat$loScaledCoords, 
                  upperHabCoords = habitat$upScaledCoords,
@@ -604,7 +649,6 @@ nimData <- list( y = y,
 ##---- Set model constants
 nimConstants <- list( G = 500,
                       J = nrow(y),
-                      
                       n.habWindows = habitat$n.HabWindows,
                       n.localIndicesMax = localObjects$numLocalIndicesMax,
                       y.max = dim(habitat$matrix)[1],
@@ -614,7 +658,6 @@ nimConstants <- list( G = 500,
 ##---- Set parameters to track 
 nimParams <- c("N", "D", "lambda0", "sigma", "psi", "theta", "rho", "betaHab")
 nimParams2 <- c("z", "s")
-
 
 
 
