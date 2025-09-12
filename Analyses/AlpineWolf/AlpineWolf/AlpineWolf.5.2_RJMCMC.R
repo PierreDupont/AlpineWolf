@@ -1,12 +1,17 @@
 ## -------------------------------------------------------------------------- ##
-## ---------------------------- ALPINE WOLF SCR------------------------------ ##
+## ----------------------- ALPINE WOLF SCR ---------------------------------- ##
+## ----------------- s[CLC + HumPop + Zone] --------------------------------- ##
+## ---------------- z[psi,rho,theta] ---------------------------------------- ##
+## ---------------- y[p0(transects + zone + ),sigma] ------------------------ ##
 ## -------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
 
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
+library(rgdal)
 library(raster)
+library(coda)
 library(nimble)
 library(nimbleSCR)
 library(stringr)
@@ -18,9 +23,9 @@ library(dplyr)
 library(lubridate)
 library(stars)
 library(RANN)
-# library(Rcpp)
-# library(RcppArmadillo)
-# library(RcppProgress)
+library(Rcpp)
+library(RcppArmadillo)
+library(RcppProgress)
 library(gridExtra)
 library(MetBrewer)
 library(data.table)
@@ -33,15 +38,15 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-# sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
-# sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 
 
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.6.2_RJMCMC"
+modelName = "AlpineWolf.5.2_RJMCMC"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -338,7 +343,7 @@ plot(PA, add = T)
 ## ------   5. PRE-PROCESSED STUFF ------
 load(file.path(thisDir,"Habitat.RData"))
 load(file.path(thisDir,"Detectors.RData"))
-
+ 
 
 
 ## -----------------------------------------------------------------------------
@@ -509,7 +514,7 @@ for(l in 1:length(layer.index)){
   temp[temp[] %in% layer.index[l]] <- 1
   plot(temp)
   plot(st_geometry(detectors$grid), add = T)
-  
+
   COV[[l]] <- raster::aggregate( x = temp,
                                  fact = detectors$resolution/res(temp),
                                  fun = mean)
@@ -766,16 +771,16 @@ for(l in 1:length(layer.index)){
   temp[temp[] %in% layer.index[l]] <- 1
   plot(temp)
   plot(st_geometry(habitat$grid), add = T)
-  
+
   COV[[l]] <- raster::aggregate( x = temp,
                                  fact = habitat$resolution/res(temp),
                                  fun = mean)
-  
+
   COV[[l]] <- raster::focal(x = COV[[l]],
                             w = matrix(1,3,3),
                             fun = mean,
                             na.rm = T)
-  
+
   plot(COV[[l]])
   plot(st_geometry(habitat$grid), add = T)
   CLC.df[ ,l] <- raster::extract( x = COV[[l]],
@@ -895,7 +900,7 @@ for(y in 1:length(packPres_raw)){
     st_drop_geometry() %>%
     group_by(id) %>%
     summarise(sumpres = sum(pres))
-  
+
   tmp <- habitat$grid %>%
     left_join(intersection, by = "id")
   tmp$sumpres[is.na(tmp$sumpres)] <- 0
@@ -982,7 +987,7 @@ habitat$upScaledCoords <- habitat$scaledCoords + 0.5
 localObjects <- getLocalObjects(
   habitatMask = habitat$binary,
   coords = scaledCoords$coordsDataScaled[ ,1:2],
-  dmax = 15)
+  dmax = 25)
 
 
 
@@ -1105,23 +1110,17 @@ status.aug <- MakeAugmentation( y = status,
   
   ##-- RAW DATA
   ##-- Study area polygon 
-  png(
-    file = "C:/Users/pidu/OneDrive - Norwegian University of Life Sciences/PROJECTS/ROVQUANT/TALKS/Wolves Across Borders_May_2023/Full_map_ngs.png",
-    width = 2000,height = 1200, bg = "transparent")
   plot(studyArea, col = adjustcolor("gray60", alpha.f = 0.5), border = F)
-  #mtext( text = "Raw data", side = 1, font = 2)
+  mtext( text = "Raw data", side = 1, font = 2)
   ##-- GPS search tracks 
-  trans_simp <- st_simplify(transects,dTolerance = 1000)
-  
-  plot(trans_simp, col = "firebrick3", add = T, lwd = 0.5)
+  plot(transects, col = "firebrick3", add = T, lwd = 0.5)
   ##-- NGS samples per sex
   sexCol <- ifelse(ngs$Sex == "F", "lightgreen", "orange4")
-  plot(ngs, add = T, pch = 21, bg = sexCol, col = sexCol, cex = 3)
-  legend( x = 202000, y = 5210000, bty = "n",
+  plot(ngs, add = T, pch = 21, bg = sexCol, col = sexCol, cex = 0.5)
+  legend( x = 372000, y = 5210000, bty = "n",
           legend = c("Females", "males"), title = "NGS samples",
           pch = 21, pt.bg = c("lightgreen", "orange4"))
   
-  dev.off()
   
   ##-- PROCESSED DATA
   plot(habitat$polygon, border = "red", lwd = 2)
@@ -1474,13 +1473,14 @@ modelCode <- nimbleCode({
   psiRJ ~ dunif(0, 1) # inclusion prob
   
   for(c in 1:n.habCovs){
-    betaHabDens.raw[c] ~ dnorm(0.0,0.01)
-    zRJ.habDens[c] ~ dbern(psiRJ)
-    betaHabDens[c] <- betaHabDens.raw[c] * zRJ.habDens[c]
+    betaHab.raw[c] ~ dnorm(0.0,0.01)
+    zRJ[c] ~ dbern(psiRJ)
+    betaHab[c] <- betaHab.raw[c] * zRJ[c]
   }#c
   
   habIntensity[1:n.habWindows] <- exp(
-    hab.covs[1:n.habWindows,1:n.habCovs] %*% betaHabDens[1:n.habCovs])
+    hab.covs[1:n.habWindows,1:n.habCovs] %*% (betaHab[1:n.habCovs]*zRJ[1:n.habCovs]))
+  
   sumHabIntensity <- sum(habIntensity[1:n.habWindows])
   logHabIntensity[1:n.habWindows] <- log(habIntensity[1:n.habWindows])
   logSumHabIntensity <- log(sumHabIntensity)
@@ -1501,53 +1501,36 @@ modelCode <- nimbleCode({
   psi ~ dunif(0,1)
   rho ~ dunif(0,1)
   
-  for(sx in 1:2){
-    theta[1:n.states,sx] ~ ddirch(alpha[1:n.states,sx])
-  }#sx
+  for(ss in 1:2){
+    theta[1:n.states,ss] ~ ddirch(alpha[1:n.states,ss])
+  }#ss
   
   for(i in 1:n.individuals){ 
     sex[i] ~ dbern(rho)
     z[i] ~ dbern(psi)
     status[i] ~ dcat(theta[1:n.states,sex[i]+1])
-  }#i 	
-  
+  }#i 								
   
   
   ##---- DETECTION PROCESS 
-  for(c in 1:n.habCovs){
-    betaHabDet.raw[c] ~ dnorm(0.0,0.01)
-    zRJ.det[c] ~ dbern(psiRJ)
-    betaHabDet[c] <- betaHabDet.raw[c] * zRJ.det[c]
-  }#c
+  for(c in 1:n.detCovs){
+    betaDet[c] ~ dnorm(0.0,0.01)
+  }
   
-  betaSigma.raw ~ dnorm(0.0,0.01)
-  zRJ.sigma ~ dbern(psiRJ)
-  betaSigma <- betaSigma.raw * zRJ.sigma
- 
-   for(c in 1:n.detCovs){
-    betaDet[c] ~ dnorm(0.0,0.1)
-  }#c
-  
-  for(st in 1:n.states){
-    for(sx in 1:2){
-      p0[st,sx] ~ dunif(0,1)
-      sigma0[st,sx] ~ dunif(0,2)
-      logit(p0Traps[st,sx,1:n.detectors]) <- logit(p0[st,sx]) + 
+  for(s in 1:n.states){
+    for(ss in 1:2){
+      p0[s,ss] ~ dunif(0,0.5)
+      sigma[s,ss] ~ dunif(0,12)
+      logit(p0Traps[s,ss,1:n.detectors]) <- logit(p0[s,ss]) + 
         det.covs[1:n.detectors,1:n.detCovs] %*% betaDet[1:n.detCovs]
-    }#sx
-  }#st
-  
+    }#ss
+  }#s
   
   for(i in 1:n.individuals){
-    y[i,1:n.maxDets] ~ dbinomLocal_normal_SEM(
-      resizeFactor = 1,
+    y[i,1:n.maxDets] ~ dbinomLocal_normal(
       size = size[1:n.detectors],
       p0Traps = p0Traps[status[i],sex[i]+1,1:n.detectors],
-      sigma0 = sigma0[status[i],sex[i]+1],
-      densCov = densCov[1:n.habWindows],
-      betaDens = betaSigma,
-      habCovs = hab.covs[1:n.habWindows,1:n.habCovs],
-      betaHab = betaHabDet[1:n.habCovs],
+      sigma = sigma[status[i],sex[i]+1],
       s = s[i,1:2],
       trapCoords = detCoords[1:n.detectors,1:2],
       localTrapsIndices = localTrapsIndices[1:n.habWindows,1:n.localIndicesMax],
@@ -1558,20 +1541,10 @@ modelCode <- nimbleCode({
   }#i
   
   
-  ##---- DERIVED VALUES
-  
-  ##-- POPULATION SIZE
+  ##-- DERIVED PARAMETERS 
   N <- sum(z[1:n.individuals])
-  
-  ##-- DENSITY
-  density[1:n.habWindows] <- calculateDensity(
-    s = s[1:n.individuals,1:2],
-    habitatGrid = habitatGrid2[1:y.max,1:x.max],
-    indicator = z[1:n.individuals],
-    numWindows = n.habWindows)
-  densCov[1:n.habWindows] <- log(density[1:n.habWindows]+1) - 0.8 ## offset
-  
 })
+
 
 
 
@@ -1597,15 +1570,13 @@ nimData <- list( y = yCombined.aug,
                    "snow_fall" = detectors$grid$`snow_fall`,
                    "zone" = detectors$grid$`zone`,
                    "log_pop" = detectors$grid$`log_pop`),
-                 #dens.cov = rep(1,habitat$n.HabWindows),
                  size = detectors$size,
                  detCoords = detectors$scaledCoords,
                  localTrapsIndices = localObjects$localIndices,
                  localTrapsNum = localObjects$numLocalIndices,
                  habitatGrid2 = habitat$matrix,
                  habitatGrid = localObjects$habitatGrid)
-nimData$y[410, ] <- c(3, 1  , 2  , 1,-1,-1,-1,-1,-1,-1,-1,
-                         625,627,696,-1,-1,-1,-1,-1,-1,-1) 
+
 
 nimConstants <- list( n.individuals = nrow(nimData$y),
                       n.maxDets = ncol(nimData$y),
@@ -1618,21 +1589,13 @@ nimConstants <- list( n.individuals = nrow(nimData$y),
                       y.max = dim(habitat$matrix)[1],
                       x.max = dim(habitat$matrix)[2])
 
-nimParams <- c("N", "p0", "sigma0", "psi",
-               "zRJ.habDens", "zRJ.sigma", "zRJ.det","psiRJ",
-               "betaHabDens", "betaHabDens.raw",
-               "betaDet", "betaHabDet", "betaHabDet.raw",
-               "betaSigma", "betaSigma.raw",
-               "theta", "rho")
-
-nimParams2 <-  c("z", "s", "status", "sex")
-
-
-
+nimParams <- c("N", "p0", "sigma", "psi", "zRJ","psiRJ",
+               "betaDet", "betaHab.raw", "betaHab", "theta", "rho",
+               "z", "s", "status", "sex")
 
 
 ## ------   3. SAVE THE INPUT ------
-for(c in 1:8){
+for(c in 1:4){
   s.init <- matrix(NA, nimConstants$n.individuals, 2)
   for(i in 1:n.detected){
     if(detNums[i] > 1){
@@ -1656,12 +1619,11 @@ for(c in 1:8){
   sex.init[!is.na(nimData$sex)] <- NA
   sex1.init <- sex.init + 1
   
-  status.init <- rcat(n = nimConstants$n.individuals, prob = c(0.3,0.6,0.1))
+  status.init <- rcat(n = nimConstants$n.individuals, prob = c(0.5,0.45,0.05))
   status.init[!is.na(nimData$status)] <- NA
   
   z.init <- rbinom(n = nimConstants$n.individuals, 1, prob = 0.1)
   z.init[!is.na(nimData$z)] <- NA
-  
   
   nimInits <- list( "s" = s.init,
                     "z" = z.init,
@@ -1672,53 +1634,35 @@ for(c in 1:8){
                     "theta" = cbind(c(0.5,0.45,0.05),
                                     c(0.5,0.3,0.2)),
                     "betaDet" = rep(0,nimConstants$n.detCovs),
-                    "psiRJ" = 0.2,
-                    "zRJ.habDens" = rep(0,nimConstants$n.habCovs),
-                    "zRJ.det" = rep(0,nimConstants$n.habCovs),
-                    "zRJ.sigma" = 0,
-                    
-                    "betaHabDens.raw" = rep(0,nimConstants$n.habCovs),
-                    "betaHabDet.raw" = rep(0,nimConstants$n.habCovs),
-                    "betaSigma.raw" = 0,
-                    
-                    "betaHabDens" = rep(0,nimConstants$n.habCovs),
-                    "betaHabDet" = rep(0,nimConstants$n.habCovs),
-                    "betaSigma" = 0,
-                    
+                    "psiRJ" = 1,
+                    "zRJ" = rep(1,nimConstants$n.habCovs),
+                    "betaHab.raw" = rep(0,nimConstants$n.habCovs),
                     "p0" = cbind(c(0.1,0.1,0.05),
                                  c(0.1,0.1,0.05)),
-                    "sigma0" = cbind(c(0.5,0.5,1),
-                                     c(0.5,0.5,1)))
-  
-  nimInput <- list()
-  nimInput$data <- nimData
-  nimInput$constants <- nimConstants
-  nimInput$inits <- nimInits
+                    "sigma" = cbind(c(1,1,2),
+                                    c(1,1,2)))
   
   save( modelCode,
-        nimInput,
+        nimData,
+        nimConstants,
+        nimInits,
         nimParams,
-        nimParams2,
         file = file.path(thisDir, "input",
                          paste0(modelName, "_", c, ".RData")))
 }
 
 
 
+
 ## ------   4. FIT MODEL -----
-
-load( file.path(thisDir, "input", paste0(modelName, "_1.RData")))
-
 ##---- Create the nimble model object
 nimModel <- nimbleModel( code = modelCode,
-                         constants = nimInput$constants,
-                         inits = nimInput$inits,
-                         data = nimInput$data,
+                         constants = nimConstants,
+                         inits = nimInits,
+                         data = nimData,
                          check = FALSE,
                          calculate = FALSE) 
-
 nimModel$calculate()
-
 
 ##---- Compile the nimble model object to C++
 CsimModel <- compileNimble(nimModel)
@@ -1731,9 +1675,9 @@ conf <- configureMCMC( model = nimModel,
 
 ##---- Configure reversible jump
 configureRJ( conf =  conf,
-             targetNodes = c('betaHabDens.raw','betaHabDet.raw','betaSigma.raw'),
-             indicatorNodes = c('zRJ.habDens','zRJ.det','zRJ.sigma'),
-             control = list(mean = 0, scale = .2))
+            targetNodes = 'betaHab.raw',
+            indicatorNodes = 'zRJ',
+            control = list(mean = 0, scale = .2))
 
 Rmcmc <- buildMCMC(conf)
 compiledList <- compileNimble(list(model = nimModel, mcmc = Rmcmc))
@@ -1741,11 +1685,11 @@ Cmodel <- compiledList$model
 Cmcmc <- compiledList$mcmc
 
 ##---- Run nimble MCMC in multiple bites
-for(c in 1:3){
+for(c in 1:1){
   print(system.time(
     runMCMCbites( mcmc = Cmcmc,
-                  bite.size = 1000,
-                  bite.number = 5,
+                  bite.size = 50,
+                  bite.number = 2,
                   path = file.path(thisDir, paste0("output/chain",c)))
   ))
 }
@@ -1758,10 +1702,8 @@ for(c in 1:3){
 ## ------ V. PROCESS NIMBLE OUTPUT ------
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
-nimOutput <- collectMCMCbites( 
-  path = file.path(thisDir, "output"),
-  burnin = 10,
-  progress.bar = F)
+nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               burnin = 10)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
@@ -1911,9 +1853,9 @@ row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Calculate density
 WA_Extract <- GetDensity(
-  sx = res_sxy$sims.list$s[ , ,1],
-  sy = res_sxy$sims.list$s[ , ,2],
-  z = res_sxy$sims.list$z,
+  sx = res$sims.list$s[ , ,1],
+  sy = res$sims.list$s[ , ,2],
+  z = res$sims.list$z,
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = T,
@@ -2079,7 +2021,7 @@ plot(centroids,
      add = T, pch = 21, cex = 1.2,
      bg = adjustcolor("red",0.2),
      col = "red")
-mtext( text = "Wolf density with/ndetected individuals' centroid",
+mtext( text = "Wolf density with\ndetected individuals' centroid",
        side = 3, font = 2, cex = 2)
 
 
@@ -2088,7 +2030,7 @@ mtext( text = "Wolf density with/ndetected individuals' centroid",
 par(mfrow = c(1,1))
 plot.new()
 grid.table(round(WA_Italy$summary,1))
-mtext(text = "Abundance estimates/nby region",
+mtext(text = "Abundance estimates\nby region",
       side = 3, outer = T, line = -20, cex = 2, font = 2)
 
 sex <- c("female","male")
@@ -2099,7 +2041,7 @@ for(s in 1:length(sex)){
     par(mfrow = c(1,1))
     plot.new()
     grid.table(round(WA_status[[s]][[ss]]$summary,1))
-    mtext(text = paste0("Abundance estimates/nfor ", sex[s], "_", status[ss]),
+    mtext(text = paste0("Abundance estimates\nfor ", sex[s], "_", status[ss]),
           side = 3, outer = T, line = -10, font = 2)
   }
 }
@@ -2179,7 +2121,7 @@ dimnames(betas.wide) <- list(NULL, covNames)
 ##---- List model combinations
 mods <- apply(zRJ.wide, 1, function(x){paste(covNames[x == 1], collapse = "+")})
 
-betas.wide$model <- zRJ.wide$model <- gsub("//(Intercept//)//+", "", mods)
+betas.wide$model <- zRJ.wide$model <- gsub("\\(Intercept\\)\\+", "", mods)
 betas.wide$chain <- zRJ.wide$chain <- rep(1:n.chains, each = n.iterations)
 betas.wide$iteration <- zRJ.wide$iteration <- rep(1:n.iterations, n.chains)
 
@@ -2224,9 +2166,9 @@ ggplot(data = aggr,
        mapping =  aes(x = model, y = weight, alpha = weight)) +
   geom_col(fill =
              "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
+           angle = 45,
+           vjust = 1,
+           hjust = 1
              )) + ylab("Weight") + xlab("Models")
 
 
@@ -2313,12 +2255,12 @@ for(b in 1:ncol(res$sims.list$betaHab)){
        tck = 0.01, las = 1, cex = 2)
   
   
-  # for(m in 1:nrow(aggr)){
-  m <- 1
-  ##-- Identify iterations for this model
-  tmp <- as.data.frame(betas.wide[betas.wide$model == aggr$model[m],1:5])
-  
-  ##-- Calculate intensity
+ # for(m in 1:nrow(aggr)){
+m <- 1
+    ##-- Identify iterations for this model
+    tmp <- as.data.frame(betas.wide[betas.wide$model == aggr$model[m],1:5])
+    
+    ##-- Calculate intensity
   intensity <- do.call( rbind,
                         lapply(1:nrow(tmp),
                                function(x){
@@ -2343,80 +2285,6 @@ graphics.off()
 
 
 
-
-
-
-## ------   4. SIGMA ------
-pdf(file = file.path(thisDir, paste0(modelName,"_Sigma.pdf")),
-    width = 20, height = 15)
-
-## ------     4.1. SIGMA MAP ------
-sex <- c("female","male")
-status <- c("alpha","pup","other")
-for(ss in 1:2){
-  for(s in 1:3){
-    habitat$grid[ ,paste0("sigma_",sex[ss],"_",status[s])] <- 
-      c(exp(log(res$mean$sigma0[s,ss]) + res$mean$betaHabDet %*% t(nimData$hab.covs)))*10
-  }#s
-}#ss
-plot(habitat$grid[ ,c("sigma_female_alpha","sigma_female_pup","sigma_female_other",
-                      "sigma_male_alpha","sigma_male_pup","sigma_male_other")],
-     key.pos = 4,
-     breaks = exp(seq(0,2.8,0.15)))
-
-
-
-
-## ------     4.2. SIGMA EFFECT PLOT ------
-par(mfrow = c(2,3), mar = c(6,5,2,0))
-covNames <- names(nimData$hab.covs)
-pred.hab.covs <- apply(nimData$hab.covs,
-                       2,
-                       function(c){
-                         seq(min(c),
-                             max(c),
-                             length.out = 100)})
-mean.hab.covs <- apply(nimData$hab.covs, 2, mean)
-cols <- hcl.colors(length(mean.hab.covs))
-
-for(b in 1:ncol(res$sims.list$betaHabDet)){
-  sigma <- do.call( rbind,
-                    lapply(1:length(res$sims.list$betaHabDet[ ,b]),
-                           function(x){
-                             exp(log(res$sims.list$sigma0[x,1,1]) +
-                                   res$sims.list$betaHabDet[x,b] * pred.hab.covs[ ,b] + 
-                                   sum(res$sims.list$betaHabDet[x,-b] * mean.hab.covs[-b]))*10
-                           }))
-  
-  mean.int <- colMeans(sigma)
-  quant.int <- apply(sigma, 2, function(x)quantile(x,c(0.025,0.5,0.975)))
-  maxD <- round(max(quant.int),3)
-  plot( x = pred.hab.covs[ ,b],
-        y = quant.int[2, ],
-        type = "n", ylim = c(0, maxD), xlim = range(pred.hab.covs[ ,b]),
-        ylab = expression(paste(sigma, " (km)")),
-        xlab = covNames[b], axes = FALSE)
-  minCov <- min(st_drop_geometry(habitat$grid[ ,covNames[b]]))
-  maxCov <- max(st_drop_geometry(habitat$grid[ ,covNames[b]]))
-  xLabels <- round(seq(minCov, maxCov, length.out = 10),2)
-  axis(1,
-       at = round(seq(min(pred.hab.covs[ ,b]), max(pred.hab.covs[ ,b]), length.out = 10),3),
-       labels = xLabels, cex = 2,
-       tck = 0.01, las = 1, hadj = 0.5)
-  axis(2, at = seq(0,maxD,length.out = 6),
-       labels = seq(0,maxD,length.out = 6),
-       tck = 0.01, las = 1, cex = 2)
-  
-  polygon(x = c(pred.hab.covs[ ,b],rev(pred.hab.covs[ ,b])),
-          y = c(quant.int[1, ],rev(quant.int[3, ])), border = F,
-          col = adjustcolor(cols[b], alpha.f = 0.5))
-  
-  points( x = pred.hab.covs[ ,b],
-          y = quant.int[2,],
-          lwd = 2, type = "l", col = cols[b])
-  
-}
-graphics.off()
 
 
 
@@ -2505,7 +2373,7 @@ graphics.off()
 
 ## ------   4. PARAMETER TABLES ------
 ## ------     4.1. SCR PARAMETERS ------
-#paramSimple <- sapply(strsplit(colnames(res$sims.list), split = '//['), '[', 1)
+#paramSimple <- sapply(strsplit(colnames(res$sims.list), split = '\\['), '[', 1)
 params.simple <- names(res$mean)[!names(res$mean) %in% c("s","z")]
 
 params.means <- do.call(c, lapply(params.simple, function(x)res$mean[[x]]))
@@ -2528,7 +2396,7 @@ names(params.summary) <- c("mean", "sd", "2.5%CI", "97.5%CI", "Rhat", "n.eff")
 # 
 # print( xtable(params.summary, type = "latex"),
 #        floating = FALSE,# scalebox=.8,
-#        add.to.row = list(list(seq(1, nrow(params.summary), by = 2)),"//rowcolor[gray]{.95} "),
+#        add.to.row = list(list(seq(1, nrow(params.summary), by = 2)),"\\rowcolor[gray]{.95} "),
 #        file = file.path(myVars$WD, myVars$modelName,"TABLES",
 #                         paste( myVars$modelName, "_params.tex", sep = "")))
 
@@ -2674,7 +2542,7 @@ mods <- apply(zRJ.wide, 1, function(x) {
   paste(covNames[x == 1], collapse = "+")
 })
 betas.wide$model <- zRJ.wide$model <-
-  gsub("//(Intercept//)//+", "", mods)
+  gsub("\\(Intercept\\)\\+", "", mods)
 
 
 betas.wide$chain <- zRJ.wide$chain <- rep(1:n.chains, each = n.iterations)
@@ -2725,9 +2593,9 @@ ggplot(data = aggr,
   
   geom_col(fill =
              "magenta") + theme(axis.text.x = element_text(
-               angle = 45,
-               vjust = 1,
-               hjust = 1
+           angle = 45,
+           vjust = 1,
+           hjust = 1
              )) + ylab("Weight") + xlab("Models")
 
 
