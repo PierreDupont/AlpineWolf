@@ -37,7 +37,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.4_RJMCMC_2324"
+modelName = "AlpineWolf.5.5_RJMCMC_2324"
 thisDir <- file.path(analysisDir, modelName)
 
 ## LOAD HABITAT SPECIFICATIONS
@@ -68,7 +68,7 @@ alps <- st_transform(x = alps, crs = st_crs(countries))
 ## LOAD POLYGON OF THE MINIMUM WOLF PRESENCE
 presence <- read_sf(file.path(dataDir,"GISData/presence_2324/Grid_Alpi_presenzaRAlpine_ITA_2023_2024_LWAEU.shp"))
 presence <- st_transform(x = presence, crs = st_crs(countries))
-presence <- presence[presence$`Pres_20-21` %in% 1, ]
+presence <- presence[presence$`2023_2024` %in% 1, ]
 presence <- st_intersection(presence, regions)
 
 # east <- read_sf(file.path(dataDir,"GISData/Output_layout/East_tot.shp"))
@@ -116,6 +116,11 @@ s.rescaled <- scaleCoordsToHabitatGrid(
   coordsHabitatGridCenter = coordinates(habitat.r),
   scaleToGrid = T)$coordsDataScaled
 
+# ##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
+habitat.id <- matrix( data = 1:ncell(habitat.r),
+                      nrow = nrow(habitat.r),
+                      ncol = ncol(habitat.r),
+                      byrow = TRUE)
 
 ##---- Create a matrix of Italian regions
 ##---- (rows == regions ; columns == habitat raster cells)
@@ -124,82 +129,66 @@ regions.r <- fasterize(sf = st_as_sf(regions),
                        field = "ID",
                        background = NA)
 regions.r[regions.r[]==0] <- NA
-regions.r <- regions.r + italia.r - 1
-# for(i in 1:length(regions$DEN_UTS)){
-#   regions.r[regions.r %in% regions$ID[i]] <- regions$DEN_UTS[i]
-# }
+regions.r <- regions.r + habitat.r - 1
+
 regions.unique <- sort(na.omit(unique(regions.r[])))
+regions.names <- NULL
+for(r in 1:length(regions.unique)){
+  regions.names[r] <- regions$DEN_UTS[regions$ID == regions.unique[r]]
+}
 regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] == x}))
 regions.rgmx[is.na(regions.rgmx)] <- 0
-row.names(regions.rgmx) <- regions.unique
+row.names(regions.rgmx) <- regions.names
 
-##---- Create a matrix of Italian regions without Liguria
-regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
 
-regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
-                            raster = habitat.r,
-                            field = "ID",
-                            background = NA)
-
-regionsnolig.r[regionsnolig.r[]==0] <- NA
-regionsnolig.r <- regionsnolig.r + italia.r - 1
-
-# for(i in 1:length(regionsnolig$DEN_UTS)){
-#   regionsnolig.r[regionsnolig.r %in% regionsnolig$ID[i]] <- regionsnolig$DEN_UTS[i]
+# ##---- Create a matrix of Italian regions without Liguria
+# regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
+# regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
+#                             raster = habitat.r,
+#                             field = "ID",
+#                             background = NA)
+# 
+# regionsnolig.rgmx <- regions.rgmx[ row.names(regions.rgmx) != "Liguria", ]
+# row.names(regionsnolig.rgmx)
+# plot(regionsnolig.r)
+# 
+# ##---- Create a matrix of grid minimum presence
+# ##---- (rows == regions ; columns == habitat raster cells)
+# # presence <- st_buffer(st_union(presence), dist = 1000)
+# presence.r <- fasterize(sf = st_as_sf(presence),
+#                         raster = habitat.r,
+#                         field = "ID",
+#                         background = NA)
+# presence.r[presence.r[]==0] <- NA
+# presence.r <- presence.r + habitat.r - 1
+# 
+# presence.unique <- sort(na.omit(unique(presence.r[])))
+# presence.names <- NULL
+# for(r in 1:length(presence.unique)){
+#   presence.names[r] <- regions$DEN_UTS[regions$ID == presence.unique[r]]
 # }
-regionsnolig.unique <- sort(na.omit(unique(regionsnolig.r[])))
-regionsnolig.rgmx <- do.call(rbind, lapply(regionsnolig.unique, function(x){regionsnolig.r[] == x}))
-regionsnolig.rgmx[is.na(regionsnolig.rgmx)] <- 0
-row.names(regionsnolig.rgmx) <- regionsnolig.unique
-
-
-##---- Create a matrix of grid minimum presence
-##---- (rows == regions ; columns == habitat raster cells)
-# presence <- st_buffer(st_union(presence), dist = 1000)
-presence.r <- fasterize(sf = st_as_sf(presence),
-                        raster = habitat.r,
-                        field = "ID",
-                        background = NA)
-
-
-presence.r[presence.r[]==0] <- NA
-presence.r <- presence.r + italia.r - 1
-# for(i in 1:length(presence$DEN_UTS)){
-#   presence.r[presence.r %in% presence$ID[i]] <- presence$DEN_UTS[i]
-# }
-presence.unique <- sort(na.omit(unique(presence.r[])))
-presence.rgmx <- do.call(rbind, lapply(presence.unique, function(x){presence.r[] == x}))
-presence.rgmx[is.na(presence.rgmx)] <- 0
-row.names(presence.rgmx) <- presence.unique
-
-
-# THEN WITHOUT LIGURIA
-presence.nolig <- presence[presence$DEN_UTS != 'Liguria',]
-
-presencenolig.r <- fasterize(sf = st_as_sf(presence.nolig),
-                             raster = habitat.r,
-                             field = "ID",
-                             background = NA)
-
-presencenolig.r[presencenolig.r[]==0] <- NA
-presencenolig.r <- presencenolig.r + italia.r - 1
-# for(i in 1:length(presence.nolig$DEN_UTS)){
-#   presencenolig.r[presencenolig.r %in% presence.nolig$ID[i]] <- presence.nolig$DEN_UTS[i]
-# }
-presence.nolig.unique <- sort(na.omit(unique(presencenolig.r[])))
-presence.nolig.rgmx <- do.call(rbind, lapply(presence.nolig.unique, function(x){presencenolig.r[] == x}))
-presence.nolig.rgmx[is.na(presence.nolig.rgmx)] <- 0
-row.names(presence.nolig.rgmx) <- presence.nolig.unique
+# presence.rgmx <- do.call(rbind, lapply(presence.unique, function(x){presence.r[] == x}))
+# presence.rgmx[is.na(presence.rgmx)] <- 0
+# row.names(presence.rgmx) <- presence.names
+# 
+# 
+# # THEN WITHOUT LIGURIA
+# presence.nolig <- presence[presence$DEN_UTS != 'Liguria',]
+# presencenolig.r <- fasterize(sf = st_as_sf(presence.nolig),
+#                              raster = habitat.r,
+#                              field = "ID",
+#                              background = NA)
+# 
+# presence.nolig.rgmx <- presence.rgmx[ row.names(presence.rgmx) != "Liguria", ]
+# row.names(regionsnolig.rgmx)
 
 ##---presence.r##---- Create a matrix of the Alpine region
 ##---- (rows == regions ; columns == habitat raster cells)
 alps.r <- fasterize( sf = st_as_sf(alps),
-                     raster = presencenolig.r,
+                     raster = regions.r,
                      background = NA)
-# plot(alps.r)
-
 alps.r[alps.r[]==0] <- NA
-alps.r <- alps.r + italia.r - 1
+alps.r <- alps.r + habitat.r - 1
 alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
 alps.rgmx[is.na(alps.rgmx)] <- 0
 row.names(alps.rgmx) <- "Italian Alps"
@@ -207,7 +196,7 @@ row.names(alps.rgmx) <- "Italian Alps"
 
 ##---- Thin MCMC samples for faster calculation 
 ##---- (60000 iterations in too much for the getDensity fucntion at 1x1km)
-iter <- seq(1,dim(res_sxy$sims.list$z)[1],length.out = 1000)
+iter <- round(seq(3,dim(res_sxy$sims.list$z)[1],length.out = 2000))
 
 
 ## ------   1.1. EXTRACT PRESENCE ONLY & REGION-SPECIFIC DENSITIES ------
@@ -240,7 +229,7 @@ for(s in 0:1){
       regionID = presence.rgmx)
   }#ss
 }#s
-
+gc()
 
 ##---- Calculate Italian density with no Liguria
 # rownames(presence.rgmx)
@@ -258,6 +247,8 @@ WA_presence_noLig <- GetDensity(
   returnPosteriorCells = F,
   regionID = presence.nolig.rgmx)
 
+gc()
+
 # save WA_Italy_noLig and remove the object and reload it
 # save WA_status_noLig for each status and sex and save it remove the object and 
 WA_status_noLig <- list()
@@ -269,8 +260,8 @@ for(s in 0:1){
       (res_sxy$sims.list$status == ss)
     
     WA_status_noLig[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[iter, ,1],
-      sy = res_sxy$sims.list$s[iter, ,2],
+      sx = s.rescaled[iter, ,1],
+      sy = s.rescaled[iter, ,2],
       z = thisStatus,
       IDmx = habitat.id,
       aliveStates = 1,
@@ -278,6 +269,8 @@ for(s in 0:1){
       regionID = presence.nolig.rgmx)
   }
 }
+
+gc()
 
 ## ------   1.2. EXTRACT TOTAL & REGION-SPECIFIC DENSITIES ------
 ##---- Calculate total and regional densities
@@ -289,6 +282,8 @@ WA_regions <- GetDensity(
   aliveStates = 1,
   returnPosteriorCells = F,
   regionID = regions.rgmx)
+
+gc()
 
 ##---- Calculate sex and status-specific densities
 WA_status <- list()
@@ -309,12 +304,7 @@ for(s in 0:1){
       regionID = regions.rgmx)
   }#ss
 }#s
-
-##---- Name the object to fill up rapidly the tables 
-names(WA_status)<- c("F","M")
-names(WA_status[["F"]]) <- c("Alpha", "Pups", "Others")
-names(WA_status[["M"]]) <- c("Alpha", "Pups", "Others")
-
+gc()
 
 ## ------   1.2. EXTRACT TOTAL & REGION-SPECIFIC DENSITIES ------
 ##---- Calculate total and regional densities
@@ -327,12 +317,14 @@ WA_regionsNoLig <- GetDensity(
   returnPosteriorCells = F,
   regionID = regionsnolig.rgmx)
 
+gc()
+
 ##---- Calculate sex and status-specific densities
 WA_status_reg_NoLig <- list()
 for(s in 0:1){
   WA_status_reg_NoLig[[s+1]] <- list()
   for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
+    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
       (res_sxy$sims.list$sex[iter, ] == s) &
       (res_sxy$sims.list$status[iter, ] == ss)
     
@@ -345,12 +337,8 @@ for(s in 0:1){
       returnPosteriorCells = F,
       regionID = regionsnolig.rgmx)
   }#ss
-}#s
-
-##---- Name the object to fill up rapidly the tables 
-names(WA_status)<- c("F","M")
-names(WA_status[["F"]]) <- c("Alpha", "Pups", "Others")
-names(WA_status[["M"]]) <- c("Alpha", "Pups", "Others")
+}#s``
+gc()
 
 ## ------   1.3. EXTRACT ALPINE REGION DENSITY ------
 WA_alps <- GetDensity(
@@ -362,152 +350,228 @@ WA_alps <- GetDensity(
   returnPosteriorCells = F,
   regionID = alps.rgmx)
 
+gc()
+
 WA_alps$summary
 
 
 # 198 + 422 +65
 
 ## ------   1.4. EXTRACT PREDICTED DENSITY ------
-predDensities <- sapply(iter,
-                        function(x){
-                          intens <- c(exp(res$sims.list$betaHab[x, ] %*% t(nimData$hab.covs)))
-                          pred <- res$sims.list$N[x]*(intens/sum(intens))
-                          return(pred)
-                        })
-
-meanPred.r <- habitat$raster
-meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
-meanPred.r[is.na(habitat$Italia[])] <- NA
-
-
+# predDensities <- sapply(iter,
+#                         function(x){
+#                           intens <- c(exp(res$sims.list$betaHab[x, ] %*% t(nimData$hab.covs)))
+#                           pred <- res$sims.list$N[x]*(intens/sum(intens))
+#                           return(pred)
+#                         })
+# 
+# meanPred.r <- habitat$raster
+# meanPred.r[meanPred.r[] > 0] <- rowMeans(predDensities)
+# meanPred.r[is.na(habitat$Italia[])] <- NA
 
 
 ## ------   1.5. SAVE DENSITIES -----
-# save(WA_Density,
-#      WA_regions,
-#      WA_status,
-#      WA_regionsNoLig,
-#      WA_status_reg_NoLig,
-#      WA_presence,
-#      # WA_presence_status,
-#      WA_presence_noLig,
-#      WA_status_noLig,
-#      WA_alps, meanPred.r,
-#      file = file.path(thisDir, paste0(modelName, "_densities.RData")))
+save(WA_regions,
+     # WA_status,
+     # WA_regionsNoLig,
+     # WA_status_reg_NoLig,
+     # WA_presence,
+     # WA_presence_status,
+     # WA_presence_noLig,
+     # WA_status_noLig,
+     WA_alps,
+     file = file.path(thisDir, paste0(modelName, "_densities_1x1.RData")))
 
-load(file = file.path(thisDir, paste0(modelName, "_densities.RData")))
+load(file = file.path(thisDir, paste0(modelName, "_densities_1x1.RData")))
 
 
 ## -----------------------------------------------------------------------------
 ## ------ 2. REPORT FIGURES ------
 ## ------   2.1. DENSITY MAPS ------
 ## ------     2.1.1. DENSITY MAPS ------
-##---- Plot overall density raster
-par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "white")
-meanDensity.R <- regions.r
-meanDensity.R[ ] <- WA_regions$MeanCell
-meanDensity.R[is.na(regions.r[])] <- NA
-plot(meanDensity.R)
-
-
-##---- Smooth using a moving window 
-f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T)) 
-MovingWindowSize <-  matrix(1,5,5)
-meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
-plot(meanDensity.R)
-
-# writeRaster(x = meanDensity.R, overwrite = TRUE,
-#              filename = file.path(thisDir, paste0(modelName, "regions_raster.tif")))
-
+# ##---- Plot overall density raster
+# par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "white")
+# meanDensity.R <- regions.r
+# meanDensity.R[ ] <- WA_regions$MeanCell
+# meanDensity.R[is.na(regions.r[])] <- NA
+# plot(meanDensity.R)
+# 
+# 
+# ##---- Smooth using a moving window 
+# f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T)) 
+# MovingWindowSize <-  matrix(1,5,5)
+# meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+# plot(meanDensity.R)
+# 
+# # writeRaster(x = meanDensity.R, overwrite = TRUE,
+# #              filename = file.path(thisDir, paste0(modelName, "regions_raster.tif")))
 
 
 ##---- Plot 1
-##---- Set color scale
-maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
-cuts <- seq(0, maxDens, length.out = 100)   
 
-
-colFunc <- colorRampPalette(c("gray80", rev(terrain.colors(12))))
-col <- colFunc(100)
 {
-  pdf(file = file.path(thisDir, paste0(modelName, "_density_map1.pdf" )),
-      width = 10, height = 8)
-  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
+  pdf(file = file.path(thisDir, paste0(modelName, "_Density_2324_alps.pdf" )),
+      width = 20, height = 12)
+  
+  meanDensity.R <- regions.r
+  meanDensity.R[ ] <- WA_regions$MeanCell
+  meanDensity.R[is.na(regions.r[])] <- NA
+  
+  ##---- Smooth using a moving window 
+  f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T))
+  MovingWindowSize <-  matrix(1,5,5)
+  meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+
+  ##---- Set color scale
+  maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+  cuts <- seq(0, maxDens, length.out = 100)   
+  
+  colFunc <- colorRampPalette(c("whitesmoke","#1e96b2", "#36b2db", "#77c5b8","#a9d4b6", "#bed789", "#e0dd81"))  
+  col <- colFunc(100)
+  
+  # par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
   plot(st_geometry(st_union(st_intersection(countries,studyArea))),
        col = "white", border = "black")
-  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
-  plot( meanDensity.R, add = T,
-        breaks = cuts, col = col,
-        axes = F, box = F, bty = "n", legend = F)
-  plot(st_geometry(st_union(st_intersection(countries,regions))),
-       add=T, border = "black")
-  graphics.off()
-  
-  
-  pdf(file = file.path(thisDir, paste0(modelName, "_density_legend1.pdf" )),
-      width = 1.75, height = 5)
-  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
-  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
-  resolution<-prod(res(meanDensity.R)/1000)
-  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
-  lab<-DoScale(num,1,100)
-  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
-  axis(4,lab,num*100)
-  box()
-  graphics.off()
-}
-
-
-colFunc <- colorRampPalette(c("gray80","slateblue","yellow","orange","red","red"))
-col <- colFunc(100)
-{
-  pdf(file = file.path(thisDir, paste0(modelName, "_density_map2.pdf" )),
-      width = 10, height = 8)
-  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       col = "white", border = "black")
-  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
-  plot( meanDensity.R, add = T,
-        breaks = cuts, col = col,
-        axes = F, box = F, bty = "n", legend = F)
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       add=T, border = "black")
-  graphics.off()
-  
-  
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend2.pdf" )),
-      width = 1.75, height = 5)
-  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
-  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
-  resolution<-prod(res(meanDensity.R)/1000)
-  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
-  lab<-DoScale(num,1,100)
-  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
-  axis(4,lab,num*100)
-  box()
-  graphics.off()
-}
-
-
-colFunc <- colorRampPalette(c("whitesmoke", "lightskyblue3", "dodgerblue3","mediumpurple4","lightsalmon1"))
-col <- colFunc(100)
-{
-  pdf(file = file.path(thisDir, paste0(modelName, "_density_regionsplot_map.pdf" )),
-      width = 10, height = 8)
-  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       col = "white", border = "black")
-  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  # plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
   plot( meanDensity.R, add = T,
         breaks = cuts, col = col,
         axes = F, box = F, bty = "n", legend = F)
   plot(st_geometry(st_union(st_intersection(countries,studyArea))),
        add=T, border = "black") 
   plot( st_geometry(regions), add = T, lwd = 1, border = "black", fill = FALSE,)
-  mtext( text = paste( "N = ", round(WA_regions$summary["Total",1],1),
-                       " [", round(WA_regions$summary["Total",4],1), " ; ",
-                       round(WA_regions$summary["Total",5],1), "]", sep = ""),
-         side = 1, font = 2, cex = 1.5)
+  plot( st_geometry(alps), add = T, lwd = 1, border = "blue", fill = FALSE,)
+  # mtext( text = paste( "N = ", round(WA_regions$summary["Total",1],1),
+  #                      " [", round(WA_regions$summary["Total",4],1), " ; ",
+  #                      round(WA_regions$summary["Total",5],1), "]", sep = ""),
+  #        side = 1, font = 2, cex = 1.5)
+  
+  
+
+  
+  # meanDensity.R <- alps.r
+  # meanDensity.R[ ] <- WA_alps$MeanCell
+  # meanDensity.R[is.na(alps.r[])] <- NA
+  # 
+  # ##---- Smooth using a moving window 
+  # f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T))
+  # MovingWindowSize <-  matrix(1,5,5)
+  # meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+  # 
+  # ##---- Set color scale
+  # maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+  # cuts <- seq(0, maxDens, length.out = 100)   
+  # 
+  # colFunc <- colorRampPalette(c("whitesmoke","#1e96b2", "#36b2db", "#77c5b8","#a9d4b6", "#bed789", "#e0dd81"))  
+  # col <- colFunc(100)
+  # 
+  # # par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      col = "white", border = "black")
+  # plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  # plot( meanDensity.R, add = T,
+  #       breaks = cuts, col = col,
+  #       axes = F, box = F, bty = "n", legend = F)
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      add=T, border = "black") 
+  # plot( st_geometry(regions), add = T, lwd = 1, border = "black", fill = FALSE,)
+  # plot( st_geometry(alps), add = T, lwd = 1, border = "black",fill = FALSE)
+  # mtext( text = paste( "N = ", round(WA_alps$summary["Total",1],1),
+  #                      " [", round(WA_alps$summary["Total",4],1), " ; ",
+  #                      round(WA_alps$summary["Total",5],1), "]", sep = ""),
+  #        side = 1, font = 2, cex = 1.5)
+  # 
+  
+  # meanDensity.R <- regionsnolig.r
+  # meanDensity.R[ ] <- WA_regionsNoLig$MeanCell
+  # meanDensity.R[is.na(regionsnolig.r[])] <- NA
+  # 
+  # ##---- Smooth using a moving window 
+  # f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T))
+  # MovingWindowSize <-  matrix(1,5,5)
+  # meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+  # 
+  # ##---- Set color scale
+  # maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+  # cuts <- seq(0, maxDens, length.out = 100)   
+  # 
+  # colFunc <- colorRampPalette(c("whitesmoke","#1e96b2", "#36b2db", "#77c5b8","#a9d4b6", "#bed789", "#e0dd81"))  
+  # col <- colFunc(100)
+  # 
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      col = "white", border = "black")
+  # plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  # plot( meanDensity.R, add = T,
+  #       breaks = cuts, col = col,
+  #       axes = F, box = F, bty = "n", legend = F)
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      add=T, border = "black") 
+  # plot( st_geometry(regions), add = T, lwd = 1, border = "black", fill = FALSE,)
+  # mtext( text = paste( "N = ", round(WA_regionsNoLig$summary["Total",1],1),
+  #                      " [", round(WA_regionsNoLig$summary["Total",4],1), " ; ",
+  #                      round(WA_regionsNoLig$summary["Total",5],1), "]", sep = ""),
+  #        side = 1, font = 2, cex = 1.5)
+  # 
+  # 
+  # meanDensity.R <- presence.r
+  # meanDensity.R[ ] <- WA_presence$MeanCell
+  # meanDensity.R[is.na(presence.r[])] <- NA
+  # ##---- Smooth using a moving window 
+  # f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T))
+  # MovingWindowSize <-  matrix(1,5,5)
+  # meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+  # 
+  # ##---- Set color scale
+  # maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+  # cuts <- seq(0, maxDens, length.out = 100)   
+  # 
+  # colFunc <- colorRampPalette(c("whitesmoke","#1e96b2", "#36b2db", "#77c5b8","#a9d4b6", "#bed789", "#e0dd81"))  
+  # col <- colFunc(100)
+  # 
+  # 
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      col = "white", border = "black")
+  # plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  # plot( meanDensity.R, add = T,
+  #       breaks = cuts, col = col,
+  #       axes = F, box = F, bty = "n", legend = F)
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      add=T, border = "black") 
+  # plot( st_geometry(regions), add = T, lwd = 1, border = "black", fill = FALSE,)
+  # mtext( text = paste( "N = ", round(WA_presence$summary["Total",1],1),
+  #                      " [", round(WA_presence$summary["Total",4],1), " ; ",
+  #                      round(WA_presence$summary["Total",5],1), "]", sep = ""),
+  #        side = 1, font = 2, cex = 1.5)
+  # 
+  # 
+  # meanDensity.R <- presencenolig.r
+  # meanDensity.R[ ] <- WA_presence_noLig$MeanCell
+  # meanDensity.R[is.na(presencenolig.r[])] <- NA
+  # ##---- Smooth using a moving window 
+  # f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T))
+  # MovingWindowSize <-  matrix(1,5,5)
+  # meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+  # 
+  # ##---- Set color scale
+  # maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+  # cuts <- seq(0, maxDens, length.out = 100)   
+  # 
+  # colFunc <- colorRampPalette(c("whitesmoke","#1e96b2", "#36b2db", "#77c5b8","#a9d4b6", "#bed789", "#e0dd81"))  
+  # col <- colFunc(100)
+  # 
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      col = "white", border = "black")
+  # plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
+  # plot( meanDensity.R, add = T,
+  #       breaks = cuts, col = col,
+  #       axes = F, box = F, bty = "n", legend = F)
+  # plot(st_geometry(st_union(st_intersection(countries,studyArea))),
+  #      add=T, border = "black") 
+  # plot( st_geometry(regions), add = T, lwd = 1, border = "black", fill = FALSE,)
+  # mtext( text = paste( "N = ", round(WA_presence_noLig$summary["Total",1],1),
+  #                      " [", round(WA_presence_noLig$summary["Total",4],1), " ; ",
+  #                      round(WA_presence_noLig$summary["Total",5],1), "]", sep = ""),
+  #        side = 1, font = 2, cex = 1.5)
+  # 
   
   graphics.off()
   
@@ -524,104 +588,6 @@ col <- colFunc(100)
 #   box()
 #   graphics.off()
 }
-
-
-colFunc <- colorRampPalette(c("gray80", "orange", "yellow", "white", "white"))#,"yellow","orange","red","red"
-col <- colFunc(100)
-{
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map4.pdf" )),
-      width = 10, height = 8)
-  par(mfrow = c(1,1), mar = c(4,4,0,0),bg="white")
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       col = "white", border = "black")
-  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
-  plot( meanDensity.R, add = T,
-        breaks = cuts, col = col,
-        axes = F, box = F, bty = "n", legend = F)
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       add=T, border = "black",lwd=2)
-  plot(st_geometry(st_union(st_intersection(west,studyArea))), lwd = 2,
-       add=T, border = "black")
-  graphics.off()
-  
-  
-  
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend4.pdf" )),
-      width = 1.75, height = 5)
-  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
-  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
-  resolution<-prod(res(meanDensity.R)/1000)
-  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
-  lab<-DoScale(num,1,100)
-  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
-  axis(4,lab,num*100)
-  box()
-  graphics.off()
-}
-
-
-colFunc <- colorRampPalette(c("gray80", rev(hcl.colors(4))))
-col <- colFunc(100)
-{
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map5.pdf" )),
-      width = 10, height = 8)
-  par(mfrow = c(1,1), mar = c(4,4,0,0),bg = "white")
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       col = "white", border = "black")
-  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
-  plot( meanDensity.R, add = T,
-        breaks = cuts, col = col,
-        axes = F, box = F, bty = "n", legend = F)
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       add=T, border = "black")
-  graphics.off()
-  
-  
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend5.pdf" )),
-      width = 1.75, height = 5)
-  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
-  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
-  resolution<-prod(res(meanDensity.R)/1000)
-  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
-  lab<-DoScale(num,1,100)
-  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
-  axis(4,lab,num*100)
-  box()
-  graphics.off()
-}
-
-
-colFunc <- colorRampPalette(c("gray80", hcl.colors(4)))
-col <- colFunc(100)
-{
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_map6.pdf" )),
-      width = 10, height = 8)
-  par(mfrow = c(1,1), mar = c(4,4,0,0),bg = "white")
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       col = "white", border = "black")
-  plot( st_geometry(countries), add = T, lwd = 1, border = "black", col = "gray80")
-  plot( meanDensity.R, add = T,
-        breaks = cuts, col = col,
-        axes = F, box = F, bty = "n", legend = F)
-  plot(st_geometry(st_union(st_intersection(countries,studyArea))),
-       add=T, border = "black")
-  graphics.off()
-  
-  
-  pdf(file = file.path(thisDir, "figures", paste0(modelName, "_density_legend6.pdf" )),
-      width = 1.75, height = 5)
-  par(mar=c(1,1,1,4),las=1,cex.axis=1.6,xaxs="i",yaxs="i")#,bg="black")
-  plot(1,type="n",axes=FALSE,ylim=c(1,100),xlim=c(0,1),xlab="",ylab="")
-  resolution<-prod(res(meanDensity.R)/1000)
-  num<-seq(min(cuts)/resolution,max(cuts)/resolution,0.05)
-  lab<-DoScale(num,1,100)
-  segments(0,1:length(col),1,1:length(col),col=col,lwd=5,lend=1)
-  axis(4,lab,num*100)
-  box()
-  graphics.off()
-}
-
-
 
 
 plot( st_geometry(st_difference(countries,studyArea)),
@@ -643,7 +609,7 @@ mtext( text = paste( "N = ", round(WA_regions$summary["Total",1],1),
 ##---- Plot Alpine region density raster
 par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "black")
 
-alpDensity.R <- habitat.r
+alpDensity.R <- habitat$raster
 alpDensity.R[] <- WA_alps$MeanCell
 alpDensity.R[is.na(alps.r[])] <- NA
 
@@ -1111,20 +1077,21 @@ status <- c("Alpha","Pups","Others")
 ##---- Create empty table
 abundanceTable  <-  matrix(NA, nrow = 10, ncol = 12)
 colnames(abundanceTable) <- c(rep("Alpha",3), rep("Pups",3), rep("Others",3), rep("Total",3))
-rownames(abundanceTable) <- c("Region", row.names(WA_regions$summary))
+rownames(abundanceTable) <- c("Region", row.names(WA_presence$summary))
 abundanceTable[1,] <- c(rep(c("F", "M", "Total"), 4))
 
 for(ss in 1:length(status)){
   colPos <- which(colnames(abundanceTable) %in% status[ss])
   for(s in 1:length(sex)){
     abundanceTable[2:nrow(abundanceTable),colPos[s]] <- paste0(
-      format(round( WA_status[[sex[s]]][[status[ss]]]$summary[,"mean"],1), nsmall = 1),
-      " (", WA_status[[sex[s]]][[status[ss]]]$summary[,"95%CILow"],
-      "-", WA_status[[sex[s]]][[status[ss]]]$summary[,"95%CIHigh"], ")")
+      format(round( WA_presence_status[[sex[s]]][[status[ss]]]$summary[,"mean"],1), nsmall = 1),
+      " (", WA_presence_status[[sex[s]]][[status[ss]]]$summary[,"95%CILow"],
+      "-", WA_presence_status[[sex[s]]][[status[ss]]]$summary[,"95%CIHigh"], ")")
   }#s
   
   ##---- Calculate status-specific TOTALS from posteriors
-  TotalTmp <- WA_status[[sex[1]]][[status[ss]]]$PosteriorRegions + WA_status[[sex[2]]][[status[ss]]]$PosteriorRegions
+  TotalTmp <- WA_presence_status[[sex[1]]][[status[ss]]]$PosteriorRegions + 
+    WA_presence_status[[sex[2]]][[status[ss]]]$PosteriorRegions
   abundanceTable[2:nrow(abundanceTable),colPos[3]] <- c(
     paste0( format(round(apply(TotalTmp, 1, mean), 1), nsmall = 1), " (",
             apply(TotalTmp,1,function(x) quantile(x,prob=c(0.025))), "-",
@@ -1138,8 +1105,9 @@ for(ss in 1:length(status)){
 ##---- Get TOTALS per sex
 colPos <- which(colnames(abundanceTable) %in% "Total")
 for(s in 1:length(sex)){
-  TotalTmp <- WA_status[[sex[s]]][[1]]$PosteriorRegions + WA_status[[sex[s]]][[2]]$PosteriorRegions +
-    WA_status[[sex[s]]][[3]]$PosteriorRegions
+  TotalTmp <- WA_presence_status[[sex[s]]][[1]]$PosteriorRegions + 
+    WA_presence_status[[sex[s]]][[2]]$PosteriorRegions +
+    WA_presence_status[[sex[s]]][[3]]$PosteriorRegions
   abundanceTable[2:nrow(abundanceTable), colPos[s]] <- c(
     paste0(format(round(apply(TotalTmp,1,mean),1), nsmall = 1), " (",
            apply(TotalTmp,1,function(x) quantile(x,prob=c(0.025))), "-",

@@ -45,7 +45,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
 ## MODEL NAME 
-modelName = "AlpineWolf.5.4_RJMCMC_2324"
+modelName = "AlpineWolf.5.5_RJMCMC_2324"
 thisDir <- file.path(analysisDir, modelName)
 
 ## HABITAT SPECIFICATIONS
@@ -265,7 +265,7 @@ filtered_transects <- transects %>%
 table(filtered_transects$REGIONE)
 
 ##---- Genotyped NGS samples
-ngs <- read.csv(file.path(dataDir,"DNA/ngs_23_24.csv"))
+ngs <- read.csv(file.path(dataDir,"DNA/ngs_23_24_BL.csv"))
 
 dim(ngs)
 
@@ -333,10 +333,10 @@ proj4string(ngs) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
 ngs <- st_as_sf(ngs)
 
 ##---- Plot check
-# plot(st_geometry(studyArea))
-# plot(st_geometry(countries), col = "gray80",add=T)
-# plot(st_geometry(filtered_transects), col = "red", add = T)
-# plot(st_geometry(ngs), add = T, pch = 3)
+plot(st_geometry(studyArea))
+plot(st_geometry(countries), col = "gray80",add=T)
+plot(st_geometry(filtered_transects), col = "red", add = T)
+plot(st_geometry(ngs), add = T, pch = 3)
 
 # ##---- Calculate distance to the closest transect
 # ## For later: can be quite long with many points and transects
@@ -473,7 +473,7 @@ iucn_2023$SPOIS <- ifelse(iucn_2023$PRESENCE == "Sporadic", 1, 3)
 
 ## ------   5. PRE-PROCESSED STUFF ------
 load(file.path(thisDir,"Habitat.RData"))
-# load(file.path(thisDir,"Detectors.RData"))
+load(file.path(thisDir,"Detectors.RData"))
 
 
 
@@ -640,8 +640,6 @@ detectors$grid <- detectors$grid %>%
 ##---- scale covariate
 detectors$grid$snow_fall[is.na(detectors$grid$snow_fall)] <- 0
 detectors$grid$snow_fall <- scale(detectors$grid$snow_fall)
-
-
 
 
 ## ------       1.2.2. CORINE LAND COVER ------
@@ -1860,33 +1858,33 @@ for(c in 1:1){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 ##---- Collect multiple MCMC bites and chains
-nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
-                                   burnin = 40,
-                                   param.omit = c("s","z","sex","status"))
-res <- ProcessCodaOutput(nimOutput_noZ)
+# nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
+#                                    burnin = 40,
+#                                    param.omit = c("s","z","sex","status"))
+# res <- ProcessCodaOutput(nimOutput_noZ)
 
 ##---- Traceplots
-pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput_noZ)
-graphics.off()
+# pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
+# plot(nimOutput_noZ)
+# graphics.off()
 
 
 ##---- Process and save MCMC samples
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 40,
+                               burnin = 50,
                                param.omit = nimParams[!nimParams %in%  c("s","z","sex","status")])
 nimOutput <- as.mcmc.list(lapply(nimOutput, function(x)as.mcmc(x[seq(1,nrow(x),by=10),])))
+gc()
 res_sxy <- ProcessCodaOutput(nimOutput)
 
 
 # res_sxy <- ProcessCodaOutput(nimOutput$samples2)
-# save(res, res_sxy, 
-#      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
-# 
+save(res, res_sxy,
+     file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
 ## ------   1. CALCULATE AC-BASED DENSITY ------
 ##---- Load processed MCMC samples
-load(file.path(thisDir, paste0(modelName, "_mcmc2.RData")))
+load(file.path(thisDir, paste0(modelName, "_mcmc.RData")))
 load(file.path(thisDir, "input", paste0(modelName, "_1.RData")))
 
 ## ----- CALCULATE DENSITIES WITH A 1X1 KM RESOLUTION -----
@@ -1932,68 +1930,68 @@ regions.rgmx <- do.call(rbind, lapply(regions.unique, function(x){regions.r[] ==
 regions.rgmx[is.na(regions.rgmx)] <- 0
 row.names(regions.rgmx) <- regions.unique
 
-##---- Create a matrix of Italian regions without Liguria
-regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
-
-regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
-                            raster = habitat.r,
-                            field = "ID",
-                            background = NA)
-
-regionsnolig.r[regionsnolig.r[]==0] <- NA
-regionsnolig.r <- regionsnolig.r + italia.r - 1
-
-# for(i in 1:length(regionsnolig$DEN_UTS)){
-#   regionsnolig.r[regionsnolig.r %in% regionsnolig$ID[i]] <- regionsnolig$DEN_UTS[i]
-# }
-regionsnolig.unique <- sort(na.omit(unique(regionsnolig.r[])))
-regionsnolig.rgmx <- do.call(rbind, lapply(regionsnolig.unique, function(x){regionsnolig.r[] == x}))
-regionsnolig.rgmx[is.na(regionsnolig.rgmx)] <- 0
-row.names(regionsnolig.rgmx) <- regionsnolig.unique
-
-
-##---- Create a matrix of grid minimum presence
-##---- (rows == regions ; columns == habitat raster cells)
-# presence <- st_buffer(st_union(presence), dist = 1000)
-presence.r <- fasterize(sf = st_as_sf(presence),
-                        raster = habitat.r,
-                        field = "ID",
-                        background = NA)
-
-
-presence.r[presence.r[]==0] <- NA
-presence.r <- presence.r + italia.r - 1
-# for(i in 1:length(presence$DEN_UTS)){
-#   presence.r[presence.r %in% presence$ID[i]] <- presence$DEN_UTS[i]
-# }
-presence.unique <- sort(na.omit(unique(presence.r[])))
-presence.rgmx <- do.call(rbind, lapply(presence.unique, function(x){presence.r[] == x}))
-presence.rgmx[is.na(presence.rgmx)] <- 0
-row.names(presence.rgmx) <- presence.unique
-
-
-# THEN WITHOUT LIGURIA
-presence.nolig <- presence[presence$DEN_UTS != 'Liguria',]
-
-presencenolig.r <- fasterize(sf = st_as_sf(presence.nolig),
-                             raster = habitat.r,
-                             field = "ID",
-                             background = NA)
-
-presencenolig.r[presencenolig.r[]==0] <- NA
-presencenolig.r <- presencenolig.r + italia.r - 1
-# for(i in 1:length(presence.nolig$DEN_UTS)){
-#   presencenolig.r[presencenolig.r %in% presence.nolig$ID[i]] <- presence.nolig$DEN_UTS[i]
-# }
-presence.nolig.unique <- sort(na.omit(unique(presencenolig.r[])))
-presence.nolig.rgmx <- do.call(rbind, lapply(presence.nolig.unique, function(x){presencenolig.r[] == x}))
-presence.nolig.rgmx[is.na(presence.nolig.rgmx)] <- 0
-row.names(presence.nolig.rgmx) <- presence.nolig.unique
+# ##---- Create a matrix of Italian regions without Liguria
+# regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
+# 
+# regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
+#                             raster = habitat.r,
+#                             field = "ID",
+#                             background = NA)
+# 
+# regionsnolig.r[regionsnolig.r[]==0] <- NA
+# regionsnolig.r <- regionsnolig.r + italia.r - 1
+# 
+# # for(i in 1:length(regionsnolig$DEN_UTS)){
+# #   regionsnolig.r[regionsnolig.r %in% regionsnolig$ID[i]] <- regionsnolig$DEN_UTS[i]
+# # }
+# regionsnolig.unique <- sort(na.omit(unique(regionsnolig.r[])))
+# regionsnolig.rgmx <- do.call(rbind, lapply(regionsnolig.unique, function(x){regionsnolig.r[] == x}))
+# regionsnolig.rgmx[is.na(regionsnolig.rgmx)] <- 0
+# row.names(regionsnolig.rgmx) <- regionsnolig.unique
+# 
+# 
+# ##---- Create a matrix of grid minimum presence
+# ##---- (rows == regions ; columns == habitat raster cells)
+# # presence <- st_buffer(st_union(presence), dist = 1000)
+# presence.r <- fasterize(sf = st_as_sf(presence),
+#                         raster = habitat.r,
+#                         field = "ID",
+#                         background = NA)
+# 
+# 
+# presence.r[presence.r[]==0] <- NA
+# presence.r <- presence.r + italia.r - 1
+# # for(i in 1:length(presence$DEN_UTS)){
+# #   presence.r[presence.r %in% presence$ID[i]] <- presence$DEN_UTS[i]
+# # }
+# presence.unique <- sort(na.omit(unique(presence.r[])))
+# presence.rgmx <- do.call(rbind, lapply(presence.unique, function(x){presence.r[] == x}))
+# presence.rgmx[is.na(presence.rgmx)] <- 0
+# row.names(presence.rgmx) <- presence.unique
+# 
+# 
+# # THEN WITHOUT LIGURIA
+# presence.nolig <- presence[presence$DEN_UTS != 'Liguria',]
+# 
+# presencenolig.r <- fasterize(sf = st_as_sf(presence.nolig),
+#                              raster = habitat.r,
+#                              field = "ID",
+#                              background = NA)
+# 
+# presencenolig.r[presencenolig.r[]==0] <- NA
+# presencenolig.r <- presencenolig.r + italia.r - 1
+# # for(i in 1:length(presence.nolig$DEN_UTS)){
+# #   presencenolig.r[presencenolig.r %in% presence.nolig$ID[i]] <- presence.nolig$DEN_UTS[i]
+# # }
+# presence.nolig.unique <- sort(na.omit(unique(presencenolig.r[])))
+# presence.nolig.rgmx <- do.call(rbind, lapply(presence.nolig.unique, function(x){presencenolig.r[] == x}))
+# presence.nolig.rgmx[is.na(presence.nolig.rgmx)] <- 0
+# row.names(presence.nolig.rgmx) <- presence.nolig.unique
 
 ##---presence.r##---- Create a matrix of the Alpine region
 ##---- (rows == regions ; columns == habitat raster cells)
 alps.r <- fasterize( sf = st_as_sf(alps),
-                     raster = presencenolig.r,
+                     raster = regions.r,
                      background = NA)
 # plot(alps.r)
 
@@ -2016,6 +2014,7 @@ WA_Density <- GetDensity(
   returnPosteriorCells = F,
   regionID = regions.rgmx)
 
+gc()
 ##---- Calculate sex and status-specific densities
 WA_status <- list()
 for(s in 0:1){
@@ -2038,148 +2037,148 @@ for(s in 0:1){
 
 gc()
 ##---- Calculate total and regional densities
-WA_regionsNoLig <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res_sxy$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = regionsnolig.rgmx)
+# WA_regionsNoLig <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res_sxy$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = regionsnolig.rgmx)
+# 
+# ##---- Calculate sex and status-specific densities
+# WA_status_reg_NoLig <- list()
+# for(s in 0:1){
+#   WA_status_reg_NoLig[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+#       (res_sxy$sims.list$sex[iter, ] == s) &
+#       (res_sxy$sims.list$status[iter, ] == ss)
+#     
+#     WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter, ,1],
+#       sy = s.rescaled[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = regionsnolig.rgmx)
+#   }#ss
+# }#s
 
-##---- Calculate sex and status-specific densities
-WA_status_reg_NoLig <- list()
-for(s in 0:1){
-  WA_status_reg_NoLig[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
-      (res_sxy$sims.list$sex[iter, ] == s) &
-      (res_sxy$sims.list$status[iter, ] == ss)
-    
-    WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = regionsnolig.rgmx)
-  }#ss
-}#s
-
-gc()
-# ##---- Calculate overall density
-WA_presence <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = presence.rgmx)
- 
-##---- Calculate sex and status-specific densities
-WA_presence_status <- list()
-for(s in 0:1){
-  WA_presence_status[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
-    
-    WA_presence_status[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = presence.rgmx)
-  }#ss
-}#s
-## ------   1.1. EXTRACT PRESENCE ONLY & REGION-SPECIFIC DENSITIES ------
-##---- Calculate total and regional densities
-WA_presence <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res_sxy$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = presence.rgmx)
-
-##---- Calculate sex and status-specific densities
-WA_presence_status <- list()
-for(s in 0:1){
-  WA_presence_status[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
-    
-    WA_presence_status[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = presence.rgmx)
-  }#ss
-}#s
-
-
-##---- Calculate Italian density with no Liguria
-# rownames(presence.rgmx)
-# # Create a logical mask: TRUE when KEEP
-# keep <- !(trimws(tolower(rownames(presence.rgmx))) == "liguria")  
-# # Subsample the object while keeping matrix type
-# presence.nol.rgmx <- as.matrix(presence.rgmx[keep, ])
-
-WA_presence_noLig <- GetDensity(
-  sx = s.rescaled[iter, ,1],
-  sy = s.rescaled[iter, ,2],
-  z = res_sxy$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = presence.nolig.rgmx)
-
-# save WA_Italy_noLig and remove the object and reload it
-# save WA_status_noLig for each status and sex and save it remove the object and 
-WA_status_noLig <- list()
-for(s in 0:1){
-  WA_status_noLig[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res_sxy$sims.list$z == 1) &
-      (res_sxy$sims.list$sex == s) &
-      (res_sxy$sims.list$status == ss)
-    
-    WA_status_noLig[[s+1]][[ss]] <- GetDensity(
-      sx = s.rescaled[iter, ,1],
-      sy = s.rescaled[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = presence.nolig.rgmx)
-  }
-}
+# gc()
+# # ##---- Calculate overall density
+# WA_presence <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = presence.rgmx)
+# 
+# ##---- Calculate sex and status-specific densities
+# WA_presence_status <- list()
+# for(s in 0:1){
+#   WA_presence_status[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res$sims.list$z[iter, ] == 1) &
+#       (res$sims.list$sex[iter, ] == s) &
+#       (res$sims.list$status[iter, ] == ss)
+#     
+#     WA_presence_status[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter, ,1],
+#       sy = s.rescaled[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = presence.rgmx)
+#   }#ss
+# }#s
+# ## ------   1.1. EXTRACT PRESENCE ONLY & REGION-SPECIFIC DENSITIES ------
+# ##---- Calculate total and regional densities
+# WA_presence <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res_sxy$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = presence.rgmx)
+# 
+# ##---- Calculate sex and status-specific densities
+# WA_presence_status <- list()
+# for(s in 0:1){
+#   WA_presence_status[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res$sims.list$z[iter, ] == 1) &
+#       (res$sims.list$sex[iter, ] == s) &
+#       (res$sims.list$status[iter, ] == ss)
+#     
+#     WA_presence_status[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter, ,1],
+#       sy = s.rescaled[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = presence.rgmx)
+#   }#ss
+# }#s
+# 
+# 
+# ##---- Calculate Italian density with no Liguria
+# # rownames(presence.rgmx)
+# # # Create a logical mask: TRUE when KEEP
+# # keep <- !(trimws(tolower(rownames(presence.rgmx))) == "liguria")  
+# # # Subsample the object while keeping matrix type
+# # presence.nol.rgmx <- as.matrix(presence.rgmx[keep, ])
+# 
+# WA_presence_noLig <- GetDensity(
+#   sx = s.rescaled[iter, ,1],
+#   sy = s.rescaled[iter, ,2],
+#   z = res_sxy$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = presence.nolig.rgmx)
+# 
+# # save WA_Italy_noLig and remove the object and reload it
+# # save WA_status_noLig for each status and sex and save it remove the object and 
+# WA_status_noLig <- list()
+# for(s in 0:1){
+#   WA_status_noLig[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res_sxy$sims.list$z == 1) &
+#       (res_sxy$sims.list$sex == s) &
+#       (res_sxy$sims.list$status == ss)
+#     
+#     WA_status_noLig[[s+1]][[ss]] <- GetDensity(
+#       sx = s.rescaled[iter, ,1],
+#       sy = s.rescaled[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = presence.nolig.rgmx)
+#   }
+# }
 
 
- 
+
 ## ------   1.2. SAVE 1X1 KM DENSITIES ------
 save(WA_Density,
-     WA_status,
-     WA_regionsNoLig,
-     WA_status_reg_NoLig,
-     WA_presence,
-     WA_presence_status,
-     WA_presence_noLig,
-     WA_status_noLig,
-      file = file.path(thisDir, paste0(modelName, "_densities_2.RData")))
+     # WA_status,
+     # WA_regionsNoLig,
+     # WA_status_reg_NoLig,
+     # WA_presence,
+     # WA_presence_status,
+     # WA_presence_noLig,
+     # WA_status_noLig,
+     file = file.path(thisDir, paste0(modelName, "_densities_1x1.RData")))
 ## ------   1.3. LOAD 1X1 KM DENSITIES ------
-load(file.path(thisDir, paste0(modelName, "_densities_2.RData")))
+# load(file.path(thisDir, paste0(modelName, "_densities_1x1.RData")))
 
 ## ----  CALCULATE DENSITIES WITH A 5X5 KM RESOLUTION ----
 
@@ -2216,42 +2215,42 @@ regions.rgmx[is.na(regions.rgmx)] <- 0
 row.names(regions.rgmx) <- regions.unique
 
 ##---- Create a matrix of Italian regions without Liguria
-regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
-
-regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
-                            raster = habitat.r,
-                            field = "ID",
-                            background = NA)
-
-regionsnolig.r[regionsnolig.r[]==0] <- NA
-regionsnolig.r <- regionsnolig.r + habitat$Italia - 1
-
-# for(i in 1:length(regionsnolig$DEN_UTS)){
-#   regionsnolig.r[regionsnolig.r %in% regionsnolig$ID[i]] <- regionsnolig$DEN_UTS[i]
+# regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
+# 
+# regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
+#                             raster = habitat.r,
+#                             field = "ID",
+#                             background = NA)
+# 
+# regionsnolig.r[regionsnolig.r[]==0] <- NA
+# regionsnolig.r <- regionsnolig.r + habitat$Italia - 1
+# 
+# # for(i in 1:length(regionsnolig$DEN_UTS)){
+# #   regionsnolig.r[regionsnolig.r %in% regionsnolig$ID[i]] <- regionsnolig$DEN_UTS[i]
+# # }
+# regionsnolig.unique <- sort(na.omit(unique(regionsnolig.r[])))
+# regionsnolig.rgmx <- do.call(rbind, lapply(regionsnolig.unique, function(x){regionsnolig.r[] == x}))
+# regionsnolig.rgmx[is.na(regionsnolig.rgmx)] <- 0
+# row.names(regionsnolig.rgmx) <- regionsnolig.unique
+# 
+# 
+# ##---- Create a matrix of grid minimum presence
+# ##---- (rows == regions ; columns == habitat raster cells)
+# # presence <- st_buffer(st_union(presence), dist = 1000)
+# presence.r <- fasterize(sf = st_as_sf(presence),
+#                         raster = habitat.r,
+#                         field = "ID",
+#                         background = NA)
+# 
+# presence.r[presence.r[]==0] <- NA
+# presence.r <- presence.r + habitat$Italia - 1
+# for(i in 1:length(presence$DEN_UTS)){
+#   presence.r[presence.r %in% presence$ID[i]] <- presence$DEN_UTS[i]
 # }
-regionsnolig.unique <- sort(na.omit(unique(regionsnolig.r[])))
-regionsnolig.rgmx <- do.call(rbind, lapply(regionsnolig.unique, function(x){regionsnolig.r[] == x}))
-regionsnolig.rgmx[is.na(regionsnolig.rgmx)] <- 0
-row.names(regionsnolig.rgmx) <- regionsnolig.unique
-
-
-##---- Create a matrix of grid minimum presence
-##---- (rows == regions ; columns == habitat raster cells)
-# presence <- st_buffer(st_union(presence), dist = 1000)
-presence.r <- fasterize(sf = st_as_sf(presence),
-                        raster = habitat.r,
-                        field = "ID",
-                        background = NA)
-
-presence.r[presence.r[]==0] <- NA
-presence.r <- presence.r + habitat$Italia - 1
-for(i in 1:length(presence$DEN_UTS)){
-  presence.r[presence.r %in% presence$ID[i]] <- presence$DEN_UTS[i]
-}
-presence.unique <- sort(na.omit(unique(presence.r[])))
-presence.rgmx <- do.call(rbind, lapply(presence.unique, function(x){presence.r[] == x}))
-presence.rgmx[is.na(presence.rgmx)] <- 0
-row.names(presence.rgmx) <- presence.unique
+# presence.unique <- sort(na.omit(unique(presence.r[])))
+# presence.rgmx <- do.call(rbind, lapply(presence.unique, function(x){presence.r[] == x}))
+# presence.rgmx[is.na(presence.rgmx)] <- 0
+# row.names(presence.rgmx) <- presence.unique
 
 # THEN WITHOUT LIGURIA
 # presence.nolig <- presence[presence$DEN_UTS != 'Liguria',]
@@ -2288,7 +2287,7 @@ row.names(alps.rgmx) <- "Italian Alps"
 iter <- seq(1,dim(res_sxy$sims.list$z)[1],length.out = 1500)
 
 ##---- Calculate density
-WA_Density <- GetDensity(
+WA_Density_estov <- GetDensity(
   sx = res_sxy$sims.list$s[iter, ,1],
   sy = res_sxy$sims.list$s[iter, ,2],
   z = res_sxy$sims.list$z[iter, ],
@@ -2320,76 +2319,76 @@ for(s in 0:1){
 
 gc()
 ##---- Calculate total and regional densities
-WA_regionsNoLig <- GetDensity(
-  sx = res_sxy$sims.list$s[iter, ,1],
-  sy = res_sxy$sims.list$s[iter, ,2],
-  z = res_sxy$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = regionsnolig.rgmx)
-
-gc()
-##---- Calculate sex and status-specific densities
-WA_status_reg_NoLig <- list()
-for(s in 0:1){
-  WA_status_reg_NoLig[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
-      (res_sxy$sims.list$sex[iter, ] == s) &
-      (res_sxy$sims.list$status[iter, ] == ss)
-    
-    WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[iter, ,1],
-      sy = res_sxy$sims.list$s[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = regionsnolig.rgmx)
-  }#ss
-}#s
-
-gc()
-
-###---- Calculate overall density
-WA_presence <- GetDensity(
-  sx = res_sxy$sims.list$s[iter, ,1],
-  sy = res_sxy$sims.list$s[iter, ,2],
-  z = res$sims.list$z[iter, ],
-  IDmx = habitat.id,
-  aliveStates = 1,
-  returnPosteriorCells = F,
-  regionID = presence.rgmx)
-
-gc()
-##---- Calculate sex and status-specific densities
-WA_presence_status <- list()
-for(s in 0:1){
-  WA_presence_status[[s+1]] <- list()
-  for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
-    
-    WA_presence_status[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[iter, ,1],
-      sy = res_sxy$sims.list$s[iter, ,2],
-      z = thisStatus,
-      IDmx = habitat.id,
-      aliveStates = 1,
-      returnPosteriorCells = F,
-      regionID = presence.rgmx)
-  }#ss
-}#s
-
-gc()
+# WA_regionsNoLig <- GetDensity(
+#   sx = res_sxy$sims.list$s[iter, ,1],
+#   sy = res_sxy$sims.list$s[iter, ,2],
+#   z = res_sxy$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = regionsnolig.rgmx)
+# 
+# gc()
+# ##---- Calculate sex and status-specific densities
+# WA_status_reg_NoLig <- list()
+# for(s in 0:1){
+#   WA_status_reg_NoLig[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+#       (res_sxy$sims.list$sex[iter, ] == s) &
+#       (res_sxy$sims.list$status[iter, ] == ss)
+#     
+#     WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
+#       sx = res_sxy$sims.list$s[iter, ,1],
+#       sy = res_sxy$sims.list$s[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = regionsnolig.rgmx)
+#   }#ss
+# }#s
+# 
+# gc()
+# 
+# ###---- Calculate overall density
+# WA_presence <- GetDensity(
+#   sx = res_sxy$sims.list$s[iter, ,1],
+#   sy = res_sxy$sims.list$s[iter, ,2],
+#   z = res$sims.list$z[iter, ],
+#   IDmx = habitat.id,
+#   aliveStates = 1,
+#   returnPosteriorCells = F,
+#   regionID = presence.rgmx)
+# 
+# gc()
+# ##---- Calculate sex and status-specific densities
+# WA_presence_status <- list()
+# for(s in 0:1){
+#   WA_presence_status[[s+1]] <- list()
+#   for(ss in 1:3){
+#     thisStatus <- (res$sims.list$z[iter, ] == 1) &
+#       (res$sims.list$sex[iter, ] == s) &
+#       (res$sims.list$status[iter, ] == ss)
+#     
+#     WA_presence_status[[s+1]][[ss]] <- GetDensity(
+#       sx = res_sxy$sims.list$s[iter, ,1],
+#       sy = res_sxy$sims.list$s[iter, ,2],
+#       z = thisStatus,
+#       IDmx = habitat.id,
+#       aliveStates = 1,
+#       returnPosteriorCells = F,
+#       regionID = presence.rgmx)
+#   }#ss
+# }#s
+# 
+# gc()
 
 ###---- Calculate overall density
 WA_alps <- GetDensity(
   sx = res_sxy$sims.list$s[iter, ,1],
   sy = res_sxy$sims.list$s[iter, ,2],
-  z = res$sims.list$z[iter, ],
+  z = res_sxy$sims.list$z[iter, ],
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = F,
@@ -2399,13 +2398,14 @@ gc()
 
 ## ------   1.2. SAVE 5X5 KM DENSITIES ------
 save(WA_Density,
-     WA_status,
-     WA_regionsNoLig,
-     WA_status_reg_NoLig,
-     WA_presence,
-     WA_presence_status,
-     WA_presence_noLig,
-     WA_status_noLig,
+     # WA_status,
+     # WA_regionsNoLig,
+     # WA_status_reg_NoLig,
+     # WA_presence,
+     # WA_presence_status,
+     # WA_presence_noLig,
+     # WA_status_noLig,
+     WA_alps,
      file = file.path(thisDir, paste0(modelName, "_densities_5x5.RData")))
 ## ------   1.3. LOAD 5X5 KM DENSITIES ------
 load(file.path(thisDir, paste0(modelName, "_densities_5x5.RData")))
@@ -2575,4 +2575,3 @@ for(s in 1:length(sex)){
 }
 
 graphics.off()
-

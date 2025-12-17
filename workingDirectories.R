@@ -6,7 +6,7 @@ if(Sys.info()['user'] == 'pidu') { ## Pierre
   meetDir <- 'C:/Users/pidu/AQEG Dropbox/AQEG Team Folder/AlpineWolf/04_Meetings'
   reportDir <- 'C:/Users/pidu/AQEG Dropbox/AQEG Team Folder/AlpineWolf/06_Report'
 } else if(Sys.info()['user'] == 'virginia') {## Virginia
-  gitDir <- '/Users/virginia/Dropbox/Mac/Documents/GitHub/AlpineWolf'
+  gitDir <- '/Users/virginia/Documents/GitHub/AlpineWolf'
   dataDir <- '/Users/virginia/Dropbox/AlpineWolf/01_Data'
   analysisDir <- '/Users/virginia/Dropbox/AlpineWolf/02_Analysis'
   simDir <- '/Users/virginia/Dropbox/AlpineWolf/03_Simulations'
