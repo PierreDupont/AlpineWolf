@@ -117,8 +117,6 @@ s.rescaled <- scaleCoordsToHabitatGrid(
   scaleToGrid = T)$coordsDataScaled
 
 
-
-
 ##---- Create a matrix of Italian regions
 ##---- (rows == regions ; columns == habitat raster cells)
 regions.r <- fasterize(sf = st_as_sf(regions),
@@ -139,9 +137,9 @@ row.names(regions.rgmx) <- regions.unique
 regionsnolig <- regions[regions$DEN_UTS != 'Liguria',]
 
 regionsnolig.r <- fasterize(sf = st_as_sf(regionsnolig),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = NA)
+                            raster = habitat.r,
+                            field = "ID",
+                            background = NA)
 
 regionsnolig.r[regionsnolig.r[]==0] <- NA
 regionsnolig.r <- regionsnolig.r + italia.r - 1
@@ -159,9 +157,9 @@ row.names(regionsnolig.rgmx) <- regionsnolig.unique
 ##---- (rows == regions ; columns == habitat raster cells)
 # presence <- st_buffer(st_union(presence), dist = 1000)
 presence.r <- fasterize(sf = st_as_sf(presence),
-                       raster = habitat.r,
-                       field = "ID",
-                       background = NA)
+                        raster = habitat.r,
+                        field = "ID",
+                        background = NA)
 
 
 presence.r[presence.r[]==0] <- NA
@@ -179,9 +177,9 @@ row.names(presence.rgmx) <- presence.unique
 presence.nolig <- presence[presence$DEN_UTS != 'Liguria',]
 
 presencenolig.r <- fasterize(sf = st_as_sf(presence.nolig),
-                        raster = habitat.r,
-                        field = "ID",
-                        background = NA)
+                             raster = habitat.r,
+                             field = "ID",
+                             background = NA)
 
 presencenolig.r[presencenolig.r[]==0] <- NA
 presencenolig.r <- presencenolig.r + italia.r - 1
@@ -206,9 +204,10 @@ alps.rgmx <- matrix(alps.r[] == 1, nrow = 1)
 alps.rgmx[is.na(alps.rgmx)] <- 0
 row.names(alps.rgmx) <- "Italian Alps"
 
+
 ##---- Thin MCMC samples for faster calculation 
 ##---- (60000 iterations in too much for the getDensity fucntion at 1x1km)
-iter <- seq(1,dim(res_sxy$sims.list$z)[1],length.out = 2000)
+iter <- seq(1,dim(res_sxy$sims.list$z)[1],length.out = 1000)
 
 
 ## ------   1.1. EXTRACT PRESENCE ONLY & REGION-SPECIFIC DENSITIES ------
@@ -227,9 +226,9 @@ WA_presence_status <- list()
 for(s in 0:1){
   WA_presence_status[[s+1]] <- list()
   for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
+    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+      (res_sxy$sims.list$sex[iter, ] == s) &
+      (res_sxy$sims.list$status[iter, ] == ss)
     
     WA_presence_status[[s+1]][[ss]] <- GetDensity(
       sx = s.rescaled[iter, ,1],
@@ -334,8 +333,8 @@ for(s in 0:1){
   WA_status_reg_NoLig[[s+1]] <- list()
   for(ss in 1:3){
     thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
+      (res_sxy$sims.list$sex[iter, ] == s) &
+      (res_sxy$sims.list$status[iter, ] == ss)
     
     WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
       sx = s.rescaled[iter, ,1],

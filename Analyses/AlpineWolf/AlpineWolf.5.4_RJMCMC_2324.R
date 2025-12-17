@@ -38,9 +38,8 @@ source("workingDirectories.R")
 
 ## ------ SOURCE CUSTOM FUNCTIONS ------
 sourceDirectory(path = file.path(getwd(),"Source"), modifiedOnly = F)
-# sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
-# sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
-
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetDensity.cpp"))
+sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 
 ## -----------------------------------------------------------------------------
@@ -62,6 +61,7 @@ detectors = list( resolution = 5000,
 data = list( sex = c("F","M"),
              status = c("alpha","pup","other"),
              aug.factor = 12) 
+# maybe reduce a bit next time 
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
 if(!dir.exists(thisDir)){dir.create(thisDir)}
@@ -128,7 +128,7 @@ temp <- count[count$CNTRY_NAME %in% c("Albania",
                                       "Slovenia",
                                       "San Marino",
                                       "Switzerland"), ]
-plot(st_geometry(temp),col="gray60")
+# plot(st_geometry(temp),col="gray60")
 temp <- st_transform(temp, st_crs(studyArea))
 
 
@@ -142,7 +142,7 @@ transects <- read_sf(file.path(dataDir,"GISData/Transects_Wolfalps20232024/Trans
 # transects$Month <- as.numeric(format(transects$Date,"%m"))
 
 ##---- Plot check
-plot(transects$geometry, col = "red", add = T)
+# plot(transects$geometry, col = "red", add = T)
 
 table(st_geometry_type(transects))
 
@@ -333,10 +333,10 @@ proj4string(ngs) <- "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"
 ngs <- st_as_sf(ngs)
 
 ##---- Plot check
-plot(st_geometry(studyArea))
-plot(st_geometry(countries), col = "gray80",add=T)
-plot(st_geometry(filtered_transects), col = "red", add = T)
-plot(st_geometry(ngs), add = T, pch = 3)
+# plot(st_geometry(studyArea))
+# plot(st_geometry(countries), col = "gray80",add=T)
+# plot(st_geometry(filtered_transects), col = "red", add = T)
+# plot(st_geometry(ngs), add = T, pch = 3)
 
 # ##---- Calculate distance to the closest transect
 # ## For later: can be quite long with many points and transects
@@ -384,29 +384,29 @@ CLC <- raster(file.path(dataDir,"/GISData/Environmental Layers/CLC 2018/corine32
 ## 9 = perpetual snow
 layer.names <- c("developed","agriculture","forest","herbaceous","bare rock",
                  "sea features","inland water","NA","perpetual snow")
-plot(CLC)
+# plot(CLC)
 
 
 ##---- Load elevation data
 DEM_raw <- raster(file.path(dataDir,"/GISData/Environmental Layers/Orography/E40N20_crop_1km.tif"))
-plot(DEM_raw)
+# plot(DEM_raw)
 
 
 ##---- Load terrain ruggedness data
 TRI_raw <- raster(file.path(dataDir,"/GISData/Environmental Layers/Orography/TRI_1km.tif"))
-plot(TRI_raw)
+# plot(TRI_raw)
 
 
 ##---- Load human population density data
 POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
-plot(POP_raw)
+# plot(POP_raw)
 
 
 ##---- Load roads data
-roads <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Road Density/road_density_tot_clipped.shp"))
-table(roads$highway) # see https://wiki.openstreetmap.org/wiki/Key:highway for road classes description
-mainRoads <- subset(roads, highway %in% c("motorway", "trunk", "primary"))
-rm(roads)
+# roads <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Road Density/road_density_tot_clipped.shp"))
+# table(roads$highway) # see https://wiki.openstreetmap.org/wiki/Key:highway for road classes description
+# mainRoads <- subset(roads, highway %in% c("motorway", "trunk", "primary"))
+# rm(roads)
 
 
 ##---- Create a line to delineate the "western Alps"
@@ -465,15 +465,15 @@ iucn_2023 <- st_transform(iucn_2023, st_crs(studyArea))
 iucn_2023$SPOIS <- ifelse(iucn_2023$PRESENCE == "Sporadic", 1, 3)
 
 ##---- Load protected areas
-PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
-plot(studyArea)
-plot(PA, add = T)
+# PA <- read_sf(file.path(dataDir,"/GISData/Environmental Layers/Protected_Areas/PA.shp"))
+# plot(studyArea)
+# plot(PA, add = T)
 
 
 
 ## ------   5. PRE-PROCESSED STUFF ------
-load(file.path(thisDir,"Habitat.RData"))
-load(file.path(thisDir,"Detectors.RData"))
+# load(file.path(thisDir,"Habitat.RData"))
+# load(file.path(thisDir,"Detectors.RData"))
 
 
 
@@ -513,7 +513,7 @@ to.remove <- glaciers %>%
   fasterize(.,detectors$raster)
 
 detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
+# plot(detectors$raster)
 
 ##---- Remove big lakes
 lakes <- CLC
@@ -527,7 +527,7 @@ to.remove <- lakes %>%
   st_as_sf() %>%
   fasterize(.,detectors$raster)
 detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
+# plot(detectors$raster)
 
 ##---- Remove big cities
 to.remove <- POP_raw %>%
@@ -538,7 +538,7 @@ to.remove <- POP_raw %>%
   st_as_sf() %>%
   fasterize(.,detectors$raster)
 detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
+# plot(detectors$raster)
 
 ##---- Keep original detector area to make habitat
 detectors$grid.original <- st_as_sf(rasterToPolygons(detectors$raster))
@@ -549,7 +549,7 @@ st_crs(detectors$grid.original) <- st_crs(studyArea)
 to.remove <- regions[regions$ID == 3, ] %>%
   fasterize(.,detectors$raster)
 detectors$raster[to.remove[ ] == 1] <- NA
-plot(detectors$raster)
+# plot(detectors$raster)
 
 ##---- Transform into spatial grid
 detectors$grid <- st_as_sf(rasterToPolygons(detectors$raster))
@@ -684,8 +684,8 @@ detectors$grid <- left_join(detectors$grid, CLC.df, by = "id")
 DEM <- raster::aggregate( x = DEM_raw,
                           fact = detectors$resolution/res(DEM_raw),
                           fun = mean)
-plot(DEM)
-plot(st_geometry(detectors$grid), add = T)
+# plot(DEM)
+# plot(st_geometry(detectors$grid), add = T)
 
 ##---- Extract scaled elevation values
 detectors$grid$elev <- DEM %>%
@@ -701,8 +701,8 @@ TRI <- raster::aggregate( x = TRI_raw ,
                           fact = detectors$resolution/res(TRI_raw ),
                           fun = mean)
 
-plot(TRI)
-plot(st_geometry(detectors$grid), add = T)
+# plot(TRI)
+# plot(st_geometry(detectors$grid), add = T)
 
 ##---- Extract scaled terrain ruggedness
 detectors$grid$tri <- TRI %>%
@@ -718,8 +718,8 @@ POP <- raster::aggregate( x = POP_raw ,
                           fact = detectors$resolution/res(POP_raw ),
                           fun = mean)
 
-plot(POP)
-plot(st_geometry(detectors$grid), add = T)
+# plot(POP)
+# plot(st_geometry(detectors$grid), add = T)
 
 ##----Extract scaled human pop density
 detectors$grid$pop <- POP %>%
@@ -738,23 +738,21 @@ detectors$grid$log_pop <- log_POP %>%
 
 ## ------       1.2.6. ROAD DENSITY -------
 ##---- Extract road length in each detector grid cell
-intersection <- st_intersection(detectors$grid, mainRoads) %>%
-  mutate(length = st_length(.))  %>%
-  st_drop_geometry() %>%
-  group_by(id) %>%
-  summarise(mainRoads_L = sum(length))
-
-##---- Store scaled road density
-detectors$grid <- detectors$grid %>%
-  left_join(intersection, by = "id")
-detectors$grid$mainRoads_L[is.na(detectors$grid$mainRoads_L)] <- 0
-detectors$grid$mainRoads_L <- scale(detectors$grid$mainRoads_L)
+# intersection <- st_intersection(detectors$grid, mainRoads) %>%
+#   mutate(length = st_length(.))  %>%
+#   st_drop_geometry() %>%
+#   group_by(id) %>%
+#   summarise(mainRoads_L = sum(length))
+# 
+# ##---- Store scaled road density
+# detectors$grid <- detectors$grid %>%
+#   left_join(intersection, by = "id")
+# detectors$grid$mainRoads_L[is.na(detectors$grid$mainRoads_L)] <- 0
+# detectors$grid$mainRoads_L <- scale(detectors$grid$mainRoads_L)
 
 
 ##---- Display all detector covariates
-plot(detectors$grid[ ,3:length(detectors$grid)], max.plot = 15)
-
-
+# plot(detectors$grid[ ,3:length(detectors$grid)], max.plot = 15)
 
 
 ## ------       1.2.7. EAST/WEST ------
@@ -808,7 +806,7 @@ to.remove <- glaciers %>%
   fasterize(.,habitat$raster)
 
 habitat$raster[to.remove[ ] == 1] <- NA
-plot(habitat$raster)
+# plot(habitat$raster)
 
 ##---- Remove big lakes
 lakes <- CLC
@@ -822,7 +820,7 @@ to.remove <- lakes %>%
   st_as_sf() %>%
   fasterize(.,habitat$raster)
 habitat$raster[to.remove[ ] == 1] <- NA
-plot(habitat$raster)
+# plot(habitat$raster)
 
 ##---- Remove big cities
 to.remove <- POP_raw %>%
@@ -833,7 +831,7 @@ to.remove <- POP_raw %>%
   st_as_sf() %>%
   fasterize(.,habitat$raster)
 habitat$raster[to.remove[ ] == 1] <- NA
-plot(habitat$raster)
+# plot(habitat$raster)
 
 
 
@@ -889,11 +887,11 @@ habitat$upperCoords <- habitat$coords + 0.5*habitat$resolution
 habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 
 ##---- Visual plotting to check if everything is right
-plot(habitat$raster)
-plot(st_geometry(countries), add = T)
-plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
-plot(transects,add=T, col="red")
-plot(st_geometry(detectors$grid), add=T)
+# plot(habitat$raster)
+# plot(st_geometry(countries), add = T)
+# plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
+# plot(transects,add=T, col="red")
+# plot(st_geometry(detectors$grid), add=T)
 
 
 
@@ -948,8 +946,8 @@ habitat$grid$human <- habitat$grid$developed + habitat$grid$agriculture
 DEM <- raster::aggregate( x = DEM_raw,
                           fact = habitat$resolution/res(DEM_raw),
                           fun = mean)
-plot(DEM)
-plot(st_geometry(habitat$grid), add = T)
+# plot(DEM)
+# plot(st_geometry(habitat$grid), add = T)
 
 ## Extract scaled elevation values
 habitat$grid$elev <- DEM %>%
@@ -968,8 +966,8 @@ TRI <- raster::focal(x = TRI,
                      w = matrix(1,3,3),
                      fun = mean,
                      na.rm = T)
-plot(TRI)
-plot(st_geometry(habitat$grid), add = T)
+# plot(TRI)
+# plot(st_geometry(habitat$grid), add = T)
 
 ## Extract scaled terrain ruggedness
 habitat$grid$tri <- TRI %>%
@@ -988,8 +986,8 @@ POP <- raster::focal(x = POP,
                      w = matrix(1,3,3),
                      fun = mean,
                      na.rm = T)
-plot(POP)
-plot(st_geometry(habitat$grid), add = T)
+# plot(POP)
+# plot(st_geometry(habitat$grid), add = T)
 
 ## Extract scaled human pop density
 habitat$grid$pop <- POP %>%
@@ -1000,11 +998,11 @@ habitat$grid$pop <- POP %>%
 log_POP <- POP
 log_POP[ ] <- log(POP[]+1)
 
-par(mfrow=c(1,2))
-plot(POP)
-plot(st_geometry(countries),add=T)
-plot(log_POP)
-plot(st_geometry(countries),add=T)
+# par(mfrow=c(1,2))
+# plot(POP)
+# plot(st_geometry(countries),add=T)
+# plot(log_POP)
+# plot(st_geometry(countries),add=T)
 
 habitat$grid$log_pop <- log_POP %>%
   raster::extract(y = habitat$sp) %>%
@@ -1072,7 +1070,7 @@ intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
 habitat$grid <- habitat$grid %>%
   left_join(intersection, by = "id")
 habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
-plot(habitat$grid[,"IUCN"])
+# plot(habitat$grid[,"IUCN"])
 
 ## Extract LCIE wolf sporadic presence in each habitat grid cell (2012)
 intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
@@ -1085,7 +1083,7 @@ tmp <- habitat$grid %>%
   left_join(intersection, by = "id")
 tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
 habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
+# plot(habitat$grid[,"IUCN"])
 
 ## Extract LCIE wolf presence in each habitat grid cell for 2018 data
 intersection <- st_intersection(habitat$grid, iucn_2018) %>%
@@ -1111,7 +1109,7 @@ tmp <- habitat$grid %>%
   left_join(intersection, by = "id")
 tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
 habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
+# plot(habitat$grid[,"IUCN"])
 
 habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
@@ -1861,18 +1859,27 @@ for(c in 1:1){
 ## ------ V. PROCESS NIMBLE OUTPUT ------
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
-nimOutput <- collectMCMCbites( path = file.path(thisDir, "output/chain1"),
-                               burnin = 0)
+##---- Collect multiple MCMC bites and chains
+nimOutput_noZ <- collectMCMCbites( path = file.path(thisDir, "output"),
+                                   burnin = 20,
+                                   param.omit = c("s","z","sex","status"))
+res <- ProcessCodaOutput(nimOutput_noZ)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
-plot(nimOutput[[1]])
+plot(nimOutput_noZ)
 graphics.off()
 
 
 ##---- Process and save MCMC samples
-res <- ProcessCodaOutput(nimOutput$samples)
-res_sxy <- ProcessCodaOutput(nimOutput$samples2)
+nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
+                               burnin = 20,
+                               param.omit = nimParams[!nimParams %in%  c("s","z","sex","status")])
+nimOutput <- as.mcmc.list(lapply(nimOutput, function(x)as.mcmc(x[seq(1,nrow(x),by=10),])))
+res_sxy <- ProcessCodaOutput(nimOutput)
+
+
+# res_sxy <- ProcessCodaOutput(nimOutput$samples2)
 save(res, res_sxy, 
      file = file.path(thisDir, paste0(modelName,"_mcmc.RData")))
 
@@ -1882,23 +1889,31 @@ save(res, res_sxy,
 load(file.path(thisDir, paste0(modelName, "_mcmc.RData")))
 load(file.path(thisDir, "input", paste0(modelName, "_1.RData")))
 
-##----  Extract the habitat raster
-habitat.r <- habitat$raster
 
-##---- Set cells outside the habitat to NA
-habitat.r[habitat.r == 0] <- NA
+##---- Disaggregate habitat raster to a 1x1km resolution
+habitat.r <- disaggregate(x = habitat$raster, fact = 5)
+italia.r <- disaggregate(x = habitat$Italia, fact = 5)
 
-##---- Create a matrix of raster cellsIDs
+##---- Create a matrix of raster cellsIDs (including cells outside the habitat)
 habitat.id <- matrix( data = 1:ncell(habitat.r),
-                      nrow = dim(habitat.r)[1],
-                      ncol = dim(habitat.r)[2],
+                      nrow = nrow(habitat.r),
+                      ncol = ncol(habitat.r),
                       byrow = TRUE)
 
-##---- Create a matrix of admin units binary indicators
-##---- (rows == regions ; columns == habitat raster cells)
-hab.rgmx <- rbind(habitat$raster[] == 1)
-hab.rgmx[is.na(hab.rgmx)] <- 0
-row.names(hab.rgmx) <- "habitat"
+##---- Rescale sxy coords to original projection and reproject to the new raster
+dimnames(res_sxy$sims.list$s) <- list(1:dim(res_sxy$sims.list$s)[1],
+                                      1:dim(res_sxy$sims.list$s)[2],
+                                      c("x","y"))
+s.original <- scaleCoordsToHabitatGrid(
+  coordsData = res_sxy$sims.list$s,
+  coordsHabitatGridCenter = coordinates(habitat$raster),
+  scaleToGrid = F)$coordsDataScaled
+
+##---- ... and reproject to the new raster
+s.rescaled <- scaleCoordsToHabitatGrid(
+  coordsData = s.original,
+  coordsHabitatGridCenter = coordinates(habitat.r),
+  scaleToGrid = T)$coordsDataScaled
 
 
 ##---- Create a matrix of Italian regions
@@ -1989,13 +2004,13 @@ alps.rgmx[is.na(alps.rgmx)] <- 0
 row.names(alps.rgmx) <- "Italian Alps"
 
 
-iter <- seq(1,dim(res$sims.list$z)[1],length.out = 2000)
+iter <- seq(1,dim(res_sxy$sims.list$z)[1],length.out = 1000)
 
 ##---- Calculate density
 WA_Density <- GetDensity(
-  sx = res$sims.list$s[iter , ,1],
-  sy = res$sims.list$s[iter , ,2],
-  z = res$sims.list$z[iter, ],
+  sx = s.rescaled[iter, ,1],
+  sy = s.rescaled[iter, ,2],
+  z = res_sxy$sims.list$z[iter, ],
   IDmx = habitat.id,
   aliveStates = 1,
   returnPosteriorCells = F,
@@ -2006,9 +2021,9 @@ WA_status <- list()
 for(s in 0:1){
   WA_status[[s+1]] <- list()
   for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
+    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+      (res_sxy$sims.list$sex[iter, ] == s) &
+      (res_sxy$sims.list$status[iter, ] == ss)
     
     WA_status[[s+1]][[ss]] <- GetDensity(
       sx = s.rescaled[iter, ,1],
@@ -2036,9 +2051,9 @@ WA_status_reg_NoLig <- list()
 for(s in 0:1){
   WA_status_reg_NoLig[[s+1]] <- list()
   for(ss in 1:3){
-    thisStatus <- (res$sims.list$z[iter, ] == 1) &
-      (res$sims.list$sex[iter, ] == s) &
-      (res$sims.list$status[iter, ] == ss)
+    thisStatus <- (res_sxy$sims.list$z[iter, ] == 1) &
+      (res_sxy$sims.list$sex[iter, ] == s) &
+      (res_sxy$sims.list$status[iter, ] == ss)
     
     WA_status_reg_NoLig[[s+1]][[ss]] <- GetDensity(
       sx = s.rescaled[iter, ,1],
@@ -2054,8 +2069,8 @@ for(s in 0:1){
 
 # ##---- Calculate overall density
 WA_presence <- GetDensity(
-  sx = res$sims.list$s[iter , ,1],
-  sy = res$sims.list$s[iter, ,2],
+  sx = s.rescaled[iter, ,1],
+  sy = s.rescaled[iter, ,2],
   z = res$sims.list$z[iter, ],
   IDmx = habitat.id,
   aliveStates = 1,
@@ -2140,8 +2155,8 @@ for(s in 0:1){
       (res_sxy$sims.list$status == ss)
     
     WA_status_noLig[[s+1]][[ss]] <- GetDensity(
-      sx = res_sxy$sims.list$s[iter, ,1],
-      sy = res_sxy$sims.list$s[iter, ,2],
+      sx = s.rescaled[iter, ,1],
+      sy = s.rescaled[iter, ,2],
       z = thisStatus,
       IDmx = habitat.id,
       aliveStates = 1,
@@ -2175,6 +2190,33 @@ save(WA_Density,
       file = file.path(thisDir, paste0(modelName, "_densities_2.RData")))
 
 load(file.path(thisDir, paste0(modelName, "_densities_2.RData")))
+
+
+##---- Plot overall density raster
+par(mfrow = c(1,1), mar = c(4,4,0,0), bg = "white")
+meanDensity.R <- regions.r
+meanDensity.R[ ] <- WA_Density$MeanCell
+meanDensity.R[is.na(regions.r[])] <- NA
+plot(meanDensity.R)
+
+
+##---- Smooth using a moving window 
+f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T)) 
+MovingWindowSize <-  matrix(1,5,5)
+meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+plot(meanDensity.R)
+
+# writeRaster(x = meanDensity.R, overwrite = TRUE,
+#              filename = file.path(thisDir, paste0(modelName, "regions_raster.tif")))
+
+
+
+##---- Plot 1
+##---- Set color scale
+maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+cuts <- seq(0, maxDens, length.out = 100)   
+
+
 ## ------   2. DENSITY ------
 pdf(file = file.path(thisDir, paste0(modelName,"_2_Density.pdf")),
     width = 20, height = 15)
