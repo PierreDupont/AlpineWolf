@@ -486,30 +486,30 @@ for(j in 1:nrow(detectors)){
 ## ------ III. NIMBLE ------- 
 
 ## ------   0. PRIORS ------
-
 estGammaParams <- function(mu, var) {
   shape <- mu^2 / var
   scale <- var / mu
   return(params = list(shape= shape, scale = scale))
 }
 sigma <- cbind.data.frame(
-  mean = c(3.3,3.5,2.4,4.08,3.33,3.49)/5,
-  sd = c(0.3,0.25,0.14,0.2,0.25,0.2)/5)
+  mean = c(2.35,3.37,3.53)/5,
+  sd = c(1.12,2.28,2.36)/5)
 
 gammas <- estGammaParams(sigma$mean,
                          sigma$sd)
 
-estGammaParams(mean(sigma$mean),
-               1.5*max(sigma$sd))
+estGammaParams(0.9,0.5)
 
 ## INFORMATIVE GAMMA PRIOR FOR SIGMA
-plot(density(x = rgamma(10000,shape = 4.99,scale = 0.13)),col="red",lwd=3)
+plot(density(x = rgamma( 10000,
+                         shape = 0.99,
+                         scale = 0.6)),col="red",lwd=3)
 
 # plot(density(x = rgamma(10000,shape = 1.053087,scale = 1.926761)),col="blue",lwd=3)
 # points(density(x = rgamma(10000,shape = 13,scale = 0.26)),col="red",lwd=3, type="l")
 
-sigma ~ dgamma( shape = 1.053087,
-                scale = 1.926761)
+sigma ~ dgamma( shape = 0.99,
+                scale = 0.6)
 
 
 for(r in 1:length(gammas$scale)){
@@ -566,8 +566,8 @@ modelCode <- nimbleCode({
   ## Use informative prior distribution for sigma
   ## Shape and scale of the gamma distribution derived from the population 
   ## average of the SCR
-  sigma ~ dgamma( shape = 4.99,
-                  scale = 0.13)
+  sigma ~ dgamma( shape = 0.99,
+                  scale = 0.6)
   lambda0 ~ dunif(0,10)
   
   for(i in 1:M){ 
