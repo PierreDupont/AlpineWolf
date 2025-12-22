@@ -44,7 +44,7 @@ sourceCpp(file = file.path(getwd(),"Source/cpp/GetSpaceUse.cpp"))
 
 ## -----------------------------------------------------------------------------
 ## ------ 0. SET ANALYSIS CHARACTERISTICS -----
-modelName = "AlpineWolf.SC.1.1.2"
+modelName = "AlpineWolf.SC.1.1.2_A"
 thisDir <- file.path(analysisDir, modelName)
 
 if(is.null(modelName))stop("YOU SHOULD PROBABLY CHOOSE A NAME FOR THIS ANALYSIS/MODEL")
