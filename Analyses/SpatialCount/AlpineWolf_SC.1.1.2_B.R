@@ -116,8 +116,8 @@ ct$tot_attivi <- as.numeric(ct$tot_attivi)
 ct$id <- paste0("FT", 1:nrow(ct))
 
 ##---- Plot check
-plot(studyArea, col = "steelblue")
-plot(ct$geometry, col = "blue", pch = 3, add = T)
+# plot(studyArea, col = "steelblue")
+# plot(ct$geometry, col = "blue", pch = 3, add = T)
 
 
 
@@ -150,7 +150,7 @@ dim(pics)
 pics$uniqueID <- 1:nrow(pics)
 
 ##---- Plot check
-plot(pics$geometry, col = "black", add = T)
+# plot(pics$geometry, col = "black", add = T)
 
 
 
@@ -233,10 +233,10 @@ habitat$n.HabWindows <- dim(habitat$lowerCoords)[1] ## == length(isHab)
 
 
 ##---- Visual plotting to check if everything is right
-plot(habitat$raster)
-plot(st_geometry(countries), add = T)
-plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
-plot(ct,add=T, col="red")
+# plot(habitat$raster)
+# plot(st_geometry(countries), add = T)
+# plot(habitat$polygon, add = T, col = rgb(red = 102/255,green = 102/255,blue = 102/255,alpha = 0.5))
+# plot(ct,add=T, col="red")
 
 
 
@@ -244,7 +244,7 @@ plot(ct,add=T, col="red")
 ## ------       2.2.1. HUMAN POPULATION DENSITY -------
 ##---- Load human population density data
 POP_raw  <- raster(file.path(dataDir,"/GISData/Environmental Layers/Human Population/Pop_Dens_1km.tif"))
-plot(POP_raw)
+# plot(POP_raw)
 
 ## Aggregate to the detector resolution
 POP <- raster::aggregate( x = POP_raw ,
@@ -254,8 +254,8 @@ POP <- raster::focal(x = POP,
                      w = matrix(1,3,3),
                      fun = mean,
                      na.rm = T)
-plot(POP)
-plot(st_geometry(grid), add = T)
+# plot(POP)
+# plot(st_geometry(grid), add = T)
 
 ## Extract scaled human pop density
 habitat$grid$pop <- POP %>%
@@ -266,11 +266,11 @@ habitat$grid$pop <- POP %>%
 log_POP <- POP
 log_POP[ ] <- log(POP[]+1)
 
-par(mfrow=c(1,2))
-plot(POP)
-plot(st_geometry(countries),add=T)
-plot(log_POP)
-plot(st_geometry(countries),add=T)
+# par(mfrow=c(1,2))
+# plot(POP)
+# plot(st_geometry(countries),add=T)
+# plot(log_POP)
+# plot(st_geometry(countries),add=T)
 
 habitat$grid$log_pop <- log_POP %>%
   raster::extract(y = habitat$sp) %>%
@@ -298,8 +298,8 @@ for(l in 1:length(layer.index)){
   temp <- CLC
   temp[!temp[] %in% layer.index[l]] <- 0
   temp[temp[] %in% layer.index[l]] <- 1
-  plot(temp)
-  plot(st_geometry(habitat$grid), add = T)
+  # plot(temp)
+  # plot(st_geometry(habitat$grid), add = T)
   
   COV[[l]] <- raster::aggregate( x = temp,
                                  fact = habitat$resolution/res(temp),
@@ -310,8 +310,8 @@ for(l in 1:length(layer.index)){
                             fun = mean,
                             na.rm = T)
   
-  plot(COV[[l]])
-  plot(st_geometry(habitat$grid), add = T)
+  # plot(COV[[l]])
+  # plot(st_geometry(habitat$grid), add = T)
   CLC.df[ ,l] <- raster::extract( x = COV[[l]],
                                   y = habitat$sp)
   print(layer.index[l])
@@ -328,18 +328,18 @@ list.files(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid"))
 iucn_2012_1 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_permanent.shp"))
 iucn_2012_1$SPOIS <- 3
 iucn_2012_1 <- st_transform(iucn_2012_1, st_crs(studyArea))
-plot(st_geometry(studyArea))
-plot(st_geometry(iucn_2012_1), add = T, col = "lightskyblue4")
+# plot(st_geometry(studyArea))
+# plot(st_geometry(iucn_2012_1), add = T, col = "lightskyblue4")
 
 iucn_2012_2 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/Clip_2012_12_01_Wolves_sporadic.shp"))
 iucn_2012_2$SPOIS <- 1
 iucn_2012_2 <- st_transform(iucn_2012_2, st_crs(studyArea))
-plot(st_geometry(iucn_2012_2), add = T, col = "lightskyblue2")
+# plot(st_geometry(iucn_2012_2), add = T, col = "lightskyblue2")
 
 iucn_2018 <- read_sf(file.path(dataDir,"/GISData/WOLF_IUCN_LCIE Grid/2018_06_06_Wolf_IUCN_Redlist.shp"))
 iucn_2018 <- st_transform(iucn_2018, st_crs(studyArea))
-plot(st_geometry(studyArea))
-plot(iucn_2018[ ,"SPOIS"], add = T)
+# plot(st_geometry(studyArea))
+# plot(iucn_2018[ ,"SPOIS"], add = T)
 ## Code back to numeric
 iucn_2018$SPOIS <- ifelse(iucn_2018$SPOIS == "Sporadic", 1, 3)
 
@@ -353,7 +353,7 @@ intersection <- st_intersection(habitat$grid, iucn_2012_1) %>%
 habitat$grid <- habitat$grid %>%
   left_join(intersection, by = "id")
 habitat$grid$IUCN[is.na(habitat$grid$IUCN)] <- 0
-plot(habitat$grid[,"IUCN"])
+# plot(habitat$grid[,"IUCN"])
 
 ## Extract LCIE wolf sporadic presence in each habitat grid cell
 intersection <- st_intersection(habitat$grid, iucn_2012_2) %>%
@@ -366,7 +366,7 @@ tmp <- habitat$grid %>%
   left_join(intersection, by = "id")
 tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
 habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
+# plot(habitat$grid[,"IUCN"])
 
 ## Extract LCIE wolf presence in each habitat grid cell
 intersection <- st_intersection(habitat$grid, iucn_2018) %>%
@@ -379,7 +379,7 @@ tmp <- habitat$grid %>%
   left_join(intersection, by = "id")
 tmp$iucn_2[is.na(tmp$iucn_2)] <- 0
 habitat$grid$IUCN <- habitat$grid$IUCN + tmp$iucn_2
-plot(habitat$grid[,"IUCN"])
+# plot(habitat$grid[,"IUCN"])
 
 habitat$grid$IUCN <- scale(habitat$grid$IUCN)
 
@@ -420,10 +420,10 @@ closest <- nn2( st_coordinates(detectors),
 table(closest$nn.dists)
 toCheck <- pics[closest$nn.dists > 0, ]
 
-plot(studyArea, col = "steelblue")
-plot(ct$geometry, col = "blue", pch = 3, add = T)
-plot(pics$geometry, col = "black", add = T)
-plot(pics$geometry[toCheck], col = "red",pch=19, cex = 0.8, add = T)
+# plot(studyArea, col = "steelblue")
+# plot(ct$geometry, col = "blue", pch = 3, add = T)
+# plot(pics$geometry, col = "black", add = T)
+# plot(pics$geometry[toCheck], col = "red",pch=19, cex = 0.8, add = T)
 
 
 ##---- Assign each picture to a camera-trap based on minimum distance
@@ -501,9 +501,9 @@ gammas <- estGammaParams(sigma$mean,
 estGammaParams(0.9,0.5)
 
 ## INFORMATIVE GAMMA PRIOR FOR SIGMA
-plot(density(x = rgamma( 10000,
-                         shape = 0.99,
-                         scale = 0.6)),col="red",lwd=3)
+# plot(density(x = rgamma( 10000,
+#                          shape = 0.99,
+#                          scale = 0.6)),col="red",lwd=3)
 
 # plot(density(x = rgamma(10000,shape = 1.053087,scale = 1.926761)),col="blue",lwd=3)
 # points(density(x = rgamma(10000,shape = 13,scale = 0.26)),col="red",lwd=3, type="l")
@@ -741,7 +741,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
+                               burnin = 30)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
