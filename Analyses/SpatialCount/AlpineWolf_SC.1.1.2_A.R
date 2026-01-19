@@ -741,7 +741,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
+                               burnin = 30)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
@@ -915,7 +915,7 @@ mtext( text = paste( "N = ", round(WA_Density$summary["Total",1],1),
                      round(WA_Density$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
-
+dev.off()
 ##---- Plot Italian density raster
 ital.R <- habitat$Italia
 ital.R[] <- WA_Italy$MeanCell
