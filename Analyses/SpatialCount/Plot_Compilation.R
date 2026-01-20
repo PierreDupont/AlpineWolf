@@ -56,7 +56,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res00 <- WA_Italy
 N00 <- res00$PosteriorAllRegions
 N_00 <- data.frame(N = N00,
-                   model = "AW1")
+                   model = "M1")
 
 modelName = "AlpineWolf.SC.1.1.1"
 thisDir <- file.path(analysisDir, modelName)
@@ -64,15 +64,15 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res01 <- WA_Italy
 N01 <- res01$PosteriorAllRegions
 N_01 <- data.frame(N = N01,
-                   model = "AW2")
+                   model = "M2")
 
-modelName = "AlpineWolf.SC.1.1.2"
+modelName = "AlpineWolf.SC.1.1.2_A"
 thisDir <- file.path(analysisDir, modelName)
 load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res02 <- WA_Italy
 N02 <- res02$PosteriorAllRegions
 N_02 <- data.frame(N = N02,
-                   model = "AW3")
+                   model = "M3")
 
 modelName = "AlpineWolf.SC.1.1.4"
 thisDir <- file.path(analysisDir, modelName)
@@ -80,7 +80,7 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res03 <- WA_Italy
 N03 <- res03$PosteriorAllRegions
 N_03 <- data.frame(N = N03,
-                   model = "AW4")
+                   model = "M4")
 
 modelName = "AlpineWolf.SC.1.1.5"
 thisDir <- file.path(analysisDir, modelName)
@@ -88,10 +88,17 @@ load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
 res04 <- WA_Italy
 N04 <- res04$PosteriorAllRegions
 N_04 <- data.frame(N = N04,
-                   model = "AW5")
+                   model = "M5")
 
+modelName = "AlpineWolf.5.2_RJMCMC"
+thisDir <- file.path(analysisDir, modelName)
+load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
+res05 <- WA_Italy
+N05 <- res05$PosteriorAllRegions
+N_05 <- data.frame(N = N05,
+                   model = "Marucco et al., 2023")
 
-N_all <- rbind(N_00, N_01, N_02, N_03, N_04)
+N_all <- rbind(N_00, N_01, N_02, N_03, N_04, N_05)
 N_original <- 952
 ## ------ 6. PLOT N -----
 res_bias_ntot_plot <- N_all %>%
@@ -124,8 +131,6 @@ res_bias_ntot_plot
 #   geom_line(aes(y = N_original)) 
 
 # 816 952 1120
-
-
 
 
 

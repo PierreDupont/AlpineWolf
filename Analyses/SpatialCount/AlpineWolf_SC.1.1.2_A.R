@@ -915,7 +915,7 @@ mtext( text = paste( "N = ", round(WA_Density$summary["Total",1],1),
                      round(WA_Density$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
-dev.off()
+
 ##---- Plot Italian density raster
 ital.R <- habitat$Italia
 ital.R[] <- WA_Italy$MeanCell
@@ -933,7 +933,7 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
                      round(WA_Italy$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
-
+dev.off()
 ##---- Plot density raster for comparison between models
 comp.R <- habitat.r
 comp.R[ ] <- WA_Comp$MeanCell
