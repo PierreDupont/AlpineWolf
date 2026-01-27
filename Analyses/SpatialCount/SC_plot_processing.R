@@ -174,7 +174,7 @@ habitat$Italia[habitat$Italia == 0] <- NA
 ## Step 1: List only the 5 model files (exclude the reference one)
 # Use pattern matching to exclude the reference model file
 modelFiles <- list.files(thisDir,pattern = "_posterior\\.RData$")
-modelFiles <- modelFiles[!grepl("AlpineWolf.5.2_RJMCMC", modelFiles)]  # adjust as needed
+modelFiles <- modelFiles[!grepl("AlpineWolf.5.2_RJMCMC", modelFiles)]  # remove Marucco et al 2023
 
 ## Step 2: Load WA_Italy from the 5 new models
 model_outputs <- list()
@@ -187,10 +187,10 @@ for (i in seq_along(modelFiles)) {
 ## Step 3: Load reference model (WA_regions)
 ref_file <- "AlpineWolf.5.2_RJMCMC_posterior.RData"  # your reference filename
 load(file.path(thisDir, ref_file))                   # correct usage
-model_outputs[[6]] <- WA_regions
+model_outputs[[8]] <- WA_regions
 
 ## Step 4: Set names
-names(model_outputs) <- c(paste0("M", 1:5), "SCR Marucco et al. 2023")
+names(model_outputs) <- c(paste0("M", 1:7), "SCR Marucco et al. 2023")
 
 # Get minimum chain length
 min_iter <- min(sapply(model_outputs, function(x) length(x$PosteriorAllRegions)))
@@ -202,7 +202,9 @@ df <- data.frame(
   M3  = model_outputs[[3]][["PosteriorAllRegions"]][1:min_iter],
   M4  = model_outputs[[4]][["PosteriorAllRegions"]][1:min_iter],
   M5  = model_outputs[[5]][["PosteriorAllRegions"]][1:min_iter],
-  SCR = model_outputs[[6]][["PosteriorAllRegions"]][1:min_iter]
+  M4b  = model_outputs[[6]][["PosteriorAllRegions"]][1:min_iter],
+  M4c  = model_outputs[[7]][["PosteriorAllRegions"]][1:min_iter],
+  SCR = model_outputs[[8]][["PosteriorAllRegions"]][1:min_iter]
 )
   
 # Convert to long format
@@ -213,12 +215,12 @@ df_long <- data.frame(
   N = model_outputs[[1]][["PosteriorAllRegions"]],
   model = "M1"
 )
-for (i in 2:6) {
+for (i in 2:8) {
   df_long <- rbind(
     df_long,
     data.frame(
       N = model_outputs[[i]][["PosteriorAllRegions"]],
-      model = c("M2", "M3", "M4", "M5", "SCR")[i - 1]
+      model = c("M2", "M3", "M4", "M5","M4a","M4b", "SCR")[i - 1]
     )
   )
 }
@@ -376,7 +378,8 @@ density_raster3 <- density_rasters[[3]]
 density_raster4 <- density_rasters[[4]]
 density_raster5 <- density_rasters[[5]]
 density_raster6 <- density_rasters[[6]]
-
+density_raster7 <- density_rasters[[7]]
+density_raster8 <- density_rasters[[8]]
 
 # Now calculate global min and max for color scale
 global_min <- min(sapply(density_rasters, function(r) raster::cellStats(r, stat = 'min')), na.rm = TRUE)
@@ -407,8 +410,16 @@ df6 <- as.data.frame(density_raster6, xy = TRUE)
 names(df6) <- c("x", "y", "density")
 df6 <- df6[!is.na(df6$density), ]
 
+df7 <- as.data.frame(density_raster7, xy = TRUE)
+names(df7) <- c("x", "y", "density")
+df7 <- df7[!is.na(df7$density), ]
+
+df8 <- as.data.frame(density_raster8, xy = TRUE)
+names(df8) <- c("x", "y", "density")
+df8 <- df8[!is.na(df8$density), ]
+
 # Define model names and corresponding abundance (N) estimates with CIs for captions
-model_names <- c("M1", "M2", "M3", "M4", "M5", "SCR Marucco et al. 2023")
+model_names <- c("M1", "M2", "M3", "M4", "M5", "M4b", "M4c", "SCR Marucco et al. 2023")
 # Extract abundance point estimates and 95% CIs from model summaries
 N_est   <- sapply(model_outputs, function(x) round(x$summary["Total", 1], 1))  # mean
 N_lower <- sapply(model_outputs, function(x) round(x$summary["Total", 4], 1))  # 2.5%
@@ -533,6 +544,42 @@ p6 <- ggplot() +
     plot.caption = element_text(size = 10, hjust = 0.5)
   )
 
+p7 <- ggplot() +
+  geom_raster(data = df7, aes(x = x, y = y, fill = density)) +
+  geom_sf(data = countries_sf, fill = NA, color = "black", size = 0.1) +
+  # geom_sf(data = habitat_sf, fill = NA, color = "gray40", size = 1) +
+  scale_fill_gradientn(colors = col_palette, 
+                       limits = c(global_min, global_max),
+                       name = "Wolf density",
+                       na.value = NA) +
+  labs(title = model_names[7],
+       caption = paste0("N = ", N_est[7], " [", N_lower[7], " ; ", N_upper[7], "]")) +
+  coord_sf(xlim = xlim, ylim = ylim) +
+  theme_void() +  # removes all axes, ticks, and background grid
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    plot.caption = element_text(size = 10, hjust = 0.5)
+  )
+
+p8 <- ggplot() +
+  geom_raster(data = df8, aes(x = x, y = y, fill = density)) +
+  geom_sf(data = countries_sf, fill = NA, color = "black", size = 0.1) +
+  # geom_sf(data = habitat_sf, fill = NA, color = "gray40", size = 1) +
+  scale_fill_gradientn(colors = col_palette, 
+                       limits = c(global_min, global_max),
+                       name = "Wolf density",
+                       na.value = NA) +
+  labs(title = model_names[8],
+       caption = paste0("N = ", N_est[8], " [", N_lower[8], " ; ", N_upper[8], "]")) +
+  coord_sf(xlim = xlim, ylim = ylim) +
+  theme_void() +  # removes all axes, ticks, and background grid
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    plot.caption = element_text(size = 10, hjust = 0.5)
+  )
+
 # Use cowplot to arrange the six maps and add a shared legend on the right
 # Extract a legend from one plot (use the first plot with legend on to get the fill scale legend)
 # legend_plot <- ggplot(df1, aes(x = x, y = y, fill = density)) +
@@ -567,7 +614,7 @@ legend_plot <- ggplot() + geom_raster(data = df1, aes(x = x, y = y, fill = densi
 legend_grob <- cowplot::get_legend(legend_plot)
 
 # Arrange plots in a 2x3 grid (no legends in these plots)
-plot_grid_2x3 <- cowplot::plot_grid(p1, p2, p3, p4, p5, p6, 
+plot_grid_2x3 <- cowplot::plot_grid(p1, p2, p3, p4, p5, p8, 
                                     legend_grob,
                                     ncol = 3, nrow = 2)
 
@@ -578,7 +625,7 @@ combined_plot <- cowplot::plot_grid(
   ncol = 2, 
   rel_widths = c(1, 0.12))
 # Save the combined figure to a TIFF file at 2400x1600 px, 300 dpi
-ggsave("/Users/virginia/Desktop/WolfDensity_2x3_LegendRight.png",
+ggsave("/Users/virginia/Desktop/WolfDensity_44a4b_def.png",
        plot = combined_plot, 
        width = 2400/300, 
        height = 1600/300, 
@@ -602,25 +649,36 @@ N_all <- rbind(
   data.frame(N = model_outputs[[3]][["PosteriorAllRegions"]], model = "M3"),
   data.frame(N = model_outputs[[4]][["PosteriorAllRegions"]], model = "M4"),
   data.frame(N = model_outputs[[5]][["PosteriorAllRegions"]], model = "M5"),
-  data.frame(N = model_outputs[[6]][["PosteriorAllRegions"]], model = "SCR")
+  # data.frame(N = model_outputs[[6]][["PosteriorAllRegions"]], model = "M4b"),
+  # data.frame(N = model_outputs[[7]][["PosteriorAllRegions"]], model = "M4c"),
+  data.frame(N = model_outputs[[8]][["PosteriorAllRegions"]], model = "SCR")
 )
 
 N_original <- 952
-
+# N_all <- c("M1","M2","M3","M4","M5", 
+#            # "M4a", "M4b", 
+#            "SCR")
 res_bias_ntot_plot <- N_all %>%
-  mutate(model = factor(model, levels = c("M1", "M2", "M3", "M4", "M5", "SCR"))) %>%
+  mutate(model = factor(model, levels = c(
+    "M1", "M2", "M3",
+                                          "M4",
+                                          "M5",
+                                          # "M4b", "M4c",
+                                          "SCR"))) %>%
   ggplot(aes(x = model, y = N, fill = model)) +
   # SCR reference lines
   geom_hline(yintercept = N_original,alpha = 0.9, linetype ="dashed", color = "#D7263D", size = 1) +
   geom_violin(color = NA, trim = FALSE) +
   stat_summary(fun = median, geom = "point", color = "white", size = 0.5) +
-  scale_y_continuous(limits = c(500, 3500), breaks = seq(500, 3500, 500)) +
+  scale_y_continuous(limits = c(500, 4000), breaks = seq(500, 4000, 500)) +
   scale_fill_manual(values = c(
     "M1" = "#ccd5dd",
     "M2" = "#EBCC2A",
     "M3" = "#E1AF00",
     "M4" = "skyblue",
     "M5" = "#3B9AB2",
+    # "M4b" = 'darkorange',
+    # "M4c" = 'coral2',
     "SCR" = "#D7263D"
   )) +
   labs(y = "Population size", x = "") +
@@ -638,7 +696,7 @@ res_bias_ntot_plot <- N_all %>%
 # Print it
 res_bias_ntot_plot
 ggsave(
-  filename = "/Users/virginia/Desktop/Wolf_Npost_Violin.png",
+  filename = "/Users/virginia/Desktop/NewM4_Wolf_Npost_Violin_def.png",
   plot = res_bias_ntot_plot,
   width = 8,           # inches
   height = 5,        # adjust as needed

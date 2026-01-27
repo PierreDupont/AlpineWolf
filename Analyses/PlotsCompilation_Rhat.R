@@ -104,8 +104,8 @@ model_list <- list(
   M3 = N02,
   M4 = N03,
   M5 = N04,
-  M6 = N06,
-  M7 = N07
+  M4a = N06,
+  M4b = N07
   )
 
 # Mapping raw parameter names to nice symbols
@@ -174,7 +174,7 @@ p1 <- ggplot(df_small, aes(x = parameter_pretty, y = Rhat, fill = flag)) +
   geom_col() +
   coord_flip() +
   facet_wrap(~model, scales = "free_y", ncol = 2) +
-  scale_y_continuous(limits = c(0,1.5), breaks = seq(0, 1.5, by = 0.5)) +
+  # scale_y_continuous(limits = c(0,1.5), breaks = seq(0, 1.5, by = 0.5)) +
   scale_fill_manual(values = c("Rhat > 1.10" = "cadetblue", "Rhat ≤ 1.10" = "grey70")) +
   geom_hline(yintercept = 1.1, linetype = "dashed", color = "red") +
   theme_minimal(base_size = 12) +
@@ -194,3 +194,4 @@ p2 <- ggplot(df_big, aes(x = parameter_pretty, y = Rhat, fill = flag)) +
 
 # Combine with relative widths (1 for p1, 2 for p2)
 p1 + p2 + plot_layout(widths = c(1, 2))
+
