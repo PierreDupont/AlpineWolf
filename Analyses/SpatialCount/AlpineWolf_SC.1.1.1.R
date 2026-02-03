@@ -1,5 +1,8 @@
 ## -------------------------------------------------------------------------- ##
 ## ------------------------ ALPINE WOLF SC ---------------------------------- ##
+## -------------------------COVARIATE ON DENSITY----------------------------- ##
+## ------------------BUT NO INFORMATIVE PRIORS BETAS------------------------- ##
+## ---------------NOR INFORMATIVE PRIORS ON SIGMA---------------------------- ##
 ## -------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
@@ -700,7 +703,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
+                               burnin = 30)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
@@ -979,7 +982,7 @@ mtext( text = paste( "N = ", round(WA_Italy$summary["Total",1],1),
                      round(WA_Italy$summary["Total",5],1), "]", sep = ""),
        side = 1, font = 2, cex = 1.5)
 
-
+dev.off()
 ##---- Plot density raster for comparison between models
 comp.R <- habitat.r
 comp.R[ ] <- WA_Comp$MeanCell

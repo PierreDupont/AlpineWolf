@@ -1,5 +1,8 @@
 ## -------------------------------------------------------------------------- ##
 ## ------------------------ ALPINE WOLF SC ---------------------------------- ##
+## ---------------------COVARIATE ON DENSITY--------------------------------- ##
+## ------------------WITH INFORMATIVE PRIORS BETAS------------------------- ##
+## ---------------NOR INFORMATIVE PRIORS ON SIGMA---------------------------- ##
 ## -------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
@@ -71,6 +74,11 @@ studyAreaGrid <- st_transform(x = studyAreaGrid, crs = st_crs(countries))
 studyArea <- studyAreaGrid %>%
   st_snap(x = ., y = ., tolerance = 0.0001) %>%
   st_union() 
+
+presence <- read_sf(file.path(dataDir,"GISData/SECR_Presence_Layer_2020_2021/SECR_presence_layer_2021.shp"))
+presence <- st_transform(x = presence, crs = st_crs(countries))
+presence <- presence[presence$`Pres_20-21`%in% 1, ]
+# presence <- st_intersection(presence, regions)
 
 ##---- create raster with desired resolution
 grid.r <- st_as_stars(st_bbox(studyArea),
@@ -150,6 +158,10 @@ dim(pics)
 pics$uniqueID <- 1:nrow(pics)
 
 ##---- Plot check
+plot(studyArea, col = "lightcyan3", border = F)
+# dodgerblue3
+plot(presence$geometry,border = adjustcolor("grey40", alpha.f = 0.25), add = TRUE)
+plot(ct$geometry, col = "cornflowerblue", pch = 20, add = T)
 plot(pics$geometry, col = "palegreen1", pch = '*',  add = T)
 # lightskyblue3
 
@@ -710,7 +722,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 0)
+                               burnin = 30)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))

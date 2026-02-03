@@ -605,16 +605,16 @@ p8 <- ggplot() +
 legend_plot <- ggplot() + geom_raster(data = df1, aes(x = x, y = y, fill = density)) + 
   scale_fill_gradientn(colors = col_palette, 
                       limits = c(global_min, global_max), 
-                      name = "Wolf density", na.value = NA) + 
+                      name = "Wolves/100km2", na.value = NA) + 
   theme_minimal() + 
   theme(legend.position = "right", 
-        legend.title = element_text(size = 11), 
-        legend.text = element_text(size = 10), 
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 7), 
         plot.background = element_blank()) # no plot, just legend 
 legend_grob <- cowplot::get_legend(legend_plot)
 
 # Arrange plots in a 2x3 grid (no legends in these plots)
-plot_grid_2x3 <- cowplot::plot_grid(p1, p2, p3, p4, p5, p8, 
+plot_grid_2x3 <- cowplot::plot_grid(p4, p6, p7, p8, 
                                     legend_grob,
                                     ncol = 3, nrow = 2)
 
@@ -625,7 +625,7 @@ combined_plot <- cowplot::plot_grid(
   ncol = 2, 
   rel_widths = c(1, 0.12))
 # Save the combined figure to a TIFF file at 2400x1600 px, 300 dpi
-ggsave("/Users/virginia/Desktop/WolfDensity_44a4b_def.png",
+ggsave("/Users/virginia/Desktop/WolfDensity_4A4Bt_def.png",
        plot = combined_plot, 
        width = 2400/300, 
        height = 1600/300, 
@@ -644,13 +644,13 @@ ggsave("/Users/virginia/Desktop/WolfDensity_44a4b_def.png",
 ## ------   5. VIOLIN PLOTS OF POSTERIORS ------
 
 N_all <- rbind(
-  data.frame(N = model_outputs[[1]][["PosteriorAllRegions"]], model = "M1"),
-  data.frame(N = model_outputs[[2]][["PosteriorAllRegions"]], model = "M2"),
-  data.frame(N = model_outputs[[3]][["PosteriorAllRegions"]], model = "M3"),
+  # data.frame(N = model_outputs[[1]][["PosteriorAllRegions"]], model = "M1"),
+  # data.frame(N = model_outputs[[2]][["PosteriorAllRegions"]], model = "M2"),
+  # data.frame(N = model_outputs[[3]][["PosteriorAllRegions"]], model = "M3"),
   data.frame(N = model_outputs[[4]][["PosteriorAllRegions"]], model = "M4"),
-  data.frame(N = model_outputs[[5]][["PosteriorAllRegions"]], model = "M5"),
-  # data.frame(N = model_outputs[[6]][["PosteriorAllRegions"]], model = "M4b"),
-  # data.frame(N = model_outputs[[7]][["PosteriorAllRegions"]], model = "M4c"),
+  # data.frame(N = model_outputs[[5]][["PosteriorAllRegions"]], model = "M5"),
+  data.frame(N = model_outputs[[6]][["PosteriorAllRegions"]], model = "M4b"),
+  data.frame(N = model_outputs[[7]][["PosteriorAllRegions"]], model = "M4c"),
   data.frame(N = model_outputs[[8]][["PosteriorAllRegions"]], model = "SCR")
 )
 
@@ -660,10 +660,10 @@ N_original <- 952
 #            "SCR")
 res_bias_ntot_plot <- N_all %>%
   mutate(model = factor(model, levels = c(
-    "M1", "M2", "M3",
+    # "M1", "M2", "M3",
                                           "M4",
-                                          "M5",
-                                          # "M4b", "M4c",
+                                          # "M5",
+                                          "M4b", "M4c",
                                           "SCR"))) %>%
   ggplot(aes(x = model, y = N, fill = model)) +
   # SCR reference lines
@@ -672,13 +672,13 @@ res_bias_ntot_plot <- N_all %>%
   stat_summary(fun = median, geom = "point", color = "white", size = 0.5) +
   scale_y_continuous(limits = c(500, 4000), breaks = seq(500, 4000, 500)) +
   scale_fill_manual(values = c(
-    "M1" = "#ccd5dd",
-    "M2" = "#EBCC2A",
-    "M3" = "#E1AF00",
+    # "M1" = "#ccd5dd",
+    # "M2" = "#EBCC2A",
+    # "M3" = "#E1AF00",
     "M4" = "skyblue",
-    "M5" = "#3B9AB2",
-    # "M4b" = 'darkorange',
-    # "M4c" = 'coral2',
+    # "M5" = "#3B9AB2",
+    "M4b" = 'darkorange',
+    "M4c" = 'coral2',
     "SCR" = "#D7263D"
   )) +
   labs(y = "Population size", x = "") +
@@ -696,7 +696,7 @@ res_bias_ntot_plot <- N_all %>%
 # Print it
 res_bias_ntot_plot
 ggsave(
-  filename = "/Users/virginia/Desktop/NewM4_Wolf_Npost_Violin_def.png",
+  filename = "/Users/virginia/Desktop/NewM44a4b_Wolf_Npost_Violin_def.png",
   plot = res_bias_ntot_plot,
   width = 8,           # inches
   height = 5,        # adjust as needed

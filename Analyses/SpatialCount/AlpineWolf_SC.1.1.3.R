@@ -1,5 +1,6 @@
 ## -------------------------------------------------------------------------- ##
 ## ------------------------ ALPINE WOLF SC ---------------------------------- ##
+## ---------------------DON'T USE IT --------------------------------- ##
 ## -------------------------------------------------------------------------- ##
 ## ------ CLEAN THE WORK ENVIRONMENT ------
 rm(list=ls())
@@ -757,7 +758,7 @@ for(c in 1:4){
 ## ------   0. PROCESS MCMC CHAINS ------
 ##---- Collect multiple MCMC bites and chains
 nimOutput <- collectMCMCbites( path = file.path(thisDir, "output"),
-                               burnin = 20)
+                               burnin = 30)
 
 ##---- Traceplots
 pdf(file = file.path(thisDir, paste0(modelName, "_traceplots.pdf")))
