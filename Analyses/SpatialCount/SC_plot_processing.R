@@ -170,9 +170,7 @@ habitat$Italia <- mask(habitat$raster, st_as_sf(studyArea))
 habitat$Italia[habitat$Italia == 0] <- NA
 
 ## ------   3. LOAD MODELS POSTERIORS ------
-
-## Step 1: List only the 5 model files (exclude the reference one)
-# Use pattern matching to exclude the reference model file
+##List only the 5 model files (exclude the reference one at this step it has different names)
 modelFiles <- list.files(thisDir,pattern = "_posterior\\.RData$")
 modelFiles <- modelFiles[!grepl("AlpineWolf.5.2_RJMCMC", modelFiles)]  # remove Marucco et al 2023
 
@@ -181,15 +179,15 @@ model_outputs <- list()
 for (i in seq_along(modelFiles)) {
   fullPath <- file.path(thisDir, modelFiles[i])  # construct full path
   load(fullPath)                                 # load the RData file
-  model_outputs[[i]] <- WA_Italy                 # store WA_Italy into list
+  model_outputs[[i]] <- WA_Italy                 # store ONLY WA_Italy into list
 }
 
-## Step 3: Load reference model (WA_regions)
-ref_file <- "AlpineWolf.5.2_RJMCMC_posterior.RData"  # your reference filename
-load(file.path(thisDir, ref_file))                   # correct usage
+##Load reference model (here is WA_regions)
+ref_file <- "AlpineWolf.5.2_RJMCMC_posterior.RData"  
+load(file.path(thisDir, ref_file))                 
 model_outputs[[8]] <- WA_regions
 
-## Step 4: Set names
+##Set names
 names(model_outputs) <- c(paste0("M", 1:7), "SCR Marucco et al. 2023")
 
 # Get minimum chain length
@@ -224,140 +222,13 @@ for (i in 2:8) {
     )
   )
 }
-## ------ 4 DENSITY MAPS FOR ALL MODELS -------
-## ------     4.1 R PLOT VERSION -----------
-# tiff("/Users/virginia/Desktop/WolfDensity_2x3_LegendRight.tiff", 
-#      width = 2400, height = 1600, res = 300)
-#   
-# # This creates a mask of where data is not NA
-# nonNA_mask <- habitat$Italia
-# nonNA_mask[] <- ifelse(!is.na(habitat$Italia[]), 1, NA)
-# extent_mask <- extent(nonNA_mask)
-# 
-# # Add a slight buffer
-# buffer <- 20000
-# xlim_use <- c(xmin(extent_mask) - buffer, xmax(extent_mask) + buffer)
-# ylim_use <- c(ymin(extent_mask) - buffer, ymax(extent_mask) + buffer)
-# 
-# # Crop countries to match
-# countries_crop <- st_crop(countries, xmin = xlim_use[1], xmax = xlim_use[2],
-#                           ymin = ylim_use[1], ymax = ylim_use[2])
-# 
-# # Step 1: Convert country polygons to boundaries
-# boundaries <- st_boundary(countries_crop)
-# 
-# # Step 2: Wrap as geometry column and cast to MULTILINESTRING
-# boundary_lines <- st_cast(st_sf(geometry = boundaries), "MULTILINESTRING")
-# 
-# # Step 3: Done — no need to filter manually
-# countries_lines <- boundary_lines
-# # Color and page setup
-# layout_matrix <- matrix(c(1, 2, 3, 7,
-#                           4, 5, 6, 7), nrow = 2, byrow = TRUE)
-# 
-# layout(mat = layout_matrix, widths = c(1, 1, 1, 0.5), heights = c(1, 1))
-# par(mfrow = c(2, 3), mar = c(2, 2, 2, 2))
-# maxDens <- max(sapply(model_outputs, function(x) max(x$MeanCell, na.rm = TRUE)))
-# cuts <- seq(0, maxDens, length.out = 100)
-# colFunc <- colorRampPalette(c("white", "skyblue", "steelblue3", "lightgreen", "coral", "yellow"))
-# col <- colFunc(length(cuts) - 1)
-# 
-# for (i in 1:6) {
-#   dens.R <- raster(habitat$Italia)
-#   dens.R[] <- model_outputs[[i]]$MeanCell
-#   dens.R[is.na(habitat$Italia[])] <- NA
-#   
-#   plot(dens.R,
-#        breaks = cuts, col = col,
-#        legend = FALSE,
-#        xlim = xlim_use, ylim = ylim_use,
-#        axes = FALSE, box = FALSE)
-#   
-#   plot(habitat$polygon, add = TRUE, border = grey(0.6), lwd = 1)
-#   plot(st_geometry(countries_lines), add = TRUE, border = "black", lwd = 0.5)
-#   
-#   title(main = names(model_outputs)[i], font.main = 2, cex.main = 1.2, line = 0.2)
-#   N_est <- round(model_outputs[[i]]$summary["Total", 1], 1)
-#   N_lwr <- round(model_outputs[[i]]$summary["Total", 4], 1)
-#   N_upr <- round(model_outputs[[i]]$summary["Total", 5], 1)
-#   mtext(paste0("N = ", N_est, " [", N_lwr, " ; ", N_upr, "]"),
-#         side = 1, line = 0.5, cex = 0.9)
-# }
-# 
-# # Now manually place the legend using par(fig=...) — full control
-# par(mar = c(4, 1, 4, 4))  # wider right margin
-# image.plot(legend.only = TRUE,
-#            zlim = c(0, maxDens),
-#            col = col, breaks = cuts,
-#            legend.width = 2,
-#            legend.shrink = 0.8,
-#            axis.args = list(cex.axis = 1.2),
-#            legend.args = list(text = "Wolf Density", side = 3, line = 1, cex = 1.2))
-# 
-# 
-# 
-# dev.off()
-# 
-# 
-# 
-# # Save the output image
-# tiff("/Users/virginia/Desktop/WolfDensity_2x3_LegendRight.tiff", 
-#      width = 2400, height = 1600, res = 300)
-# 
-# # Create a 2x4 layout: 6 maps and 1 legend panel
-# layout_matrix <- matrix(c(1, 2, 3, 7,
-#                           4, 5, 6, 7), nrow = 2, byrow = TRUE)
-# layout(mat = layout_matrix, widths = c(1, 1, 1, 0.5), heights = c(1, 1))
-# 
-# # Adjust margins
-# par(mar = c(1.5, 1.5, 2, 1))
-# 
-# # Get common scale
-# maxDens <- max(sapply(model_outputs, function(x) max(x$MeanCell, na.rm = TRUE)))
-# cuts <- seq(0, maxDens, length.out = 100)
-# colFunc <- colorRampPalette(c("white", "skyblue", "steelblue3", "lightgreen", "coral", "yellow"))
-# col <- colFunc(length(cuts) - 1)
-# 
-# # Plot each model
-# for (i in 1:6) {
-#   dens.R <- raster(habitat$Italia)
-#   dens.R[] <- model_outputs[[i]]$MeanCell
-#   dens.R[is.na(habitat$Italia[])] <- NA
-#   
-#   plot(dens.R,
-#        breaks = cuts, col = col,
-#        legend = FALSE,
-#        xlim = xlim_use, ylim = ylim_use,
-#        axes = FALSE, box = FALSE)
-#   
-#   plot(habitat$polygon, add = TRUE, border = grey(0.6), lwd = 1)
-#   plot(st_geometry(countries_lines), add = TRUE, border = "black", lwd = 0.5)
-#   
-#   title(main = names(model_outputs)[i], font.main = 2, cex.main = 1.1, line = 0.5)
-#   N_est <- round(model_outputs[[i]]$summary["Total", 1], 1)
-#   N_lwr <- round(model_outputs[[i]]$summary["Total", 4], 1)
-#   N_upr <- round(model_outputs[[i]]$summary["Total", 5], 1)
-#   mtext(paste0("N = ", N_est, " [", N_lwr, " ; ", N_upr, "]"),
-#         side = 1, line = 0.5, cex = 0.8)
-# }
-# 
-# # Legend panel
-# par(mar = c(3, 1, 3, 3))
-# image.plot(legend.only = TRUE,
-#            zlim = c(0, maxDens),
-#            col = col, breaks = cuts,
-#            legend.width = 1.5,
-#            legend.shrink = 0.7,
-#            axis.args = list(cex.axis = 1),
-#            legend.args = list(text = "Wolf Density", side = 3, line = 0.5, cex = 1))
-# 
-# dev.off()
 
-## ------     4.2 GGPLOT VERSION -----------  
+
+## ------     4.2 GGPLOT  -----------  
 
 # Convert vector data to sf (if not already) and ensure they share the raster CRS
-habitat_sf    <- st_as_sf(habitat$polygon)               # study area outline as sf
-countries_sf  <- st_as_sf(countries)               # country borders as sf
+habitat_sf    <- st_as_sf(habitat$polygon)              
+countries_sf  <- st_as_sf(countries)             
 # Transform country borders to the habitat's coordinate system if needed
 countries_sf  <- st_transform(countries_sf, st_crs(habitat_sf))
 
@@ -371,7 +242,7 @@ density_rasters <- lapply(model_outputs, function(x) {
   return(r)
 })
 
-# Assign to named objects for convenience (optional)
+# Assign to named objects for convenience 
 density_raster1 <- density_rasters[[1]]
 density_raster2 <- density_rasters[[2]]
 density_raster3 <- density_rasters[[3]]
@@ -381,7 +252,7 @@ density_raster6 <- density_rasters[[6]]
 density_raster7 <- density_rasters[[7]]
 density_raster8 <- density_rasters[[8]]
 
-# Now calculate global min and max for color scale
+# Calculate global min and max for color scale
 global_min <- min(sapply(density_rasters, function(r) raster::cellStats(r, stat = 'min')), na.rm = TRUE)
 global_max <- max(sapply(density_rasters, function(r) raster::cellStats(r, stat = 'max')), na.rm = TRUE)
 
