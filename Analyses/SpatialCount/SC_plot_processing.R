@@ -473,9 +473,9 @@ p8 <- ggplot() +
 #   )
 
 
-legend_plot <- ggplot() + geom_raster(data = df1, aes(x = x, y = y, fill = density)) + 
+legend_plot <- ggplot() + geom_raster(data = df1, aes(x = x, y = y, fill = (density)*4)) + 
   scale_fill_gradientn(colors = col_palette, 
-                      limits = c(global_min, global_max), 
+                      limits = c(global_min, (global_max)*4), 
                       name = "Wolves/100km2", na.value = NA) + 
   theme_minimal() + 
   theme(legend.position = "right", 
@@ -485,7 +485,7 @@ legend_plot <- ggplot() + geom_raster(data = df1, aes(x = x, y = y, fill = densi
 legend_grob <- cowplot::get_legend(legend_plot)
 
 # Arrange plots in a 2x3 grid (no legends in these plots)
-plot_grid_2x3 <- cowplot::plot_grid(p4, p6, p7, p8, 
+plot_grid_2x3 <- cowplot::plot_grid(p1, p2, p3, p4, p5, p8, 
                                     legend_grob,
                                     ncol = 3, nrow = 2)
 
@@ -496,7 +496,7 @@ combined_plot <- cowplot::plot_grid(
   ncol = 2, 
   rel_widths = c(1, 0.12))
 # Save the combined figure to a TIFF file at 2400x1600 px, 300 dpi
-ggsave("/Users/virginia/Desktop/WolfDensity_4A4Bt_def.png",
+ggsave("/Users/virginia/Desktop/WolfDensity_MS_def.png",
        plot = combined_plot, 
        width = 2400/300, 
        height = 1600/300, 
