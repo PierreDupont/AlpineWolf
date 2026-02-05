@@ -31,7 +31,7 @@ library(gridExtra)
 library(MetBrewer)
 library(data.table)
 library(ggplot2)
-
+library(mapsf)
 
 
 ## ------ SET REQUIRED WORKING DIRECTORIES ------
@@ -158,14 +158,18 @@ dim(pics)
 pics$uniqueID <- 1:nrow(pics)
 
 ##---- Plot check
+par(mar = c(1, 1, 2, 2))  # bottom, left, top, right
 plot(studyArea, col = "lightcyan3", border = F)
 # dodgerblue3
-plot(presence$geometry,border = adjustcolor("grey40", alpha.f = 0.25), add = TRUE)
+# plot(presence$geometry,border = adjustcolor("grey40", alpha.f = 0.25), add = TRUE)
 plot(ct$geometry, col = "cornflowerblue", pch = 20, add = T)
 plot(pics$geometry, col = "palegreen1", pch = '*',  add = T)
 # lightskyblue3
 
-
+# scale bar
+mf_scale(size = 100, col = "black", cex = 0.8)
+# ---- north
+mf_arrow(pos = "topright", col = "black", cex = 1.2)
 ## -----------------------------------------------------------------------------
 ## ------ II. PREPARE SCR DATA ------
 ## ------   1. DETECTORS ------
