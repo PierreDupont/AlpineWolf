@@ -4,6 +4,7 @@ rm(list=ls())
 
 ## ------ IMPORT REQUIRED LIBRARIES ------
 library(raster)
+library(terra)
 library(coda)
 library(nimble)
 library(nimbleSCR)
@@ -61,15 +62,15 @@ regions <- st_transform(x = regions, crs = st_crs(countries))
 regions$ID <- as.numeric(as.factor(regions$DEN_UTS))
 
 ## LOAD POLYGON OF THE ITALIAN ALPS
-alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
-alps <- st_transform(x = alps, crs = st_crs(countries))
+# alps <- read_sf(file.path(dataDir,"GISData/Output_layout/Italian_Alps.shp"))
+# alps <- st_transform(x = alps, crs = st_crs(countries))
 # alps <- st_intersection(alps,presence)
 
 ## LOAD POLYGON OF THE MINIMUM WOLF PRESENCE
-presence <- read_sf(file.path(dataDir,"GISData/presence_2324/Grid_Alpi_presenzaRAlpine_ITA_2023_2024_LWAEU.shp"))
-presence <- st_transform(x = presence, crs = st_crs(countries))
-presence <- presence[presence$`2023_2024` %in% 1, ]
-presence <- st_intersection(presence, regions)
+# presence <- read_sf(file.path(dataDir,"GISData/presence_2324/Grid_Alpi_presenzaRAlpine_ITA_2023_2024_LWAEU.shp"))
+# presence <- st_transform(x = presence, crs = st_crs(countries))
+# presence <- presence[presence$`2023_2024` %in% 1, ]
+# presence <- st_intersection(presence, regions)
 
 # east <- read_sf(file.path(dataDir,"GISData/Output_layout/East_tot.shp"))
 # west <- read_sf(file.path(dataDir,"GISData/Output_layout/West_tot.shp"))
@@ -409,6 +410,8 @@ load(file = file.path(thisDir, paste0(modelName, "_densities_1x1.RData")))
 
 ##---- Plot 1
 
+
+
 {
   pdf(file = file.path(thisDir, paste0(modelName, "_Density_2324_alps.pdf" )),
       width = 20, height = 12)
@@ -587,7 +590,60 @@ load(file = file.path(thisDir, paste0(modelName, "_densities_1x1.RData")))
 #   axis(4,lab,num*100)
 #   box()
 #   graphics.off()
+  
+}  
+  # PLOT WITH BLURRED REGIONS
+{
+pdf(file = file.path(thisDir, paste0(modelName, "_PIEM_Density_2324_alps.pdf" )),
+    width = 20, height = 12)
+
+regions_blur <- c("Piemonte")    
+
+# meanDensity.R <- regions.r
+# meanDensity.R[ ] <- WA_regions$MeanCell
+# meanDensity.R[is.na(regions.r[])] <- NA
+# # converto raster in SpatRaster se serve
+# meanDensity.R <- rast(meanDensity.R)
+# 
+# # rasterizzo le regioni
+# mask_regions <- rasterize(vect(regions), meanDensity.R, field = "DEN_REG")
+# # raster nitido (solo regioni NON blur)
+# meanDensity_sharp <- meanDensity.R
+# meanDensity_sharp[mask_regions %in% regions_blur] <- NA
+# # raster da sfocare (solo regioni blur)
+# meanDensity_blur <- meanDensity.R
+# meanDensity_blur[!(mask_regions %in% regions_blur)] <- NA 
+# 
+# meanDensity_final <- cover(meanDensity_sharp, meanDensity_blur)
+
+meanDensity.R <- regions.r
+meanDensity.R[ ] <- WA_regions$MeanCell
+meanDensity.R[is.na(regions.r[])] <- NA
+
+##---- Smooth using a moving window 
+f.rast <- function(x) ifelse(is.na(x[13]), NA, mean(x,na.rm = T))
+MovingWindowSize <-  matrix(1,5,5)
+meanDensity.R <- focal(meanDensity.R, MovingWindowSize, f.rast)
+
+##---- Set color scale
+maxDens <- max(meanDensity.R[],na.rm = T)#max(WA_regions$MeanCell)
+cuts <- seq(0, maxDens, length.out = 100)   
+colFunc <- colorRampPalette(c("whitesmoke","#1e96b2", "#36b2db", "#77c5b8","#a9d4b6", "#bed789", "#e0dd81"))  
+col <- colFunc(100)
+## regioni blur
+regions_blur_sf <- regions[!regions$DEN_REG %in% regions_blur, ]
+grey_mask <- adjustcolor("grey85", alpha.f = 0.65)
+plot(st_geometry(st_union(st_intersection(countries, studyArea))), col = "white", border = "black")
+plot(st_geometry(countries), add = TRUE, lwd = 1, border = "black", col = "gray")
+plot(meanDensity.R, add = TRUE, breaks = cuts, col = col,axes = FALSE, box = FALSE, legend = FALSE)
+plot(st_geometry(regions_blur_sf), add = TRUE, col = grey_mask, border = NA)
+plot(st_geometry(st_union(st_intersection(countries, studyArea))), add = TRUE, border = "black")
+plot(st_geometry(regions), add = TRUE, lwd = 0.8, border = "black", fill = FALSE)
+
+graphics.off()
 }
+
+
 
 
 plot( st_geometry(st_difference(countries,studyArea)),
