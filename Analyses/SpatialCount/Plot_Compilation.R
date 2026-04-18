@@ -27,7 +27,8 @@ library(ghibli)
 library(hrbrthemes)
 library(patchwork)
 library(mefa)
-
+library(bayestestR)
+library(DescTools)
 
 ## ------ 3. SET REQUIRED WORKING DIRECTORIES ------
 source("workingDirectories.R")
@@ -93,7 +94,7 @@ N_04 <- data.frame(N = N04,
 modelName = "AlpineWolf.5.2_RJMCMC"
 thisDir <- file.path(analysisDir, modelName)
 load(file.path(thisDir, paste0(modelName, "_posterior.RData")))
-res05 <- WA_Italy
+res05 <- WA_regions
 N05 <- res05$PosteriorAllRegions
 N_05 <- data.frame(N = N05,
                    model = "Marucco et al., 2023")
@@ -133,4 +134,18 @@ res_bias_ntot_plot
 # 816 952 1120
 
 
-
+summary_stats <- N_all %>%
+  group_by(model) %>%
+  summarise(
+    mean = mean(N),
+    mode = {
+      d <- density(N)
+      d$x[which.max(d$y)]
+    },
+    hdi_low = hdi(N, ci = 0.95)$CI_low,
+    hdi_high = hdi(N, ci = 0.95)$CI_high,
+    q025 = quantile(N, 0.025),
+    q975 = quantile(N, 0.975),
+    .groups = "drop"
+  )
+write.csv(summary_stats, "summary_stats.csv", row.names = FALSE)
